@@ -86,14 +86,18 @@ function eventStartDate(event: ScheduleEvent) {
     : new Date(event.start);
 }
 
-function countdownLabel(milliseconds: number) {
+function countdownParts(milliseconds: number) {
   const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
   const days = Math.floor(totalSeconds / 86400);
   const hours = Math.floor((totalSeconds % 86400) / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-  if (days > 0) return `${days}d ${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  return [
+    { value: String(days), label: "days" },
+    { value: String(hours).padStart(2, "0"), label: "hours" },
+    { value: String(minutes).padStart(2, "0"), label: "minutes" },
+    { value: String(seconds).padStart(2, "0"), label: "seconds" },
+  ];
 }
 
 function sanitizeEventDescription(description: string) {
@@ -194,9 +198,16 @@ export default function TrainingSchedulePage() {
                         {nextEvent.isAllDay ? format(eventStartDate(nextEvent), "EEEE, MMMM d") : `${format(eventStartDate(nextEvent), "EEEE, MMMM d")} · ${displayTime(nextEvent)}`}
                       </p>
                     </div>
-                    <div className="shrink-0 rounded-2xl bg-white px-5 py-3 text-center shadow-md ring-1 ring-fuchsia-100 sm:min-w-[190px] sm:text-right">
+                    <div className="shrink-0 rounded-2xl bg-white px-4 py-3 text-center shadow-md ring-1 ring-fuchsia-100 sm:min-w-[250px]">
                       <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Starts in</p>
-                      <p className="mt-1 font-mono text-2xl font-black tabular-nums tracking-tight text-fuchsia-700 sm:text-3xl">{countdownLabel(eventStartDate(nextEvent).getTime() - now.getTime())}</p>
+                      <div className="mt-2 grid grid-cols-4 gap-2">
+                        {countdownParts(eventStartDate(nextEvent).getTime() - now.getTime()).map((part) => (
+                          <div key={part.label} className="min-w-0">
+                            <p className="font-mono text-2xl font-black leading-none tabular-nums tracking-tight text-fuchsia-700 sm:text-3xl">{part.value}</p>
+                            <p className="mt-1 truncate text-[9px] font-bold uppercase tracking-[0.08em] text-slate-500">{part.label}</p>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </button>
