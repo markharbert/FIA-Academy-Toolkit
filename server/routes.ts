@@ -49,7 +49,7 @@ import {
 } from "./clickfunnels";
 import { listCfCourses, listCfDownloads, getCfCourseStructure, extractVimeoUrl, type CfTreeNode } from "./cf-import-client";
 import { listVimeoProjects, listVimeoVideos, extractVimeoVideoId, listVimeoTextTracks, fetchVimeoTranscript } from "./vimeo";
-import { GoogleCalendarError, getTrainingCalendarEvents, listTrainingCalendars } from "./googleCalendar";
+import { FIA_EVENT_CALENDAR_ID, FIA_EVENT_CALENDAR_NAME, FIA_EVENT_CALENDAR_TIMEZONE, GoogleCalendarError, getTrainingCalendarEvents } from "./googleCalendar";
 
 const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
@@ -14057,39 +14057,11 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
 
   // ─── Training Schedule (admin-only until public rollout) ─────────────────────
   app.get("/api/training/schedule/settings", requireAdmin, async (_req, res) => {
-    try {
-      res.json(await storage.getTrainingScheduleSettings());
-    } catch (error) {
-      console.error("[training-schedule] settings error:", error);
-      res.status(500).json({ message: "Failed to load schedule settings" });
-    }
-  });
-
-  app.get("/api/training/schedule/calendars", requireAdmin, async (_req, res) => {
-    try {
-      res.json(await listTrainingCalendars());
-    } catch (error) {
-      console.error("[training-schedule] calendars error:", error);
-      const status = error instanceof GoogleCalendarError && error.status === 401 ? 503 : 502;
-      res.status(status).json({ message: "Google Calendar is unavailable. Refresh the connection and try again." });
-    }
-  });
-
-  app.put("/api/training/schedule/settings", requireAdmin, async (req, res) => {
-    const schema = z.object({
-      calendarId: z.string().min(1).max(500),
-      calendarName: z.string().min(1).max(250),
-      timezone: z.string().min(1).max(100),
+    res.json({
+      calendarId: FIA_EVENT_CALENDAR_ID,
+      calendarName: FIA_EVENT_CALENDAR_NAME,
+      timezone: FIA_EVENT_CALENDAR_TIMEZONE,
     });
-    try {
-      const settings = schema.parse(req.body);
-      await storage.setTrainingScheduleSettings(settings);
-      res.json(settings);
-    } catch (error) {
-      if (error instanceof z.ZodError) return res.status(400).json({ message: "Choose a valid calendar." });
-      console.error("[training-schedule] save settings error:", error);
-      res.status(500).json({ message: "Failed to save schedule settings" });
-    }
   });
 
   app.get("/api/training/schedule/events", requireAdmin, async (req, res) => {
@@ -14104,9 +14076,13 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       if (endDate <= startDate || endDate.getTime() - startDate.getTime() > 100 * 24 * 60 * 60 * 1000) {
         return res.status(400).json({ message: "Choose a calendar range of 100 days or fewer." });
       }
-      const settings = await storage.getTrainingScheduleSettings();
-      const events = await getTrainingCalendarEvents(settings.calendarId, startDate, endDate, settings.timezone);
-      res.json({ calendar: settings, events });
+      const calendar = {
+        calendarId: FIA_EVENT_CALENDAR_ID,
+        calendarName: FIA_EVENT_CALENDAR_NAME,
+        timezone: FIA_EVENT_CALENDAR_TIMEZONE,
+      };
+      const events = await getTrainingCalendarEvents(calendar.calendarId, startDate, endDate, calendar.timezone);
+      res.json({ calendar, events });
     } catch (error) {
       if (error instanceof z.ZodError) return res.status(400).json({ message: "Choose a valid date range." });
       console.error("[training-schedule] events error:", error);

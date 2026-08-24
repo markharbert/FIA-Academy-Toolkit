@@ -1,5 +1,9 @@
 import { ReplitConnectors } from "@replit/connectors-sdk";
 
+export const FIA_EVENT_CALENDAR_ID = "c_dqk85hfnvqe8oqt5a6d0362o@group.calendar.google.com";
+export const FIA_EVENT_CALENDAR_NAME = "FIA Event Schedule";
+export const FIA_EVENT_CALENDAR_TIMEZONE = "America/New_York";
+
 export type TrainingCalendar = {
   id: string;
   name: string;
@@ -44,32 +48,6 @@ async function requestGoogleCalendar(path: string): Promise<Response> {
     throw new GoogleCalendarError(response.status, message);
   }
   return response;
-}
-
-export async function listTrainingCalendars(): Promise<TrainingCalendar[]> {
-  const fields = "items(id,summary,primary,accessRole,timeZone,backgroundColor)";
-  const response = await requestGoogleCalendar(
-    `/calendar/v3/users/me/calendarList?minAccessRole=reader&showHidden=false&fields=${encodeURIComponent(fields)}`,
-  );
-  const payload = await response.json() as {
-    items?: Array<{
-      id?: string;
-      summary?: string;
-      primary?: boolean;
-      timeZone?: string;
-      backgroundColor?: string;
-    }>;
-  };
-
-  return (payload.items || [])
-    .filter((calendar): calendar is Required<Pick<typeof calendar, "id">> & typeof calendar => !!calendar.id)
-    .map((calendar) => ({
-      id: calendar.id,
-      name: calendar.summary || "Untitled calendar",
-      timezone: calendar.timeZone || null,
-      primary: !!calendar.primary,
-      color: calendar.backgroundColor || null,
-    }));
 }
 
 export async function getTrainingCalendarEvents(
