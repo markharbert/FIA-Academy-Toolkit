@@ -1,5 +1,5 @@
-import { Switch, Route, Redirect, useParams } from "wouter";
-import { lazy, Suspense } from "react";
+import { Switch, Route, Redirect, useLocation, useParams } from "wouter";
+import { lazy, Suspense, useEffect } from "react";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -439,6 +439,7 @@ function AppLayout() {
             <ImpersonationBanner />
             <main className="flex-1 overflow-auto">
               <div className="flex flex-col min-h-full">
+                {!user.isAdmin && <FeatureUsageTracker />}
                 <div className="flex-1">
                   <ProtectedRoutes />
                 </div>
@@ -459,6 +460,42 @@ function AppLayout() {
       <Footer />
     </div>
   );
+}
+
+function FeatureUsageTracker() {
+  const [location] = useLocation();
+
+  useEffect(() => {
+    const feature = [
+      ["/video-score", "video_scoring"],
+      ["/video-studio/research", "scripts"],
+      ["/video-studio/scripts", "scripts"],
+      ["/video-studio/record", "teleprompter"],
+      ["/email-tools/inbox-analyzer", "inbox_analyzer"],
+      ["/dmo-tracker", "dmo"],
+      ["/projects", "projects"],
+      ["/funnel-grid", "funnel_planner"],
+      ["/swipe-file", "swipe_file"],
+      ["/links", "link_vault"],
+      ["/analytics", "analytics"],
+      ["/training", "training"],
+    ].find(([prefix]) => location === prefix || location.startsWith(`${prefix}/`))?.[1];
+    if (!feature) return;
+
+    const dateKey = new Date().toISOString().slice(0, 10);
+    const storageKey = `feature-usage:${feature}:${dateKey}`;
+    if (sessionStorage.getItem(storageKey)) return;
+    sessionStorage.setItem(storageKey, "1");
+    fetch("/api/activity/feature", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ feature }),
+      keepalive: true,
+    }).catch(() => sessionStorage.removeItem(storageKey));
+  }, [location]);
+
+  return null;
 }
 
 function App() {

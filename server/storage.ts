@@ -208,6 +208,15 @@ export interface IStorage {
     neverEnrolledCount: number;
   }>;
   getCfUsers(filter?: string): Promise<Array<Pick<User, 'id' | 'email' | 'displayName' | 'firstName' | 'lastName' | 'createdAt' | 'lastLoginAt' | 'isAdmin' | 'isDisabled' | 'role' | 'cfEnrolled' | 'cfEnrolledAt' | 'cfRevokedAt' | 'cfContactId' | 'cfRevokedGraceUntil'>>>;
+  getMemberEngagementAnalytics(days: number): Promise<{
+    totalMembers: number;
+    activeMembers: number;
+    returningMembers: number;
+    neverLoggedIn: number;
+    features: Array<{ key: string; label: string; members: number; events: number; lastUsedAt: Date | null }>;
+    weeklyActivity: Array<{ week: string; members: number }>;
+  }>;
+  getUserFeatureUsage(userId: string, days: number): Promise<Array<{ key: string; label: string; events: number; lastUsedAt: Date | null }>>;
   applyCfReconciliation(enrollments: CfReconciliationEnrollment[]): Promise<CfReconciliationChanges>;
 
   getEnrolledUsersWithContactId(): Promise<Array<{ userId: string; email: string; contactId: string }>>;
@@ -5379,6 +5388,122 @@ export class DatabaseStorage implements IStorage {
       tasksDoneCount: Number(tasksDoneResult[0]?.c ?? 0),
       dmoLast30Days: Number(dmoResult[0]?.c ?? 0),
     };
+  }
+
+  async getMemberEngagementAnalytics(days: number): Promise<{
+    totalMembers: number;
+    activeMembers: number;
+    returningMembers: number;
+    neverLoggedIn: number;
+    features: Array<{ key: string; label: string; members: number; events: number; lastUsedAt: Date | null }>;
+    weeklyActivity: Array<{ week: string; members: number }>;
+  }> {
+    const safeDays = Math.min(Math.max(days, 1), 3650);
+    const since = new Date(Date.now() - safeDays * 24 * 60 * 60 * 1000);
+    const memberCondition = sql`COALESCE(${users.isAdmin}, false) = false`;
+    const featureKey = sql<string>`CASE
+      WHEN ${userActionLog.actionType} IN ('session_created', 'session_deleted', 'session_title_updated', 'session_moved_to_folder', 'transcript_regenerated', 'video_uploaded', 'processing_completed') THEN 'video_scoring'
+      WHEN ${userActionLog.actionType} IN ('project_created', 'project_updated', 'project_deleted', 'task_created', 'task_updated', 'task_completed', 'task_deleted') THEN 'projects'
+      WHEN ${userActionLog.actionType} = 'dmo_logged' THEN 'dmo'
+      WHEN ${userActionLog.actionType} IN ('topic_searched', 'script_generated', 'script_deleted') THEN 'scripts'
+      WHEN ${userActionLog.actionType} IN ('teleprompter_script_created', 'teleprompter_script_updated', 'teleprompter_script_deleted', 'teleprompter_recording_uploaded') THEN 'teleprompter'
+      WHEN ${userActionLog.actionType} = 'feature_viewed' THEN COALESCE(${userActionLog.metadataJson}->>'feature', 'other')
+      ELSE 'other'
+    END`;
+    const featureLabel = sql<string>`CASE (${featureKey})
+      WHEN 'video_scoring' THEN 'Video Scoring'
+      WHEN 'projects' THEN 'Projects & Tasks'
+      WHEN 'dmo' THEN 'DMO Tracker'
+      WHEN 'scripts' THEN 'Scripts & Topics'
+      WHEN 'teleprompter' THEN 'Teleprompter'
+      WHEN 'inbox_analyzer' THEN 'Inbox Analyzer'
+      WHEN 'funnel_planner' THEN 'Funnel Planner'
+      WHEN 'swipe_file' THEN 'Swipe File'
+      WHEN 'link_vault' THEN 'Link Vault'
+      WHEN 'training' THEN 'Training'
+      WHEN 'analytics' THEN 'Analytics'
+      ELSE 'Other Toolkit activity'
+    END`;
+    const activityCondition = and(memberCondition, gte(userActionLog.createdAt, since));
+
+    const [totals, featureRows, returningRows, weeklyRows] = await Promise.all([
+      db.select({
+        totalMembers: sql<number>`count(*)::int`,
+        neverLoggedIn: sql<number>`count(*) filter (where ${users.lastLoginAt} is null)::int`,
+      }).from(users).where(memberCondition),
+      db.select({
+        key: featureKey,
+        label: featureLabel,
+        members: sql<number>`count(distinct ${userActionLog.userId})::int`,
+        events: sql<number>`count(*)::int`,
+        lastUsedAt: sql<Date | null>`max(${userActionLog.createdAt})`,
+      }).from(userActionLog).innerJoin(users, eq(userActionLog.userId, users.id))
+        .where(activityCondition).groupBy(featureKey, featureLabel).orderBy(desc(sql`count(distinct ${userActionLog.userId})`)),
+      db.execute(sql`SELECT count(*)::int AS count FROM (
+        SELECT ${userActionLog.userId}
+        FROM ${userActionLog}
+        INNER JOIN ${users} ON ${userActionLog.userId} = ${users.id}
+        WHERE ${memberCondition} AND ${userActionLog.createdAt} >= ${since}
+        GROUP BY ${userActionLog.userId}
+        HAVING count(DISTINCT date(${userActionLog.createdAt})) >= 2
+      ) returning_members`),
+      db.execute(sql`SELECT to_char(date_trunc('week', ${userActionLog.createdAt}), 'Mon DD') AS week,
+        count(DISTINCT ${userActionLog.userId})::int AS members
+        FROM ${userActionLog}
+        INNER JOIN ${users} ON ${userActionLog.userId} = ${users.id}
+        WHERE ${memberCondition} AND ${userActionLog.createdAt} >= ${since}
+        GROUP BY date_trunc('week', ${userActionLog.createdAt})
+        ORDER BY date_trunc('week', ${userActionLog.createdAt}) ASC`),
+    ]);
+    const activeRows = await db.select({ count: sql<number>`count(distinct ${userActionLog.userId})::int` })
+      .from(userActionLog).innerJoin(users, eq(userActionLog.userId, users.id)).where(activityCondition);
+
+    return {
+      totalMembers: Number(totals[0]?.totalMembers ?? 0),
+      neverLoggedIn: Number(totals[0]?.neverLoggedIn ?? 0),
+      activeMembers: Number(activeRows[0]?.count ?? 0),
+      returningMembers: Number((returningRows as any).rows?.[0]?.count ?? 0),
+      features: featureRows.filter((row) => row.key !== "other").map((row) => ({
+        key: row.key,
+        label: row.label,
+        members: Number(row.members),
+        events: Number(row.events),
+        lastUsedAt: row.lastUsedAt,
+      })),
+      weeklyActivity: ((weeklyRows as any).rows ?? []).map((row: any) => ({
+        week: String(row.week),
+        members: Number(row.members),
+      })),
+    };
+  }
+
+  async getUserFeatureUsage(userId: string, days: number): Promise<Array<{ key: string; label: string; events: number; lastUsedAt: Date | null }>> {
+    const safeDays = Math.min(Math.max(days, 1), 3650);
+    const since = new Date(Date.now() - safeDays * 24 * 60 * 60 * 1000);
+    const featureKey = sql<string>`CASE
+      WHEN ${userActionLog.actionType} IN ('session_created', 'session_deleted', 'session_title_updated', 'session_moved_to_folder', 'transcript_regenerated', 'video_uploaded', 'processing_completed') THEN 'video_scoring'
+      WHEN ${userActionLog.actionType} IN ('project_created', 'project_updated', 'project_deleted', 'task_created', 'task_updated', 'task_completed', 'task_deleted') THEN 'projects'
+      WHEN ${userActionLog.actionType} = 'dmo_logged' THEN 'dmo'
+      WHEN ${userActionLog.actionType} IN ('topic_searched', 'script_generated', 'script_deleted') THEN 'scripts'
+      WHEN ${userActionLog.actionType} IN ('teleprompter_script_created', 'teleprompter_script_updated', 'teleprompter_script_deleted', 'teleprompter_recording_uploaded') THEN 'teleprompter'
+      WHEN ${userActionLog.actionType} = 'feature_viewed' THEN COALESCE(${userActionLog.metadataJson}->>'feature', 'other')
+      ELSE 'other'
+    END`;
+    const featureLabel = sql<string>`CASE (${featureKey})
+      WHEN 'video_scoring' THEN 'Video Scoring' WHEN 'projects' THEN 'Projects & Tasks' WHEN 'dmo' THEN 'DMO Tracker'
+      WHEN 'scripts' THEN 'Scripts & Topics' WHEN 'teleprompter' THEN 'Teleprompter' WHEN 'inbox_analyzer' THEN 'Inbox Analyzer'
+      WHEN 'funnel_planner' THEN 'Funnel Planner' WHEN 'swipe_file' THEN 'Swipe File' WHEN 'link_vault' THEN 'Link Vault'
+      WHEN 'training' THEN 'Training' WHEN 'analytics' THEN 'Analytics' ELSE 'Other Toolkit activity' END`;
+    const rows = await db.select({
+      key: featureKey,
+      label: featureLabel,
+      events: sql<number>`count(*)::int`,
+      lastUsedAt: sql<Date | null>`max(${userActionLog.createdAt})`,
+    }).from(userActionLog).where(and(eq(userActionLog.userId, userId), gte(userActionLog.createdAt, since)))
+      .groupBy(featureKey, featureLabel).orderBy(desc(sql`max(${userActionLog.createdAt})`));
+    return rows.filter((row) => row.key !== "other").map((row) => ({
+      key: row.key, label: row.label, events: Number(row.events), lastUsedAt: row.lastUsedAt,
+    }));
   }
 
   async createWorkspaceInvite(ownerId: string, inviteEmail: string, token: string, firstName?: string, lastName?: string): Promise<WorkspaceInvite> {

@@ -1847,6 +1847,17 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/cf/engagement", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const requestedDays = Number(req.query.days);
+      const days = [7, 30, 90, 3650].includes(requestedDays) ? requestedDays : 30;
+      res.json(await storage.getMemberEngagementAnalytics(days));
+    } catch (err) {
+      console.error("[CF Admin] Engagement analytics error:", err);
+      res.status(500).json({ message: "Failed to load member engagement analytics" });
+    }
+  });
+
   app.post("/api/admin/cf/reconcile", requireAdmin, async (_req: Request, res: Response) => {
     try {
       const result = await runCfMembershipReconciliation();
@@ -2603,6 +2614,17 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/users/:id/feature-usage", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const requestedDays = Number(req.query.days);
+      const days = [30, 90, 3650].includes(requestedDays) ? requestedDays : 90;
+      res.json({ features: await storage.getUserFeatureUsage(req.params.id, days) });
+    } catch (err) {
+      console.error("Admin get user feature usage error:", err);
+      res.status(500).json({ message: "Failed to load feature usage" });
+    }
+  });
+
   // Update user (role, disabled status, profile)
   app.patch("/api/admin/users/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
@@ -2947,6 +2969,29 @@ export async function registerRoutes(
       console.error("Get account activity error:", err);
       res.status(500).json({ message: "Failed to fetch activity" });
     }
+  });
+
+  // Record one meaningful feature visit per browser session. This complements
+  // completion events without storing the member's private feature content.
+  app.post("/api/activity/feature", requireAuth, async (req: Request, res: Response) => {
+    const feature = String(req.body?.feature || "");
+    const allowedFeatures = new Set([
+      "inbox_analyzer", "funnel_planner", "swipe_file", "link_vault",
+      "training", "analytics", "video_scoring", "scripts", "teleprompter",
+      "projects", "dmo",
+    ]);
+    if (!allowedFeatures.has(feature)) {
+      return res.status(400).json({ message: "Unknown feature" });
+    }
+    logUserAction({
+      userId: req.session.userId!,
+      actionType: "feature_viewed",
+      actionLabel: `Viewed ${feature.replace(/_/g, " ")}`,
+      entityType: "feature",
+      metadata: { feature },
+      req,
+    });
+    res.status(204).end();
   });
 
   // Update account profile

@@ -103,6 +103,19 @@ interface MemberAction {
   ip: string | null;
 }
 
+interface MemberEngagement {
+  totalMembers: number;
+  activeMembers: number;
+  returningMembers: number;
+  neverLoggedIn: number;
+  features: Array<{ key: string; label: string; members: number; events: number; lastUsedAt: string | null }>;
+  weeklyActivity: Array<{ week: string; members: number }>;
+}
+
+interface MemberFeatureUsage {
+  features: Array<{ key: string; label: string; events: number; lastUsedAt: string | null }>;
+}
+
 interface CfReconciliationRun {
   id: string;
   status: "running" | "completed" | "failed";
@@ -363,6 +376,72 @@ function ToolkitLoginStatus({ member }: { member: Pick<CfUser, "lastLoginAt" | "
   return <Badge variant="outline" className="border-sky-300 text-sky-700 dark:border-sky-800 dark:text-sky-300">Logged in</Badge>;
 }
 
+function MemberEngagementSummary() {
+  const [days, setDays] = useState(30);
+  const { data, isLoading } = useQuery<MemberEngagement>({
+    queryKey: [`/api/admin/cf/engagement?days=${days}`],
+  });
+  const highestAdoption = Math.max(...(data?.features.map((feature) => feature.members) ?? [1]), 1);
+  const topFeature = data?.features[0];
+  const weeklyPeak = Math.max(...(data?.weeklyActivity.map((week) => week.members) ?? [1]), 1);
+
+  return (
+    <Card className="overflow-hidden border-indigo-200/70 dark:border-indigo-950">
+      <div className="h-1.5 bg-gradient-to-r from-indigo-600 via-violet-500 to-cyan-400" />
+      <CardHeader className="gap-3 pb-3 pt-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base"><Activity className="h-4 w-4 text-indigo-500" />Member engagement</CardTitle>
+            <CardDescription className="mt-1">Recorded Toolkit activity, measured by unique members—not raw clicks.</CardDescription>
+          </div>
+          <div className="flex rounded-lg border bg-muted/40 p-1">
+            {([7, 30, 90, 3650] as const).map((value) => (
+              <button key={value} type="button" onClick={() => setDays(value)} className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${days === value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                {value === 3650 ? "All time" : `${value}d`}
+              </button>
+            ))}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            ["Active members", data?.activeMembers ?? 0, `Used the Toolkit in the last ${days === 3650 ? "all recorded time" : `${days} days`}`, "text-indigo-600 dark:text-indigo-300"],
+            ["Returning members", data?.returningMembers ?? 0, "Active on two or more days", "text-violet-600 dark:text-violet-300"],
+            ["Never logged in", data?.neverLoggedIn ?? 0, "Members who have not started", "text-amber-700 dark:text-amber-300"],
+            ["Most adopted", topFeature?.label || "No usage yet", topFeature ? `${topFeature.members} member${topFeature.members === 1 ? "" : "s"} used it` : "Awaiting activity", "text-cyan-700 dark:text-cyan-300"],
+          ].map(([label, value, detail, tone]) => (
+            <div key={String(label)} className="rounded-xl border bg-card p-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+              {isLoading ? <Loader2 className="mt-2 h-5 w-5 animate-spin text-muted-foreground" /> : <p className={`mt-1 truncate text-2xl font-bold ${tone}`}>{value}</p>}
+              <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+            </div>
+          ))}
+        </div>
+
+        {!isLoading && (
+          <div className="grid gap-5 lg:grid-cols-[1.25fr_.75fr]">
+            <div>
+              <div className="flex items-center justify-between"><h3 className="text-sm font-semibold">Feature adoption</h3><span className="text-xs text-muted-foreground">Unique members</span></div>
+              {data?.features.length ? <div className="mt-3 space-y-3">{data.features.slice(0, 6).map((feature) => (
+                <div key={feature.key}>
+                  <div className="mb-1 flex items-center justify-between gap-3 text-sm"><span className="truncate">{feature.label}</span><span className="shrink-0 text-xs font-medium text-muted-foreground">{feature.members} member{feature.members === 1 ? "" : "s"}</span></div>
+                  <div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-gradient-to-r from-indigo-600 to-cyan-400" style={{ width: `${Math.max((feature.members / highestAdoption) * 100, 5)}%` }} /></div>
+                </div>
+              ))}</div> : <p className="mt-3 text-sm text-muted-foreground">No recorded feature usage in this period yet.</p>}
+            </div>
+            <div className="rounded-xl border bg-muted/20 p-3">
+              <div className="flex items-center justify-between"><h3 className="text-sm font-semibold">Weekly activity</h3><span className="text-xs text-muted-foreground">Active members</span></div>
+              {data?.weeklyActivity.length ? <div className="mt-5 flex h-24 items-end gap-2">{data.weeklyActivity.slice(-8).map((week) => <div key={week.week} className="flex min-w-0 flex-1 flex-col items-center gap-1"><div className="w-full rounded-t bg-gradient-to-t from-violet-600 to-indigo-400" style={{ height: `${Math.max((week.members / weeklyPeak) * 76, 8)}px` }} title={`${week.members} active members`} /><span className="truncate text-[10px] text-muted-foreground">{week.week.replace(" ", "\n")}</span></div>)}</div> : <p className="mt-5 text-sm text-muted-foreground">Activity will appear here as members use the Toolkit.</p>}
+            </div>
+          </div>
+        )}
+        <p className="border-t pt-3 text-xs text-muted-foreground">Usage shows recorded Toolkit activity. It is separate from ClickFunnels access and does not include private member content.</p>
+      </CardContent>
+    </Card>
+  );
+}
+
 function MemberDetailsSheet({
   memberId,
   onOpenChange,
@@ -389,6 +468,15 @@ function MemberDetailsSheet({
     queryFn: async () => {
       const response = await fetch(`/api/admin/users/${memberId}/actions?limit=20`, { credentials: "include" });
       if (!response.ok) throw new Error("Could not load account activity");
+      return response.json();
+    },
+    enabled: !!memberId,
+  });
+  const { data: featureUsage, isLoading: featureUsageLoading } = useQuery<MemberFeatureUsage>({
+    queryKey: ["/api/admin/users", memberId, "feature-usage"],
+    queryFn: async () => {
+      const response = await fetch(`/api/admin/users/${memberId}/feature-usage?days=90`, { credentials: "include" });
+      if (!response.ok) throw new Error("Could not load feature usage");
       return response.json();
     },
     enabled: !!memberId,
@@ -480,6 +568,11 @@ function MemberDetailsSheet({
                   const StatIcon = Icon as typeof Activity;
                   return <div key={String(label)} className="rounded-lg border bg-card p-3"><div className="flex items-center gap-1 text-xs text-muted-foreground"><StatIcon className="h-3.5 w-3.5" />{label}</div><p className="mt-1 text-lg font-semibold">{value as string | number}</p></div>;
                 })}
+              </div>
+
+              <div className="rounded-lg border border-indigo-200/70 bg-indigo-50/30 p-4 dark:border-indigo-950 dark:bg-indigo-950/10">
+                <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><Activity className="h-4 w-4 text-indigo-500" /><h3 className="text-sm font-semibold">Feature usage</h3></div><span className="text-xs text-muted-foreground">Last 90 days</span></div>
+                {featureUsageLoading ? <Loader2 className="mt-3 h-4 w-4 animate-spin text-muted-foreground" /> : !featureUsage?.features.length ? <p className="mt-3 text-sm text-muted-foreground">No feature activity has been recorded in this period.</p> : <div className="mt-3 space-y-2">{featureUsage.features.slice(0, 6).map((feature) => <div key={feature.key} className="flex items-center justify-between gap-3 rounded-md border bg-background/80 px-3 py-2 text-sm"><div className="min-w-0"><p className="truncate font-medium">{feature.label}</p><p className="text-xs text-muted-foreground">Last used {formatDateTime(feature.lastUsedAt)}</p></div><Badge variant="outline" className="shrink-0">{feature.events} event{feature.events === 1 ? "" : "s"}</Badge></div>)}</div>}
               </div>
 
               <div className="rounded-lg border p-4">
@@ -578,6 +671,7 @@ function MembersTab() {
         <h2 className="text-xl font-semibold">ClickFunnels Members</h2>
         <p className="mt-1 text-sm text-muted-foreground">Your complete membership directory. ClickFunnels controls Academy access; Toolkit status explains local account and sign-in activity.</p>
       </div>
+      <MemberEngagementSummary />
       <Card>
         <CardHeader className="pb-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
