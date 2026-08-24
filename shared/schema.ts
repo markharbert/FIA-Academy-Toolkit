@@ -2171,6 +2171,7 @@ export const courseModules = pgTable("course_modules", {
   courseId: varchar("course_id").notNull().references(() => courses.id, { onDelete: "cascade" }),
   parentModuleId: varchar("parent_module_id"), // nullable — for nested sub-modules
   title: text("title").notNull(),
+  slug: text("slug"),
   status: varchar("status", { length: 20 }).notNull().default("draft"),
   sortOrder: integer("sort_order").notNull().default(0),
   externalId: text("external_id"),  // e.g. 'cf-section-456' — for idempotent import
@@ -2186,6 +2187,7 @@ export const courseLessons = pgTable("course_lessons", {
   courseId: varchar("course_id").notNull().references(() => courses.id, { onDelete: "cascade" }),
   moduleId: varchar("module_id").notNull().references(() => courseModules.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
+  slug: text("slug"),
   videoUrl: text("video_url"),
   transcriptText: text("transcript_text"),
   transcriptLanguage: text("transcript_language"),

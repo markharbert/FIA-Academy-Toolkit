@@ -702,11 +702,13 @@ export interface IStorage {
   // Courses (admin)
   getCourses(): Promise<Course[]>;
   getCourse(id: string): Promise<Course | undefined>;
+  getCourseBySlug(slug: string): Promise<Course | undefined>;
   createCourse(course: InsertCourse): Promise<Course>;
   updateCourse(id: string, updates: Partial<Course>): Promise<Course | undefined>;
   deleteCourse(id: string): Promise<boolean>;
   getCourseModules(courseId: string): Promise<CourseModule[]>;
   getCourseModule(id: string): Promise<CourseModule | undefined>;
+  getCourseModuleBySlug(courseId: string, slug: string): Promise<CourseModule | undefined>;
   getCourseModuleByExternalId(courseId: string, externalId: string): Promise<CourseModule | undefined>;
   createCourseModule(module: InsertCourseModule): Promise<CourseModule>;
   updateCourseModule(id: string, updates: Partial<CourseModule>): Promise<CourseModule | undefined>;
@@ -714,6 +716,7 @@ export interface IStorage {
   reorderCourseModules(courseId: string, orderedIds: string[]): Promise<void>;
   getCourseLessons(moduleId: string): Promise<CourseLesson[]>;
   getCourseLesson(id: string): Promise<CourseLesson | undefined>;
+  getCourseLessonBySlug(courseId: string, moduleId: string, slug: string): Promise<CourseLesson | undefined>;
   getCourseLessonByExternalId(courseId: string, externalId: string): Promise<CourseLesson | undefined>;
   createCourseLesson(lesson: InsertCourseLesson): Promise<CourseLesson>;
   updateCourseLesson(id: string, updates: Partial<CourseLesson>): Promise<CourseLesson | undefined>;
@@ -5527,6 +5530,11 @@ export class DatabaseStorage implements IStorage {
     return row || undefined;
   }
 
+  async getCourseBySlug(slug: string): Promise<Course | undefined> {
+    const [row] = await db.select().from(courses).where(eq(courses.slug, slug));
+    return row || undefined;
+  }
+
   async createCourse(course: InsertCourse): Promise<Course> {
     const [row] = await db.insert(courses).values(course).returning();
     return row;
@@ -5548,6 +5556,13 @@ export class DatabaseStorage implements IStorage {
 
   async getCourseModule(id: string): Promise<CourseModule | undefined> {
     const [row] = await db.select().from(courseModules).where(eq(courseModules.id, id));
+    return row || undefined;
+  }
+
+  async getCourseModuleBySlug(courseId: string, slug: string): Promise<CourseModule | undefined> {
+    const [row] = await db.select().from(courseModules).where(
+      and(eq(courseModules.courseId, courseId), eq(courseModules.slug, slug)),
+    );
     return row || undefined;
   }
 
@@ -5601,6 +5616,17 @@ export class DatabaseStorage implements IStorage {
 
   async getCourseLesson(id: string): Promise<CourseLesson | undefined> {
     const [row] = await db.select().from(courseLessons).where(eq(courseLessons.id, id));
+    return row || undefined;
+  }
+
+  async getCourseLessonBySlug(courseId: string, moduleId: string, slug: string): Promise<CourseLesson | undefined> {
+    const [row] = await db.select().from(courseLessons).where(
+      and(
+        eq(courseLessons.courseId, courseId),
+        eq(courseLessons.moduleId, moduleId),
+        eq(courseLessons.slug, slug),
+      ),
+    );
     return row || undefined;
   }
 
