@@ -265,7 +265,9 @@ export function domainRep90(d: any): string | null {
 
 export function domainSpam90(d: any): number | null {
   const stats = filterPostmasterLast90(d.trafficStats as any[]);
-  return stats.find((s: any) => s.spamRate != null)?.spamRate ?? null;
+  const value = stats.find((s: any) => s.spamRate != null)?.spamRate;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(0, numeric) : null;
 }
 
 // ─── DMO helpers ───────────────────────────────────────────────────────────────

@@ -68,10 +68,12 @@ export function TopicPulseWidget() {
                 {latestRun.topicCount} topics found
               </p>
               <p className="text-[11px] text-muted-foreground">
-                {new Date(latestRun.createdAt).toLocaleDateString("en-US", {
+                {Number.isFinite(new Date(latestRun.createdAt).getTime())
+                  ? new Date(latestRun.createdAt).toLocaleDateString("en-US", {
                   month: "short",
                   day: "numeric",
-                })}
+                  })
+                  : "Unknown date"}
               </p>
             </div>
           </div>
@@ -111,7 +113,7 @@ export function TopicPulseWidget() {
                         : "text-foreground font-medium"
                     }`}
                   >
-                    {s.topic.topicTitle}
+                    {s.topic?.topicTitle || "Untitled topic"}
                   </p>
                 </div>
               ))}

@@ -41,6 +41,8 @@ export function SearchConsoleWidget() {
   const impressions = gscData?.overview?.totalImpressions ?? gscData?.impressions;
   const ctr = gscData?.overview?.avgCtr ?? gscData?.ctr;
   const position = gscData?.overview?.avgPosition ?? gscData?.position;
+  const numericCtr = Number(ctr);
+  const numericPosition = Number(position);
 
   return (
     <Tile accent="bg-gradient-to-r from-blue-500 to-indigo-500" testId="card-search-console">
@@ -104,13 +106,13 @@ export function SearchConsoleWidget() {
               <Hash className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="text-muted-foreground">Avg CTR</span>
               <span className="font-bold text-foreground">
-                {ctr != null ? `${(ctr * 100).toFixed(1)}%` : "—"}
+                {Number.isFinite(numericCtr) ? `${(numericCtr * 100).toFixed(1)}%` : "—"}
               </span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground">Avg position</span>
               <span className="font-bold text-foreground">
-                {position != null ? position.toFixed(1) : "—"}
+                {Number.isFinite(numericPosition) ? numericPosition.toFixed(1) : "—"}
               </span>
             </div>
           </div>
