@@ -1,6 +1,6 @@
 import { ReplitConnectors } from "@replit/connectors-sdk";
 
-export const FIA_EVENT_CALENDAR_ID = "c_dqk85hfnvqe8oqt5a6d0362o@group.calendar.google.com";
+export const FIA_EVENT_CALENDAR_ID = "c_dqk85hfnvqeoe8oqt5a6d0362o@group.calendar.google.com";
 export const FIA_EVENT_CALENDAR_NAME = "FIA Event Schedule";
 export const FIA_EVENT_CALENDAR_TIMEZONE = "America/New_York";
 
