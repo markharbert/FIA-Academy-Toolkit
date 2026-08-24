@@ -1815,6 +1815,25 @@ export const cfWebhookActivity = pgTable("cf_webhook_activity", {
 export type CfWebhookActivity = typeof cfWebhookActivity.$inferSelect;
 export type InsertCfWebhookActivity = typeof cfWebhookActivity.$inferInsert;
 
+// ─── ClickFunnels Membership Reconciliation Runs ──────────────────────────────
+export const cfReconciliationRuns = pgTable("cf_reconciliation_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  status: text("status").notNull(), // running | completed | failed
+  totalFetched: integer("total_fetched").notNull().default(0),
+  activeFetched: integer("active_fetched").notNull().default(0),
+  inactiveFetched: integer("inactive_fetched").notNull().default(0),
+  accountsCreated: integer("accounts_created").notNull().default(0),
+  accountsReactivated: integer("accounts_reactivated").notNull().default(0),
+  accountsRevoked: integer("accounts_revoked").notNull().default(0),
+  unchanged: integer("unchanged").notNull().default(0),
+  startedAt: timestamp("started_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  completedAt: timestamp("completed_at"),
+  error: text("error"),
+});
+
+export type CfReconciliationRun = typeof cfReconciliationRuns.$inferSelect;
+export type InsertCfReconciliationRun = typeof cfReconciliationRuns.$inferInsert;
+
 // ─── Feedback (Bug Reports & Feature Requests) ────────────────────────────────
 export const feedbackPosts = pgTable("feedback_posts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

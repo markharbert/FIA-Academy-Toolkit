@@ -149,6 +149,25 @@ async function runStartupMigrations() {
         ON cf_webhook_activity (status);
     `);
     console.log("[startup] cf_webhook_activity migration complete");
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS cf_reconciliation_runs (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        status TEXT NOT NULL,
+        total_fetched INTEGER NOT NULL DEFAULT 0,
+        active_fetched INTEGER NOT NULL DEFAULT 0,
+        inactive_fetched INTEGER NOT NULL DEFAULT 0,
+        accounts_created INTEGER NOT NULL DEFAULT 0,
+        accounts_reactivated INTEGER NOT NULL DEFAULT 0,
+        accounts_revoked INTEGER NOT NULL DEFAULT 0,
+        unchanged INTEGER NOT NULL DEFAULT 0,
+        started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        completed_at TIMESTAMP,
+        error TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_cf_reconciliation_runs_started
+        ON cf_reconciliation_runs (started_at DESC);
+    `);
+    console.log("[startup] cf_reconciliation_runs migration complete");
 
     await db.execute(sql`
       ALTER TABLE email_analyses

@@ -1,8 +1,9 @@
 import { 
   users, sessions, passwordResetTokens, magicLinkTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics, sessionFolders,
-  topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers, appSettings, publicApiKeys, webhooks, cfWebhookActivity,
+  topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers, appSettings, publicApiKeys, webhooks, cfWebhookActivity, cfReconciliationRuns,
   type PublicApiKey, type Webhook,
   type CfWebhookActivity, type InsertCfWebhookActivity,
+  type CfReconciliationRun, type InsertCfReconciliationRun,
   dmoEntries, dmoSettings, emailInboxAddresses, emailAnalyses, seedInboxes, postmasterConnections, postmasterDomains,
   workspaceInvites, type WorkspaceInvite, type WorkspaceInviteWithMember,
   competitorTrackers, competitorSeedAddresses, capturedCompetitorEmails, capturedCompetitorEmailLinks,
@@ -210,6 +211,9 @@ export interface IStorage {
     processedCount: number;
     failedCount: number;
   }>;
+  createCfReconciliationRun(data?: Partial<InsertCfReconciliationRun>): Promise<CfReconciliationRun>;
+  updateCfReconciliationRun(id: string, data: Partial<InsertCfReconciliationRun>): Promise<CfReconciliationRun | undefined>;
+  getLatestCfReconciliationRun(): Promise<CfReconciliationRun | undefined>;
 
   // Admin: Audit Log
   createAuditLog(log: InsertAdminAuditLog): Promise<AdminAuditLog>;
@@ -1215,6 +1219,21 @@ export class DatabaseStorage implements IStorage {
       processedCount: Number(processed?.count ?? 0),
       failedCount: Number(failed?.count ?? 0),
     };
+  }
+
+  async createCfReconciliationRun(data: Partial<InsertCfReconciliationRun> = {}): Promise<CfReconciliationRun> {
+    const [row] = await db.insert(cfReconciliationRuns).values(data).returning();
+    return row;
+  }
+
+  async updateCfReconciliationRun(id: string, data: Partial<InsertCfReconciliationRun>): Promise<CfReconciliationRun | undefined> {
+    const [row] = await db.update(cfReconciliationRuns).set(data).where(eq(cfReconciliationRuns.id, id)).returning();
+    return row;
+  }
+
+  async getLatestCfReconciliationRun(): Promise<CfReconciliationRun | undefined> {
+    const [row] = await db.select().from(cfReconciliationRuns).orderBy(desc(cfReconciliationRuns.startedAt)).limit(1);
+    return row;
   }
 
   async getUsersWithExpiredGracePeriod(): Promise<Array<Pick<User, 'id' | 'email' | 'firstName' | 'lastName'>>> {
