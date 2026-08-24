@@ -404,6 +404,8 @@ export interface IStorage {
   // App Settings
   getMonthlyCreditsLimit(): Promise<number>;
   setMonthlyCreditsLimit(limit: number): Promise<void>;
+  getTrainingScheduleSettings(): Promise<{ calendarId: string; calendarName: string; timezone: string }>;
+  setTrainingScheduleSettings(settings: { calendarId: string; calendarName: string; timezone: string }): Promise<void>;
   getApiAccessEnabled(): Promise<boolean>;
   setApiAccessEnabled(enabled: boolean): Promise<void>;
   getEmailSenderSettings(): Promise<{ fromName: string; fromEmail: string }>;
@@ -2485,6 +2487,36 @@ export class DatabaseStorage implements IStorage {
       .values({ key: "monthly_credits_limit", value: String(limit), updatedAt: now })
       .onConflictDoUpdate({ target: appSettings.key, set: { value: String(limit), updatedAt: now } });
     await db.update(videoTrendsCredits).set({ monthlyLimit: limit, updatedAt: now });
+  }
+
+  async getTrainingScheduleSettings(): Promise<{ calendarId: string; calendarName: string; timezone: string }> {
+    const defaults = {
+      calendarId: "primary",
+      calendarName: "Primary calendar",
+      timezone: "America/New_York",
+    };
+    const [row] = await db.select().from(appSettings).where(eq(appSettings.key, "training_schedule_calendar"));
+    if (!row) return defaults;
+    try {
+      const saved = JSON.parse(row.value);
+      return {
+        calendarId: typeof saved.calendarId === "string" && saved.calendarId ? saved.calendarId : defaults.calendarId,
+        calendarName: typeof saved.calendarName === "string" && saved.calendarName ? saved.calendarName : defaults.calendarName,
+        timezone: typeof saved.timezone === "string" && saved.timezone ? saved.timezone : defaults.timezone,
+      };
+    } catch {
+      return defaults;
+    }
+  }
+
+  async setTrainingScheduleSettings(settings: { calendarId: string; calendarName: string; timezone: string }): Promise<void> {
+    const now = new Date();
+    await db.insert(appSettings)
+      .values({ key: "training_schedule_calendar", value: JSON.stringify(settings), updatedAt: now })
+      .onConflictDoUpdate({
+        target: appSettings.key,
+        set: { value: JSON.stringify(settings), updatedAt: now },
+      });
   }
 
   async getApiAccessEnabled(): Promise<boolean> {

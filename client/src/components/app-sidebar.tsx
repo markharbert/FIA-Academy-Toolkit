@@ -359,12 +359,24 @@ export function AppSidebar() {
 
       <SidebarContent>
         {/* Training section — shows published courses above Navigation */}
-        {trainingCourses.length > 0 && !isCollaborator && user?.isAdmin && (
+        {!isCollaborator && user?.isAdmin && (
           <>
             <SidebarGroup>
               <SidebarGroupLabel>Training</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={location === "/training/schedule"}
+                      tooltip="Training Schedule"
+                      onClick={() => setLocation("/training/schedule")}
+                      className={location === "/training/schedule" ? "!bg-fuchsia-500/15" : ""}
+                      data-testid="nav-training-schedule"
+                    >
+                      <CalendarDays className="text-fuchsia-400" />
+                      <span className="truncate">Schedule</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                   {trainingCourses.map((course) => {
                     const isCourseActive = course.id === activeCourseId || course.slug === activeCourseId;
                     return (

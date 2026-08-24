@@ -107,6 +107,7 @@ const AdminCourseOutlinePage     = lazyPage(() => import("@/pages/admin-course-o
 const AdminLessonEditorPage      = lazyPage(() => import("@/pages/admin-lesson-editor"));
 const TrainingCoursePage         = lazyPage(() => import("@/pages/training-course"));
 const TrainingLessonPage         = lazyPage(() => import("@/pages/training-lesson"));
+const TrainingSchedulePage       = lazyPage(() => import("@/pages/training-schedule"));
 const PrivacyPolicyPage          = lazyPage(() => import("@/pages/privacy-policy"));
 const NotFound                   = lazyPage(() => import("@/pages/not-found"));
 
@@ -360,6 +361,9 @@ function ProtectedRoutes() {
       </Route>
       <Route path="/admin/courses">
         {() => <AdminRoute component={AdminCoursesPage} />}
+      </Route>
+      <Route path="/training/schedule">
+        {() => <AdminRoute component={TrainingSchedulePage} />}
       </Route>
       <Route path="/training/:courseSlug/:moduleSlug/:lessonSlug">
         {() => <AdminRoute component={TrainingLessonPage} />}
