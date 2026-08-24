@@ -39,6 +39,7 @@ export const ActionLabels = {
   session_moved_to_folder: "Moved session to folder",
   transcript_regenerated: "Regenerated transcript",
   login_success: "Logged in",
+  feature_viewed: "Viewed a feature",
   logout: "Logged out",
   account_updated: "Updated account profile",
   video_uploaded: "Uploaded video for processing",

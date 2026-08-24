@@ -125,6 +125,7 @@ export const userActionTypes = [
   "session_moved_to_folder",
   "transcript_regenerated",
   "login_success",
+  "feature_viewed",
   "logout",
   "account_updated",
   "video_uploaded",
