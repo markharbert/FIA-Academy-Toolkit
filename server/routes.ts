@@ -35,6 +35,7 @@ import { formatSwipeListResponse } from "./swipe-api";
 import { safeNormalizeWebsite } from "./inboxIntelScreenshots";
 import { hasExactIds } from "@shared/course-structure";
 import { slugify } from "@shared/slug";
+import { resolveEmailLogoPath } from "./email-assets";
 import OpenAI from "openai";
 import {
   verifyCfWebhookSignature,
@@ -775,9 +776,13 @@ export async function registerRoutes(
     }
   });
 
-  // Public: serve brand logo (used in email templates)
+  // Public: serve the shared logo used by every notification email. Production
+  // executes from dist/, while the development server reads client/public.
   app.get("/lion-logo.png", (_req: Request, res: Response) => {
-    const imgPath = path.join(process.cwd(), "client", "public", "lion-logo.png");
+    const imgPath = resolveEmailLogoPath();
+    if (!imgPath) {
+      return res.status(404).send("Email logo asset is unavailable");
+    }
     res.setHeader("Cache-Control", "public, max-age=86400");
     res.sendFile(imgPath);
   });
