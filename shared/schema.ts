@@ -1793,6 +1793,28 @@ export const webhooks = pgTable("webhooks", {
 export type Webhook = typeof webhooks.$inferSelect;
 export type InsertWebhook = typeof webhooks.$inferInsert;
 
+// ─── ClickFunnels Webhook Activity ────────────────────────────────────────────
+export const cfWebhookActivity = pgTable("cf_webhook_activity", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventType: text("event_type").notNull(),
+  email: text("email"),
+  contactId: text("contact_id"),
+  courseId: text("course_id"),
+  status: text("status").notNull(), // processed | rejected | failed
+  action: text("action").notNull(),
+  httpStatus: integer("http_status"),
+  error: text("error"),
+  durationMs: integer("duration_ms"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (t) => ({
+  createdAtIdx: index("idx_cf_webhook_activity_created").on(t.createdAt),
+  eventTypeIdx: index("idx_cf_webhook_activity_event_type").on(t.eventType),
+  statusIdx: index("idx_cf_webhook_activity_status").on(t.status),
+}));
+
+export type CfWebhookActivity = typeof cfWebhookActivity.$inferSelect;
+export type InsertCfWebhookActivity = typeof cfWebhookActivity.$inferInsert;
+
 // ─── Feedback (Bug Reports & Feature Requests) ────────────────────────────────
 export const feedbackPosts = pgTable("feedback_posts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

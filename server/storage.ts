@@ -1,7 +1,8 @@
 import { 
   users, sessions, passwordResetTokens, magicLinkTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics, sessionFolders,
-  topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers, appSettings, publicApiKeys, webhooks,
+  topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers, appSettings, publicApiKeys, webhooks, cfWebhookActivity,
   type PublicApiKey, type Webhook,
+  type CfWebhookActivity, type InsertCfWebhookActivity,
   dmoEntries, dmoSettings, emailInboxAddresses, emailAnalyses, seedInboxes, postmasterConnections, postmasterDomains,
   workspaceInvites, type WorkspaceInvite, type WorkspaceInviteWithMember,
   competitorTrackers, competitorSeedAddresses, capturedCompetitorEmails, capturedCompetitorEmailLinks,
@@ -194,6 +195,21 @@ export interface IStorage {
   getEnrolledUsersWithContactId(): Promise<Array<{ userId: string; email: string; contactId: string }>>;
   getCfButtonSettings(): Promise<{ text: string; bg: string; color: string; radius: string; width: string; fontSize: string; padding: string }>;
   setCfButtonSettings(settings: { text: string; bg: string; color: string; radius: string; width: string; fontSize: string; padding: string }): Promise<void>;
+  createCfWebhookActivity(data: InsertCfWebhookActivity): Promise<CfWebhookActivity>;
+  getCfWebhookActivity(options: {
+    limit: number;
+    offset: number;
+    eventType?: string;
+    status?: string;
+  }): Promise<{
+    events: CfWebhookActivity[];
+    total: number;
+    lastReceivedAt: Date | null;
+    lastEnrollmentAt: Date | null;
+    lastRevocationAt: Date | null;
+    processedCount: number;
+    failedCount: number;
+  }>;
 
   // Admin: Audit Log
   createAuditLog(log: InsertAdminAuditLog): Promise<AdminAuditLog>;
@@ -1154,6 +1170,51 @@ export class DatabaseStorage implements IStorage {
     }
 
     return query.orderBy(desc(users.cfEnrolledAt));
+  }
+
+  async createCfWebhookActivity(data: InsertCfWebhookActivity): Promise<CfWebhookActivity> {
+    await db.delete(cfWebhookActivity).where(
+      lt(cfWebhookActivity.createdAt, new Date(Date.now() - 90 * 24 * 60 * 60 * 1000))
+    );
+    const [row] = await db.insert(cfWebhookActivity).values(data).returning();
+    return row;
+  }
+
+  async getCfWebhookActivity(options: {
+    limit: number;
+    offset: number;
+    eventType?: string;
+    status?: string;
+  }) {
+    const conditions = [];
+    if (options.eventType && options.eventType !== "all") {
+      conditions.push(eq(cfWebhookActivity.eventType, options.eventType));
+    }
+    if (options.status && options.status !== "all") {
+      conditions.push(eq(cfWebhookActivity.status, options.status));
+    }
+    const where = conditions.length ? and(...conditions) : undefined;
+    const [events, totalRows, [lastReceived], [lastEnrollment], [lastRevocation], [processed], [failed]] = await Promise.all([
+      db.select().from(cfWebhookActivity).where(where).orderBy(desc(cfWebhookActivity.createdAt)).limit(options.limit).offset(options.offset),
+      db.select({ count: count() }).from(cfWebhookActivity).where(where),
+      db.select({ createdAt: cfWebhookActivity.createdAt }).from(cfWebhookActivity).orderBy(desc(cfWebhookActivity.createdAt)).limit(1),
+      db.select({ createdAt: cfWebhookActivity.createdAt }).from(cfWebhookActivity)
+        .where(eq(cfWebhookActivity.eventType, "courses/enrollment.created")).orderBy(desc(cfWebhookActivity.createdAt)).limit(1),
+      db.select({ createdAt: cfWebhookActivity.createdAt }).from(cfWebhookActivity)
+        .where(sql`${cfWebhookActivity.eventType} IN ('courses/enrollment.suspended', 'courses/enrollment.deleted', 'subscription.cancelled', 'subscription.churned')`)
+        .orderBy(desc(cfWebhookActivity.createdAt)).limit(1),
+      db.select({ count: count() }).from(cfWebhookActivity).where(eq(cfWebhookActivity.status, "processed")),
+      db.select({ count: count() }).from(cfWebhookActivity).where(inArray(cfWebhookActivity.status, ["failed", "rejected"])),
+    ]);
+    return {
+      events,
+      total: Number(totalRows[0]?.count ?? 0),
+      lastReceivedAt: lastReceived?.createdAt ?? null,
+      lastEnrollmentAt: lastEnrollment?.createdAt ?? null,
+      lastRevocationAt: lastRevocation?.createdAt ?? null,
+      processedCount: Number(processed?.count ?? 0),
+      failedCount: Number(failed?.count ?? 0),
+    };
   }
 
   async getUsersWithExpiredGracePeriod(): Promise<Array<Pick<User, 'id' | 'email' | 'firstName' | 'lastName'>>> {

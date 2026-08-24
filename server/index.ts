@@ -128,6 +128,29 @@ app.use((req, res, next) => {
 async function runStartupMigrations() {
   try {
     await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS cf_webhook_activity (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        event_type TEXT NOT NULL,
+        email TEXT,
+        contact_id TEXT,
+        course_id TEXT,
+        status TEXT NOT NULL,
+        action TEXT NOT NULL,
+        http_status INTEGER,
+        error TEXT,
+        duration_ms INTEGER,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_cf_webhook_activity_created
+        ON cf_webhook_activity (created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_cf_webhook_activity_event_type
+        ON cf_webhook_activity (event_type);
+      CREATE INDEX IF NOT EXISTS idx_cf_webhook_activity_status
+        ON cf_webhook_activity (status);
+    `);
+    console.log("[startup] cf_webhook_activity migration complete");
+
+    await db.execute(sql`
       ALTER TABLE email_analyses
         ADD COLUMN IF NOT EXISTS reply_to text,
         ADD COLUMN IF NOT EXISTS subject_analysis jsonb,

@@ -35,6 +35,30 @@ interface CfUser {
   cfEnrolled: boolean;
 }
 
+interface CfWebhookActivity {
+  id: string;
+  eventType: string;
+  email: string | null;
+  contactId: string | null;
+  courseId: string | null;
+  status: "processed" | "rejected" | "failed";
+  action: string;
+  httpStatus: number | null;
+  error: string | null;
+  durationMs: number | null;
+  createdAt: string;
+}
+
+interface CfWebhookActivityResponse {
+  events: CfWebhookActivity[];
+  total: number;
+  lastReceivedAt: string | null;
+  lastEnrollmentAt: string | null;
+  lastRevocationAt: string | null;
+  processedCount: number;
+  failedCount: number;
+}
+
 // ─── ImportAllMembersButton ───────────────────────────────────────────────────
 
 function ImportAllMembersButton() {
@@ -156,6 +180,229 @@ function GracePeriodCard() {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function WebhookActivityTab() {
+  const [eventFilter, setEventFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [offset, setOffset] = useState(0);
+  const limit = 20;
+  const query = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+    eventType: eventFilter,
+    status: statusFilter,
+  });
+  const { data, isLoading, isFetching, refetch } = useQuery<CfWebhookActivityResponse>({
+    queryKey: [`/api/admin/cf/webhook-activity?${query.toString()}`],
+  });
+
+  const formatDate = (value: string | null) =>
+    value
+      ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value))
+      : "Never";
+
+  const eventLabel = (eventType: string) => {
+    const labels: Record<string, string> = {
+      "courses/enrollment.created": "Enrollment created",
+      "courses/enrollment.suspended": "Enrollment suspended",
+      "courses/enrollment.deleted": "Enrollment deleted",
+      "subscription.cancelled": "Subscription cancelled",
+      "subscription.churned": "Subscription churned",
+      unknown: "Unknown event",
+    };
+    return labels[eventType] || eventType;
+  };
+
+  const actionLabel = (action: string) =>
+    action.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+  const statusClass = (status: CfWebhookActivity["status"]) => {
+    if (status === "processed") return "text-emerald-700 dark:text-emerald-400";
+    if (status === "rejected") return "text-amber-700 dark:text-amber-400";
+    return "text-red-700 dark:text-red-400";
+  };
+
+  const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / limit));
+  const currentPage = Math.floor(offset / limit) + 1;
+
+  return (
+    <div className="space-y-4">
+      <Card className="overflow-hidden">
+        <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-400" />
+        <CardHeader className="pt-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Webhook className="h-4 w-4 text-emerald-500" />
+                Webhook Setup
+              </CardTitle>
+              <CardDescription>
+                Add this endpoint in ClickFunnels to sync enrollment events automatically.
+              </CardDescription>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+              <RotateCw className={`h-3.5 w-3.5 mr-2 ${isFetching ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-1">Webhook URL</p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-xs bg-muted px-3 py-2 rounded font-mono break-all">
+                {`${window.location.protocol}//${window.location.host}/api/webhooks/clickfunnels`}
+              </code>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigator.clipboard.writeText(`${window.location.protocol}//${window.location.host}/api/webhooks/clickfunnels`)}
+                data-testid="button-copy-webhook-url-activity"
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-2">Subscribe to these events</p>
+            <div className="space-y-2">
+              {[
+                ["courses/enrollment.created", "Grants access", "text-green-500"],
+                ["courses/enrollment.suspended", "Revokes access", "text-red-500"],
+                ["courses/enrollment.deleted", "Revokes access", "text-red-500"],
+                ["subscription.cancelled", "Revokes access", "text-red-500"],
+                ["subscription.churned", "Revokes access", "text-red-500"],
+              ].map(([event, action, color]) => (
+                <div key={event} className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2">
+                    <Webhook className={`h-4 w-4 ${color}`} />
+                    <code className="text-xs font-mono">{event}</code>
+                  </div>
+                  <span className="text-xs text-muted-foreground">{action}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="pt-2 border-t text-xs text-muted-foreground space-y-1">
+            <p className="font-medium">How to set it up in ClickFunnels:</p>
+            <ol className="list-decimal list-inside space-y-1">
+              <li>Go to <strong>Workspace Settings → Webhooks</strong></li>
+              <li>Click <strong>Add New Endpoint</strong></li>
+              <li>Paste the webhook URL above</li>
+              <li>Select all 5 events listed above</li>
+              <li>Set the signing secret to your <code className="font-mono">CF_WEBHOOK_SECRET</code> value</li>
+            </ol>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => window.open("https://app.myclickfunnels.com/settings/webhooks", "_blank")}
+            data-testid="button-open-cf-webhooks-activity"
+          >
+            <ExternalLink className="h-3.5 w-3.5 mr-2" />
+            Open ClickFunnels Webhooks
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Clock className="h-4 w-4 text-indigo-500" />
+                Webhook Activity
+              </CardTitle>
+              <CardDescription>
+                Verified requests received by this Toolkit. Activity is retained for 90 days.
+              </CardDescription>
+            </div>
+            <Badge variant="outline">{data?.total ?? 0} events</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              ["Last received", formatDate(data?.lastReceivedAt ?? null)],
+              ["Last enrollment", formatDate(data?.lastEnrollmentAt ?? null)],
+              ["Last revocation", formatDate(data?.lastRevocationAt ?? null)],
+              ["Processed / failed", `${data?.processedCount ?? 0} / ${data?.failedCount ?? 0}`],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-md border bg-muted/30 px-3 py-2">
+                <p className="text-xs text-muted-foreground">{label}</p>
+                <p className="text-sm font-medium mt-1 truncate" title={value}>{value}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <select
+              value={eventFilter}
+              onChange={(e) => { setEventFilter(e.target.value); setOffset(0); }}
+              className="text-sm border rounded-md px-3 py-2 bg-background"
+              data-testid="select-cf-webhook-event-filter"
+            >
+              <option value="all">All event types</option>
+              <option value="courses/enrollment.created">Enrollment created</option>
+              <option value="courses/enrollment.suspended">Enrollment suspended</option>
+              <option value="courses/enrollment.deleted">Enrollment deleted</option>
+              <option value="subscription.cancelled">Subscription cancelled</option>
+              <option value="subscription.churned">Subscription churned</option>
+            </select>
+            <select
+              value={statusFilter}
+              onChange={(e) => { setStatusFilter(e.target.value); setOffset(0); }}
+              className="text-sm border rounded-md px-3 py-2 bg-background"
+              data-testid="select-cf-webhook-status-filter"
+            >
+              <option value="all">All results</option>
+              <option value="processed">Processed</option>
+              <option value="rejected">Rejected</option>
+              <option value="failed">Failed</option>
+            </select>
+          </div>
+
+          {isLoading ? (
+            <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+          ) : data?.events.length ? (
+            <div className="rounded-md border divide-y">
+              {data.events.map((event) => (
+                <div key={event.id} className="px-3 py-3 text-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+                    <div>
+                      <p className="font-medium">{eventLabel(event.eventType)}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {event.email || "No email available"}{event.contactId ? ` · Contact ${event.contactId}` : ""}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className={`font-medium ${statusClass(event.status)}`}>{actionLabel(event.action)}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{formatDate(event.createdAt)}</p>
+                    </div>
+                  </div>
+                  {event.error && <p className="text-xs text-red-600 dark:text-red-400 mt-2">{event.error}</p>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-md border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+              No webhook activity matches these filters yet.
+            </div>
+          )}
+
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Page {currentPage} of {totalPages}</span>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setOffset(Math.max(0, offset - limit))} disabled={offset === 0 || isFetching}>Previous</Button>
+              <Button variant="outline" size="sm" onClick={() => setOffset(offset + limit)} disabled={currentPage >= totalPages || isFetching}>Next</Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

@@ -1327,6 +1327,28 @@ export async function registerRoutes(
       });
     },
     async (req: Request, res: Response) => {
+      const startedAt = Date.now();
+      let parsedEvent: ReturnType<typeof parseCfWebhookEvent> | null = null;
+      const recordActivity = async (data: {
+        eventType: string;
+        email?: string | null;
+        contactId?: string | null;
+        courseId?: string | null;
+        status: "processed" | "rejected" | "failed";
+        action: string;
+        httpStatus: number;
+        error?: string | null;
+      }) => {
+        try {
+          await storage.createCfWebhookActivity({
+            ...data,
+            durationMs: Date.now() - startedAt,
+          });
+        } catch (activityError: any) {
+          console.error("[CF Webhook] Failed to record activity:", activityError?.message);
+        }
+      };
+
       try {
         const signature = req.headers["x-cf-signature"] as string | undefined
           || req.headers["x-clickfunnels-signature"] as string | undefined;
@@ -1337,18 +1359,42 @@ export async function registerRoutes(
         // Verify signature — fail closed if secret is not configured
         if (!process.env.CF_WEBHOOK_SECRET) {
           console.warn("[CF Webhook] CF_WEBHOOK_SECRET not configured — rejecting unsigned webhook");
+          await recordActivity({
+            eventType: "unknown",
+            status: "rejected",
+            action: "signature_verification_not_configured",
+            httpStatus: 401,
+            error: "CF_WEBHOOK_SECRET is not configured",
+          });
           return res.status(401).json({ message: "Webhook signature verification not configured" });
         }
         if (!verifyCfWebhookSignature(rawBody, signature)) {
           console.warn("[CF Webhook] Invalid signature");
+          await recordActivity({
+            eventType: "unknown",
+            status: "rejected",
+            action: "invalid_signature",
+            httpStatus: 401,
+            error: "Webhook signature did not match",
+          });
           return res.status(401).json({ message: "Invalid signature" });
         }
 
         const event = parseCfWebhookEvent(body);
+        parsedEvent = event;
         console.log("[CF Webhook] Received:", event.eventType, "| email:", event.contactEmail, "| course:", event.courseId);
 
         const result = await handleCfEnrollmentEvent(event);
         console.log("[CF Webhook] Action:", result.action, "| email:", result.email);
+        await recordActivity({
+          eventType: event.eventType || "unknown",
+          email: result.email || event.contactEmail,
+          contactId: event.contactId,
+          courseId: event.courseId,
+          status: "processed",
+          action: result.action,
+          httpStatus: 200,
+        });
 
         // New enrollment: send welcome email with a 7-day password setup link
         if (result.action === "created" && result.email) {
@@ -1383,6 +1429,16 @@ export async function registerRoutes(
         res.json({ ok: true, action: result.action });
       } catch (err) {
         console.error("[CF Webhook] Error:", err);
+        await recordActivity({
+          eventType: parsedEvent?.eventType || "unknown",
+          email: parsedEvent?.contactEmail,
+          contactId: parsedEvent?.contactId,
+          courseId: parsedEvent?.courseId,
+          status: "failed",
+          action: "processing_failed",
+          httpStatus: 500,
+          error: err instanceof Error ? err.message.slice(0, 500) : "Webhook processing failed",
+        });
         res.status(500).json({ message: "Webhook processing failed" });
       }
     }
@@ -1709,6 +1765,20 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[CF Admin] Status error:", err);
       res.status(500).json({ message: "Failed to get CF status" });
+    }
+  });
+
+  // Admin: ClickFunnels webhook activity
+  app.get("/api/admin/cf/webhook-activity", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const limit = Math.min(Math.max(parseInt(String(req.query.limit || "20"), 10) || 20, 1), 100);
+      const offset = Math.max(parseInt(String(req.query.offset || "0"), 10) || 0, 0);
+      const eventType = String(req.query.eventType || "all");
+      const status = String(req.query.status || "all");
+      res.json(await storage.getCfWebhookActivity({ limit, offset, eventType, status }));
+    } catch (err) {
+      console.error("[CF Admin] Webhook activity error:", err);
+      res.status(500).json({ message: "Failed to load webhook activity" });
     }
   });
 
