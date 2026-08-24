@@ -18,6 +18,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  List,
   MapPin,
   Repeat2,
   Sparkles,
@@ -131,6 +132,7 @@ export default function TrainingSchedulePage() {
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
   const [selectedEvent, setSelectedEvent] = useState<ScheduleEvent | null>(null);
   const [now, setNow] = useState(() => new Date());
+  const [viewMode, setViewMode] = useState<"month" | "list">("month");
   const timezone = user?.timezone || "America/New_York";
 
   useEffect(() => {
@@ -188,6 +190,31 @@ export default function TrainingSchedulePage() {
     refetchOnMount: "always",
   });
 
+  const listMonths = useMemo(
+    () => Array.from({ length: 4 }, (_, index) => addMonths(startOfMonth(new Date()), index)),
+    [],
+  );
+  const listEventsQuery = useQuery<ScheduleResponse[]>({
+    queryKey: ["/api/training/schedule/events/list", listMonths[0].toISOString(), timezone],
+    enabled: viewMode === "list",
+    queryFn: async () => Promise.all(listMonths.map(async (month) => {
+      const monthStart = startOfMonth(month);
+      const monthEnd = endOfMonth(month);
+      const params = new URLSearchParams({
+        start: fromZonedTime(monthStart, timezone).toISOString(),
+        end: fromZonedTime(addDays(monthEnd, 1), timezone).toISOString(),
+      });
+      const response = await fetch(`/api/training/schedule/events?${params}`, {
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error(await response.text());
+      return response.json();
+    })),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+
   const days = useMemo(
     () => eachDayOfInterval({ start: range.start, end: range.end }),
     [range],
@@ -207,6 +234,20 @@ export default function TrainingSchedulePage() {
       .sort((a, b) => eventStartDate(a).getTime() - eventStartDate(b).getTime())[0] || null,
     [upcomingEventsQuery.data?.events, now],
   );
+  const listEvents = useMemo(
+    () => (listEventsQuery.data || []).flatMap((response) => response.events),
+    [listEventsQuery.data],
+  );
+  const listEventsByMonth = useMemo(() => {
+    const grouped = new Map<string, ScheduleEvent[]>();
+    listEvents
+      .sort((a, b) => eventStartDate(a).getTime() - eventStartDate(b).getTime())
+      .forEach((event) => {
+        const monthKey = event.isAllDay ? event.start.slice(0, 7) : formatInTz(new Date(event.start), timezone, "yyyy-MM");
+        grouped.set(monthKey, [...(grouped.get(monthKey) || []), event]);
+      });
+    return grouped;
+  }, [listEvents, timezone]);
   const isLoading = eventsQuery.isLoading;
   const subscribeUrl = eventsQuery.data?.calendar.subscribeUrl;
 
@@ -300,18 +341,44 @@ export default function TrainingSchedulePage() {
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Calendar view</p>
                 <h2 className="mt-1 text-xl font-semibold text-slate-950">{format(currentMonth, "MMMM yyyy")}</h2>
               </div>
-              <div className="flex items-center rounded-lg border border-slate-200 bg-white p-1">
-                <Button variant="ghost" size="icon" className="text-slate-600 hover:bg-slate-100 hover:text-slate-950" onClick={() => setCurrentMonth((date) => subMonths(date, 1))} aria-label="Previous month">
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" className="h-8 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-slate-950" onClick={() => setCurrentMonth(startOfMonth(new Date()))}>Today</Button>
-                <Button variant="ghost" size="icon" className="text-slate-600 hover:bg-slate-100 hover:text-slate-950" onClick={() => setCurrentMonth((date) => addMonths(date, 1))} aria-label="Next month">
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
+               <div className="flex flex-wrap items-center justify-end gap-2">
+                 {viewMode === "month" && (
+                   <div className="flex items-center rounded-lg border border-slate-200 bg-white p-1">
+                     <Button variant="ghost" size="icon" className="text-slate-600 hover:bg-slate-100 hover:text-slate-950" onClick={() => setCurrentMonth((date) => subMonths(date, 1))} aria-label="Previous month">
+                       <ChevronLeft className="h-4 w-4" />
+                     </Button>
+                     <Button variant="ghost" className="h-8 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-slate-950" onClick={() => setCurrentMonth(startOfMonth(new Date()))}>Today</Button>
+                     <Button variant="ghost" size="icon" className="text-slate-600 hover:bg-slate-100 hover:text-slate-950" onClick={() => setCurrentMonth((date) => addMonths(date, 1))} aria-label="Next month">
+                       <ChevronRight className="h-4 w-4" />
+                     </Button>
+                   </div>
+                 )}
+                 <div className="flex items-center rounded-lg border border-slate-200 bg-white p-1" aria-label="Calendar view options">
+                   <Button
+                     variant="ghost"
+                     className={`h-8 gap-1.5 px-3 text-xs font-semibold ${viewMode === "month" ? "bg-slate-900 text-white hover:bg-slate-800 hover:text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"}`}
+                     onClick={() => setViewMode("month")}
+                     aria-pressed={viewMode === "month"}
+                     data-testid="button-calendar-month-view"
+                   >
+                     <CalendarDays className="h-3.5 w-3.5" /> Month
+                   </Button>
+                   <Button
+                     variant="ghost"
+                     className={`h-8 gap-1.5 px-3 text-xs font-semibold ${viewMode === "list" ? "bg-slate-900 text-white hover:bg-slate-800 hover:text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"}`}
+                     onClick={() => setViewMode("list")}
+                     aria-pressed={viewMode === "list"}
+                     data-testid="button-calendar-list-view"
+                   >
+                     <List className="h-3.5 w-3.5" /> List
+                   </Button>
+                 </div>
+               </div>
             </div>
 
-            <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-100/80 px-2 md:px-3">
+             {viewMode === "month" ? (
+             <>
+             <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-100/80 px-2 md:px-3">
               {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label) => (
                 <div key={label} className="py-3 text-center text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{label}</div>
               ))}
