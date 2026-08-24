@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   addMonths,
   eachDayOfInterval,
@@ -27,28 +27,11 @@ import {
   Video,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
 
 type CalendarSettings = {
   calendarId: string;
   calendarName: string;
   timezone: string;
-};
-
-type CalendarOption = {
-  id: string;
-  name: string;
-  timezone: string | null;
-  primary: boolean;
-  color: string | null;
 };
 
 type ScheduleEvent = {
@@ -100,7 +83,6 @@ function displayRange(event: ScheduleEvent) {
 }
 
 export default function TrainingSchedulePage() {
-  const { toast } = useToast();
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
   const [selectedEvent, setSelectedEvent] = useState<ScheduleEvent | null>(null);
 
@@ -113,9 +95,6 @@ export default function TrainingSchedulePage() {
   const { data: settings } = useQuery<CalendarSettings>({
     queryKey: ["/api/training/schedule/settings"],
   });
-  const { data: calendars = [], isError: calendarsError } = useQuery<CalendarOption[]>({
-    queryKey: ["/api/training/schedule/calendars"],
-  });
   const eventsQuery = useQuery<ScheduleResponse>({
     queryKey: ["/api/training/schedule/events", range.start.toISOString(), range.end.toISOString()],
     queryFn: async () => {
@@ -124,24 +103,6 @@ export default function TrainingSchedulePage() {
       if (!response.ok) throw new Error(await response.text());
       return response.json();
     },
-  });
-
-  const saveCalendar = useMutation({
-    mutationFn: async (calendar: CalendarOption) => {
-      const payload: CalendarSettings = {
-        calendarId: calendar.id,
-        calendarName: calendar.name,
-        timezone: calendar.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York",
-      };
-      const response = await apiRequest("PUT", "/api/training/schedule/settings", payload);
-      return response.json() as Promise<CalendarSettings>;
-    },
-    onSuccess: (saved) => {
-      queryClient.setQueryData(["/api/training/schedule/settings"], saved);
-      queryClient.invalidateQueries({ queryKey: ["/api/training/schedule/events"] });
-      toast({ title: "Schedule calendar updated", description: `${saved.calendarName} is now the source for Training Schedule.` });
-    },
-    onError: () => toast({ title: "Calendar not updated", description: "Please try selecting the calendar again.", variant: "destructive" }),
   });
 
   const days = useMemo(
@@ -161,7 +122,6 @@ export default function TrainingSchedulePage() {
     () => events.filter((event) => new Date(event.end) >= new Date()).slice(0, 6),
     [events],
   );
-  const activeCalendar = eventsQuery.data?.calendar || settings;
   const isLoading = eventsQuery.isLoading || !settings;
 
   return (
@@ -183,31 +143,15 @@ export default function TrainingSchedulePage() {
             <div className="flex flex-col gap-2 sm:flex-row">
               <div className="rounded-xl border border-white/10 bg-black/15 px-3 py-2 backdrop-blur">
                 <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.15em] text-indigo-100/55">Schedule source</p>
-                <Select
-                  value={activeCalendar?.calendarId}
-                  onValueChange={(id) => {
-                    const calendar = calendars.find((item) => item.id === id);
-                    if (calendar) saveCalendar.mutate(calendar);
-                  }}
-                  disabled={!calendars.length || saveCalendar.isPending}
-                >
-                  <SelectTrigger className="h-8 min-w-[220px] border-0 bg-transparent px-0 text-sm font-medium text-white focus:ring-0">
-                    <SelectValue placeholder="Choose a Google Calendar" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {calendars.map((calendar) => (
-                      <SelectItem key={calendar.id} value={calendar.id}>
-                        {calendar.name}{calendar.primary ? " · Primary" : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center gap-2 text-sm font-medium text-white">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.7)]" />
+                  FIA Event Schedule
+                </div>
               </div>
               <Button
                 variant="outline"
                 onClick={() => {
                   eventsQuery.refetch();
-                  queryClient.invalidateQueries({ queryKey: ["/api/training/schedule/calendars"] });
                 }}
                 className="h-auto border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white"
                 data-testid="button-refresh-training-schedule"
@@ -219,10 +163,10 @@ export default function TrainingSchedulePage() {
           </div>
         </section>
 
-        {calendarsError || eventsQuery.isError ? (
+        {eventsQuery.isError ? (
           <section className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-5 text-sm text-amber-100">
             <p className="font-semibold">Google Calendar needs attention</p>
-            <p className="mt-1 text-amber-100/70">The schedule could not be loaded. Confirm the Google Calendar connection and the selected calendar, then refresh.</p>
+            <p className="mt-1 text-amber-100/70">The FIA Event Schedule could not be loaded. Confirm the Google Calendar connection, then refresh.</p>
           </section>
         ) : null}
 

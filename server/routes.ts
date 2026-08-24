@@ -14087,7 +14087,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       if (error instanceof z.ZodError) return res.status(400).json({ message: "Choose a valid date range." });
       console.error("[training-schedule] events error:", error);
       const status = error instanceof GoogleCalendarError && error.status === 404 ? 404 : 502;
-      res.status(status).json({ message: "Google Calendar is unavailable. Check the selected calendar and try again." });
+      res.status(status).json({ message: "Google Calendar is unavailable. Check the FIA Event Schedule connection and try again." });
     }
   });
 

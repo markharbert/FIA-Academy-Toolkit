@@ -4,14 +4,6 @@ export const FIA_EVENT_CALENDAR_ID = "c_dqk85hfnvqe8oqt5a6d0362o@group.calendar.
 export const FIA_EVENT_CALENDAR_NAME = "FIA Event Schedule";
 export const FIA_EVENT_CALENDAR_TIMEZONE = "America/New_York";
 
-export type TrainingCalendar = {
-  id: string;
-  name: string;
-  timezone: string | null;
-  primary: boolean;
-  color: string | null;
-};
-
 export type TrainingCalendarEvent = {
   id: string;
   title: string;
