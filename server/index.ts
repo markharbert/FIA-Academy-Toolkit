@@ -958,7 +958,6 @@ async function runStartupMigrations() {
 
 
 (async () => {
-  await runStartupMigrations();
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -990,56 +989,61 @@ async function runStartupMigrations() {
       host: "0.0.0.0",
       reusePort: true,
     },
-    async () => {
+    () => {
       log(`serving on port ${port}`);
-      
-      // Run startup migrations (additive index creation)
-      await runMigrations();
-      // Bootstrap super admins from environment
-      await bootstrapSuperAdmins();
-      // Load email sender settings from DB into the sendgrid module
-      try {
-        const senderSettings = await storage.getEmailSenderSettings();
-        configureEmailSender(senderSettings.fromName, senderSettings.fromEmail);
-        console.log(`[email] sender configured: ${senderSettings.fromName} <${senderSettings.fromEmail}>`);
-      } catch (err: any) {
-        console.warn("[email] could not load sender settings from DB, using defaults:", err?.message);
-      }
-      // Start email notification scheduler
-      startNotificationScheduler();
-      startYouTubeAnalyticsScheduler();
 
-      // Backfill DMO streak cache for existing users who have never had it computed.
-      // Runs in the background so it doesn't delay server startup.
-      (async () => {
+      // Keep the deployment healthy first. These database checks are additive and
+      // can safely finish after the HTTP server starts accepting health checks.
+      void (async () => {
         try {
-          const { pool: pgPool } = await import("./db");
-          // Find users with dmo_entries but no streak cache yet
-          const result = await pgPool.query(`
-            SELECT DISTINCT e.user_id
-            FROM dmo_entries e
-            LEFT JOIN dmo_settings s ON s.user_id = e.user_id
-            WHERE s.streak_updated_at IS NULL
-          `);
-          const userIds: string[] = result.rows.map((r: any) => r.user_id);
-          if (userIds.length === 0) {
-            console.log("[DMO] Streak cache: all users already up to date");
-            return;
+          await runStartupMigrations();
+          await runMigrations();
+          await bootstrapSuperAdmins();
+
+          try {
+            const senderSettings = await storage.getEmailSenderSettings();
+            configureEmailSender(senderSettings.fromName, senderSettings.fromEmail);
+            console.log(`[email] sender configured: ${senderSettings.fromName} <${senderSettings.fromEmail}>`);
+          } catch (err: any) {
+            console.warn("[email] could not load sender settings from DB, using defaults:", err?.message);
           }
-          console.log(`[DMO] Backfilling streak cache for ${userIds.length} user(s)…`);
-          for (const uid of userIds) {
+
+          startNotificationScheduler();
+          startYouTubeAnalyticsScheduler();
+
+          // Backfill DMO streak cache for existing users who have never had it
+          // computed. It stays detached so it cannot block a healthy server.
+          void (async () => {
             try {
-              await storage.recomputeAndStoreDmoStreak(uid);
+              const { pool: pgPool } = await import("./db");
+              const result = await pgPool.query(`
+                SELECT DISTINCT e.user_id
+                FROM dmo_entries e
+                LEFT JOIN dmo_settings s ON s.user_id = e.user_id
+                WHERE s.streak_updated_at IS NULL
+              `);
+              const userIds: string[] = result.rows.map((r: any) => r.user_id);
+              if (userIds.length === 0) {
+                console.log("[DMO] Streak cache: all users already up to date");
+                return;
+              }
+              console.log(`[DMO] Backfilling streak cache for ${userIds.length} user(s)…`);
+              for (const uid of userIds) {
+                try {
+                  await storage.recomputeAndStoreDmoStreak(uid);
+                } catch (e: any) {
+                  console.warn(`[DMO] Backfill failed for user ${uid}:`, e?.message);
+                }
+              }
+              console.log("[DMO] Streak cache backfill complete");
             } catch (e: any) {
-              console.warn(`[DMO] Backfill failed for user ${uid}:`, e?.message);
+              console.warn("[DMO] Streak cache backfill error:", e?.message);
             }
-          }
-          console.log("[DMO] Streak cache backfill complete");
-        } catch (e: any) {
-          console.warn("[DMO] Streak cache backfill error:", e?.message);
+          })();
+        } catch (err: any) {
+          console.error("[startup] background initialization failed:", err?.message);
         }
       })();
-
     },
   );
 })();
