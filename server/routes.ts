@@ -1712,49 +1712,6 @@ export async function registerRoutes(
     }
   });
 
-  // Admin: test CF API contact lookup for a given email (debug only)
-  app.get("/api/admin/cf/test-lookup", requireAdmin, async (req: Request, res: Response) => {
-    const email = (req.query.email as string || "").trim();
-    if (!email) return res.status(400).json({ message: "email query param required" });
-    const token = process.env.CF_API_TOKEN || "";
-    const rawDomain = (process.env.CF_WORKSPACE_DOMAIN || "").replace(/^https?:\/\//i, "").replace(/\/+$/, "");
-    const baseUrl = `https://${rawDomain}/api/v2`;
-    const enc = encodeURIComponent(email);
-    const headers = { Authorization: `Bearer ${token}`, Accept: "application/json" };
-
-    const attempts: Record<string, { status: number; body: string }> = {};
-
-    // Try a handful of possible contact search URL patterns
-    const urls: [string, string][] = [
-      ["filter[email_address]", `${baseUrl}/contacts?filter[email_address]=${enc}`],
-      ["filter%5Bemail_address%5D", `${baseUrl}/contacts?filter%5Bemail_address%5D=${enc}`],
-      ["filter[email]", `${baseUrl}/contacts?filter[email]=${enc}`],
-      ["filter%5Bemail%5D", `${baseUrl}/contacts?filter%5Bemail%5D=${enc}`],
-      ["GET /api/v2", `${baseUrl}`],
-      ["GET /api/v2/workspaces", `${baseUrl}/workspaces`],
-    ];
-    for (const [label, url] of urls) {
-      try {
-        const r = await fetch(url, { headers });
-        const body = await r.text();
-        attempts[label] = { status: r.status, body: body.slice(0, 300) };
-      } catch (e: any) {
-        attempts[label] = { status: -1, body: e.message };
-      }
-    }
-
-    // Also try full enrollment check
-    let enrollmentResult: any = null;
-    try {
-      const { checkCfEnrollmentByEmail } = await import("./clickfunnels");
-      enrollmentResult = await checkCfEnrollmentByEmail(email);
-    } catch (e: any) {
-      enrollmentResult = { error: e.message };
-    }
-
-    res.json({ rawDomain, baseUrl, attempts, enrollmentResult });
-  });
-
   // Admin: list users with CF enrollment info
   app.get("/api/admin/cf/users", requireAdmin, async (req: Request, res: Response) => {
     try {
@@ -1768,23 +1725,6 @@ export async function registerRoutes(
   });
 
   // Admin: immediately push fresh tokens to all enrolled members with a CF Contact ID
-  // Debug: read a CF contact directly to inspect custom_attributes
-  app.get("/api/admin/cf/contact/:contactId", requireAdmin, async (req: Request, res: Response) => {
-    try {
-      const { contactId } = req.params;
-      const token = process.env.CF_API_TOKEN || "";
-      const rawDomain = (process.env.CF_WORKSPACE_DOMAIN || "").replace(/^https?:\/\//i, "").replace(/\/+$/, "");
-      const url = `https://${rawDomain}/api/v2/contacts/${contactId}`;
-      const cfRes = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-      });
-      const body = await cfRes.text();
-      res.json({ status: cfRes.status, url, body: JSON.parse(body) });
-    } catch (err: any) {
-      res.status(500).json({ message: err?.message });
-    }
-  });
-
   // Admin: import ALL CF-enrolled members from the CF API, creating accounts for unknowns
   app.post("/api/admin/cf/import-all-members", requireAdmin, async (req: Request, res: Response) => {
     try {
@@ -2162,41 +2102,6 @@ export async function registerRoutes(
   });
 
   // ── end CF Course Import ──────────────────────────────────────────────────────
-
-  // Admin: simulate a CF webhook event for testing
-  app.post("/api/admin/cf/test-webhook", requireAdmin, async (req: Request, res: Response) => {
-    try {
-      const { email, eventType } = req.body as { email: string; eventType: string };
-      if (!email || !eventType) {
-        return res.status(400).json({ message: "email and eventType are required" });
-      }
-
-      const validEvents = [
-        "courses/enrollment.created",
-        "courses/enrollment.suspended",
-        "courses/enrollment.deleted",
-        "subscription.cancelled",
-        "subscription.churned",
-      ];
-      if (!validEvents.includes(eventType)) {
-        return res.status(400).json({ message: "Invalid event type" });
-      }
-
-      const event = {
-        eventType,
-        contactEmail: email.trim().toLowerCase(),
-        contactId: null,
-        courseId: process.env.CF_COURSE_ID || null,
-      };
-
-      const result = await handleCfEnrollmentEvent(event);
-      console.log(`[CF Test Webhook] event=${eventType} email=${email} action=${result.action}`);
-      res.json({ ok: true, action: result.action, email: result.email });
-    } catch (err) {
-      console.error("[CF Test Webhook] Error:", err);
-      res.status(500).json({ message: "Test webhook failed" });
-    }
-  });
 
   // Admin: manually grant CF access to a user
   app.post("/api/admin/users/:id/cf-access", requireAdmin, async (req: Request, res: Response) => {
