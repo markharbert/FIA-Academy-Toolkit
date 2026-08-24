@@ -173,7 +173,7 @@ export default function TrainingSchedulePage() {
         <section className="relative overflow-hidden rounded-[28px] border border-slate-200 bg-white px-6 py-7 shadow-xl shadow-slate-200/70 md:px-8 md:py-9">
           <div className="pointer-events-none absolute -right-24 -top-28 h-72 w-72 rounded-full bg-fuchsia-100/80 blur-3xl" />
           <div className="pointer-events-none absolute bottom-0 right-1/4 h-36 w-36 rounded-full bg-cyan-100/80 blur-2xl" />
-          <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+          <div className="relative flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
             <div className="max-w-2xl">
               <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-fuchsia-700">
                 <Sparkles className="h-3.5 w-3.5" /> Fearless Influencer Academy Live Events
