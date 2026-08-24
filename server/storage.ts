@@ -1156,24 +1156,15 @@ export class DatabaseStorage implements IStorage {
   async getCfEnrolledUsers(): Promise<{
     enrolledCount: number;
     revokedCount: number;
-    gracePeriodCount: number;
     neverEnrolledCount: number;
   }> {
-    const now = new Date();
     const memberAccount = sql`COALESCE(${users.isAdmin}, false) = false`;
-    const [[enrolledRow], [graceRow], [revokedRow], [neverEnrolledRow]] = await Promise.all([
+    const [[enrolledRow], [revokedRow], [neverEnrolledRow]] = await Promise.all([
       db.select({ count: count() }).from(users).where(and(memberAccount, eq(users.cfEnrolled, true))),
       db.select({ count: count() }).from(users).where(and(
         memberAccount,
         eq(users.cfEnrolled, false),
         sql`${users.cfRevokedAt} IS NOT NULL`,
-        sql`${users.cfRevokedGraceUntil} > ${now}`,
-      )),
-      db.select({ count: count() }).from(users).where(and(
-        memberAccount,
-        eq(users.cfEnrolled, false),
-        sql`${users.cfRevokedAt} IS NOT NULL`,
-        sql`(${users.cfRevokedGraceUntil} IS NULL OR ${users.cfRevokedGraceUntil} <= ${now})`,
       )),
       db.select({ count: count() }).from(users).where(and(
         memberAccount,
@@ -1184,30 +1175,20 @@ export class DatabaseStorage implements IStorage {
     return {
       enrolledCount: Number(enrolledRow?.count || 0),
       revokedCount: Number(revokedRow?.count || 0),
-      gracePeriodCount: Number(graceRow?.count || 0),
       neverEnrolledCount: Number(neverEnrolledRow?.count || 0),
     };
   }
 
   async getCfUsers(filter?: string): Promise<Array<Pick<User, 'id' | 'email' | 'displayName' | 'firstName' | 'lastName' | 'cfEnrolled' | 'cfEnrolledAt' | 'cfRevokedAt' | 'cfContactId' | 'cfRevokedGraceUntil'>>> {
-    const now = new Date();
     const memberAccount = sql`COALESCE(${users.isAdmin}, false) = false`;
     let condition = memberAccount;
     if (filter === 'enrolled') {
       condition = and(condition, eq(users.cfEnrolled, true))!;
-    } else if (filter === 'grace') {
-      condition = and(
-        condition,
-        eq(users.cfEnrolled, false),
-        sql`${users.cfRevokedAt} IS NOT NULL`,
-        sql`${users.cfRevokedGraceUntil} > ${now}`,
-      )!;
     } else if (filter === 'revoked') {
       condition = and(
         condition,
         eq(users.cfEnrolled, false),
         sql`${users.cfRevokedAt} IS NOT NULL`,
-        sql`(${users.cfRevokedGraceUntil} IS NULL OR ${users.cfRevokedGraceUntil} <= ${now})`,
       )!;
     } else if (filter === 'never') {
       condition = and(
@@ -1233,7 +1214,6 @@ export class DatabaseStorage implements IStorage {
 
   async applyCfReconciliation(
     enrollments: CfReconciliationEnrollment[],
-    gracePeriodHours: number,
   ): Promise<CfReconciliationChanges> {
     return db.transaction(async (tx) => {
       const localUsers = await tx.select().from(users);
@@ -1254,7 +1234,6 @@ export class DatabaseStorage implements IStorage {
           .filter((entry): entry is readonly [string, User] => Boolean(entry[0])),
       );
       const now = new Date();
-      const graceUntil = new Date(now.getTime() + gracePeriodHours * 60 * 60 * 1000);
       const changes: CfReconciliationChanges = {
         accountsCreated: 0,
         accountsReactivated: 0,
@@ -1328,8 +1307,9 @@ export class DatabaseStorage implements IStorage {
         await tx.update(users).set({
           cfEnrolled: false,
           cfRevokedAt: now,
-          cfRevokedGraceUntil: graceUntil,
+          cfRevokedGraceUntil: null,
           cfGraceExpirySentAt: null,
+          isDisabled: true,
         }).where(eq(users.id, localUser.id));
         changes.accountsRevoked++;
       }
