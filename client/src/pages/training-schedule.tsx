@@ -14,6 +14,7 @@ import {
 } from "date-fns";
 import {
   CalendarDays,
+  CalendarPlus,
   ChevronLeft,
   ChevronRight,
   Clock3,
@@ -31,6 +32,7 @@ type CalendarSettings = {
   calendarId: string;
   calendarName: string;
   timezone: string;
+  subscribeUrl: string;
 };
 
 type ScheduleEvent = {
@@ -167,6 +169,7 @@ export default function TrainingSchedulePage() {
     [events, now],
   );
   const isLoading = eventsQuery.isLoading;
+  const subscribeUrl = eventsQuery.data?.calendar.subscribeUrl;
 
   return (
     <main className="min-h-full bg-white text-slate-900 px-4 py-6 md:px-7 lg:px-10">
@@ -179,7 +182,21 @@ export default function TrainingSchedulePage() {
               <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-fuchsia-700">
                 <CalendarDays className="h-5 w-5" /> FIA live events
               </div>
-              <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">Training Schedule</h1>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">Training Schedule</h1>
+                {subscribeUrl && (
+                  <a
+                    href={subscribeUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-bold text-cyan-800 transition hover:border-cyan-300 hover:bg-cyan-100 hover:text-cyan-950"
+                    data-testid="link-subscribe-google-calendar"
+                  >
+                    <CalendarPlus className="h-3.5 w-3.5" />
+                    Subscribe via Google Calendar
+                  </a>
+                )}
+              </div>
               <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">
                 This is the live event calendar for Fearless Influencer Academy. It updates regularly with the latest event information.
               </p>

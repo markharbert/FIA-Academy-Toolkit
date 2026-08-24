@@ -49,7 +49,7 @@ import {
 } from "./clickfunnels";
 import { listCfCourses, listCfDownloads, getCfCourseStructure, extractVimeoUrl, type CfTreeNode } from "./cf-import-client";
 import { listVimeoProjects, listVimeoVideos, extractVimeoVideoId, listVimeoTextTracks, fetchVimeoTranscript } from "./vimeo";
-import { FIA_EVENT_CALENDAR_ID, FIA_EVENT_CALENDAR_NAME, FIA_EVENT_CALENDAR_TIMEZONE, GoogleCalendarError, getTrainingCalendarEvents } from "./googleCalendar";
+import { FIA_EVENT_CALENDAR_ID, FIA_EVENT_CALENDAR_NAME, FIA_EVENT_CALENDAR_SUBSCRIBE_URL, FIA_EVENT_CALENDAR_TIMEZONE, GoogleCalendarError, getTrainingCalendarEvents } from "./googleCalendar";
 
 const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
@@ -14061,6 +14061,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       calendarId: FIA_EVENT_CALENDAR_ID,
       calendarName: FIA_EVENT_CALENDAR_NAME,
       timezone: FIA_EVENT_CALENDAR_TIMEZONE,
+      subscribeUrl: FIA_EVENT_CALENDAR_SUBSCRIBE_URL,
     });
   });
 
@@ -14080,6 +14081,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         calendarId: FIA_EVENT_CALENDAR_ID,
         calendarName: FIA_EVENT_CALENDAR_NAME,
         timezone: FIA_EVENT_CALENDAR_TIMEZONE,
+        subscribeUrl: FIA_EVENT_CALENDAR_SUBSCRIBE_URL,
       };
       const events = await getTrainingCalendarEvents(calendar.calendarId, startDate, endDate, calendar.timezone);
       res.json({ calendar, events });
