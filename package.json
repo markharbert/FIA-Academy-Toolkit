@@ -12,7 +12,8 @@
     "extension:smoke": "node scripts/extension-link-vault-smoke.mjs",
     "test:swipe-api": "node --import tsx --test server/swipe-api.contract.test.ts",
     "test:course-builder": "node --import tsx --test server/course-structure.test.ts",
-    "test:cf-import": "node --import tsx --test server/cf-import-client.test.ts"
+    "test:cf-import": "node --import tsx --test server/cf-import-client.test.ts",
+    "test:lesson-editor": "vitest run client/src/pages/admin-lesson-editor.test.tsx"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -52,6 +53,9 @@
     "@replit/connectors-sdk": "^0.4.2",
     "@sendgrid/mail": "^8.1.6",
     "@tanstack/react-query": "^5.60.5",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.6",
     "@tiptap/extension-link": "^3.22.5",
     "@tiptap/pm": "^3.22.5",
     "@tiptap/react": "^3.22.5",
@@ -97,6 +101,7 @@
     "html-to-image": "^1.11.13",
     "imapflow": "^1.4.2",
     "input-otp": "^1.4.2",
+    "jsdom": "^29.1.1",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.453.0",
     "memorystore": "^1.6.7",
@@ -127,6 +132,7 @@
     "tw-animate-css": "^1.2.5",
     "uuid": "^14.0.0",
     "vaul": "^1.1.2",
+    "vitest": "^4.1.11",
     "web-push": "^3.6.7",
     "wouter": "^3.3.5",
     "ws": "^8.21.0",
