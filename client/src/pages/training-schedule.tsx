@@ -92,7 +92,7 @@ function countdownLabel(milliseconds: number) {
   const hours = Math.floor((totalSeconds % 86400) / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-  if (days > 0) return `${days}d ${String(hours).padStart(2, "0")}h`;
+  if (days > 0) return `${days}d ${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
@@ -179,24 +179,24 @@ export default function TrainingSchedulePage() {
                 A polished view of every live session, workshop, and Academy moment — always sourced from your Google Calendar.
               </p>
             </div>
-            <div className="flex w-full max-w-md flex-col sm:items-end">
+            <div className="flex w-full max-w-xl flex-col sm:items-end">
               {nextEvent ? (
                 <button
                   onClick={() => setSelectedEvent(nextEvent)}
-                  className="w-full rounded-2xl border border-fuchsia-200 bg-gradient-to-br from-fuchsia-50 to-cyan-50 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                  className="w-full rounded-2xl border border-fuchsia-200 bg-gradient-to-br from-fuchsia-50 via-white to-cyan-50 p-5 text-left shadow-md shadow-fuchsia-100/70 transition hover:-translate-y-0.5 hover:shadow-lg sm:p-6"
                   data-testid="card-next-training-event"
                 >
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
                       <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-fuchsia-700">Next session</p>
-                      <p className="mt-1 truncate text-sm font-bold text-slate-950">{nextEvent.title}</p>
-                      <p className="mt-1 text-xs font-medium text-slate-600">
+                      <p className="mt-1 truncate text-base font-bold text-slate-950">{nextEvent.title}</p>
+                      <p className="mt-1 text-sm font-medium text-slate-600">
                         {nextEvent.isAllDay ? format(eventStartDate(nextEvent), "EEEE, MMMM d") : `${format(eventStartDate(nextEvent), "EEEE, MMMM d")} · ${displayTime(nextEvent)}`}
                       </p>
                     </div>
-                    <div className="shrink-0 rounded-xl bg-white px-3 py-2 text-right shadow-sm ring-1 ring-fuchsia-100">
-                      <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500">Starts in</p>
-                      <p className="mt-0.5 font-mono text-sm font-bold tabular-nums text-fuchsia-700">{countdownLabel(eventStartDate(nextEvent).getTime() - now.getTime())}</p>
+                    <div className="shrink-0 rounded-2xl bg-white px-5 py-3 text-center shadow-md ring-1 ring-fuchsia-100 sm:min-w-[190px] sm:text-right">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Starts in</p>
+                      <p className="mt-1 font-mono text-2xl font-black tabular-nums tracking-tight text-fuchsia-700 sm:text-3xl">{countdownLabel(eventStartDate(nextEvent).getTime() - now.getTime())}</p>
                     </div>
                   </div>
                 </button>
