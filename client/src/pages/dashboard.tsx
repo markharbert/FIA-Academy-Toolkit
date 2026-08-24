@@ -186,7 +186,7 @@ function DashboardNextEventWidget({ timezone }: { timezone: string }) {
 
   return (
     <div
-      className="w-full max-w-xl rounded-2xl border border-teal-300/30 bg-gradient-to-br from-slate-950/80 via-indigo-950/80 to-teal-950/70 p-4 pb-3 shadow-2xl shadow-black/20 sm:p-5 sm:pb-3 xl:w-[560px] xl:max-w-[560px]"
+      className="relative w-full max-w-xl rounded-2xl border border-teal-300/30 bg-gradient-to-br from-slate-950/80 via-indigo-950/80 to-teal-950/70 p-4 pb-3 shadow-2xl shadow-black/20 sm:p-5 sm:pb-3 xl:w-[560px] xl:max-w-[560px]"
       data-testid="widget-dashboard-next-training"
     >
       <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-teal-200">
@@ -196,7 +196,7 @@ function DashboardNextEventWidget({ timezone }: { timezone: string }) {
       {eventsQuery.isLoading ? (
         <p className="mt-3 text-sm font-semibold text-white/70">Loading upcoming session…</p>
       ) : nextEvent ? (
-        <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between xl:pr-[230px]">
           <div className="min-w-0">
             <p className="line-clamp-2 break-words text-sm font-bold leading-5 text-white">{nextEvent.title}</p>
             <p className="mt-1 text-xs font-medium text-teal-100/80">
@@ -208,7 +208,7 @@ function DashboardNextEventWidget({ timezone }: { timezone: string }) {
               Time zone: {formatInTz(now, timezone, "zzzz")}
             </p>
           </div>
-          <div className="shrink-0 self-center rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-center">
+          <div className="shrink-0 self-center rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-center xl:absolute xl:right-5 xl:top-1/2 xl:-translate-y-1/2">
             <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-teal-100/70">Starts in</p>
             <div className="mt-1 grid grid-cols-4 gap-1.5">
               {dashboardCountdownParts(dashboardEventStart(nextEvent).getTime() - now.getTime()).map((part) => (
