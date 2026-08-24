@@ -406,7 +406,7 @@ export function AppSidebar() {
                       data-testid="nav-training-schedule"
                     >
                       <CalendarDays className="text-fuchsia-400" />
-                      <span className="truncate">Schedule</span>
+                      <span className="truncate">Training Schedule</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 </SidebarMenu>
