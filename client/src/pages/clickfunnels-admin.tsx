@@ -163,10 +163,6 @@ function GracePeriodCard() {
 
 function CfIntegrationSection() {
   const { toast } = useToast();
-  const [testEmail, setTestEmail] = useState("");
-  const [testEvent, setTestEvent] = useState("courses/enrollment.created");
-  const [testResult, setTestResult] = useState<{ action: string; email: string | null } | null>(null);
-  const [testLoading, setTestLoading] = useState(false);
 
   const { data: cfStatus, isLoading: statusLoading, refetch: refetchStatus } = useQuery<CfStatus>({
     queryKey: ["/api/admin/cf/status"],
@@ -178,58 +174,12 @@ function CfIntegrationSection() {
   });
   const cfUsers = cfUsersData?.users ?? [];
 
-  const [lookupEmail, setLookupEmail] = useState("");
-  const [lookupLoading, setLookupLoading] = useState(false);
-  const [lookupResult, setLookupResult] = useState<{ enrolled: boolean; contactId?: string | null; email?: string | null; error?: string } | null>(null);
-
-  const handleLookup = async () => {
-    if (!lookupEmail.trim()) return;
-    setLookupLoading(true);
-    setLookupResult(null);
-    try {
-      const res = await fetch(`/api/admin/cf/test-lookup?email=${encodeURIComponent(lookupEmail.trim())}`, { credentials: "include" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed");
-      const er = data.enrollmentResult;
-      setLookupResult({ enrolled: !!er?.enrolled, contactId: er?.contactId, email: er?.email, error: er?.error });
-    } catch (err: any) {
-      toast({ title: "Lookup failed", description: err.message, variant: "destructive" });
-    } finally {
-      setLookupLoading(false);
-    }
-  };
-
   const webhookUrl = `${window.location.protocol}//${window.location.host}/api/webhooks/clickfunnels`;
 
   const handleCopy = (text: string, label: string) => {
     navigator.clipboard.writeText(text).then(() => {
       toast({ title: `${label} copied!` });
     });
-  };
-
-  const handleTestWebhook = async () => {
-    if (!testEmail.trim()) {
-      toast({ title: "Enter an email address first", variant: "destructive" });
-      return;
-    }
-    setTestLoading(true);
-    setTestResult(null);
-    try {
-      const res = await fetch("/api/admin/cf/test-webhook", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email: testEmail.trim(), eventType: testEvent }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed");
-      setTestResult({ action: data.action, email: data.email });
-      refetchStatus();
-    } catch (err: any) {
-      toast({ title: "Test failed", description: err.message, variant: "destructive" });
-    } finally {
-      setTestLoading(false);
-    }
   };
 
   const configItems = [
@@ -473,124 +423,7 @@ function CfIntegrationSection() {
         </Card>
       </div>
 
-      {/* Webhook Tester + CF Contact Lookup — side by side */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Webhook Tester */}
-        <Card className="overflow-hidden">
-          <div className="h-1 bg-gradient-to-r from-amber-500 to-orange-400" />
-          <CardHeader className="pt-4">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Zap className="h-4 w-4 text-amber-500" />
-              Webhook Tester
-            </CardTitle>
-            <CardDescription>
-              Simulate a ClickFunnels event to verify your integration is working correctly.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-col gap-3">
-              <input
-                type="email"
-                placeholder="user@example.com"
-                value={testEmail}
-                onChange={(e) => setTestEmail(e.target.value)}
-                className="flex-1 text-sm border rounded-md px-3 py-2 bg-background"
-                data-testid="input-test-webhook-email"
-              />
-              <div className="flex gap-2">
-                <select
-                  value={testEvent}
-                  onChange={(e) => setTestEvent(e.target.value)}
-                  className="flex-1 text-sm border rounded-md px-3 py-2 bg-background"
-                  data-testid="select-test-webhook-event"
-                >
-                  <option value="courses/enrollment.created">courses/enrollment.created</option>
-                  <option value="courses/enrollment.suspended">courses/enrollment.suspended</option>
-                  <option value="courses/enrollment.deleted">courses/enrollment.deleted</option>
-                  <option value="subscription.cancelled">subscription.cancelled</option>
-                  <option value="subscription.churned">subscription.churned</option>
-                </select>
-                <Button
-                  onClick={handleTestWebhook}
-                  disabled={testLoading}
-                  size="sm"
-                  data-testid="button-run-test-webhook"
-                >
-                  {testLoading ? "Running..." : "Run Test"}
-                </Button>
-              </div>
-            </div>
-
-            {testResult && (
-              <div className={`flex items-center gap-3 rounded-md border px-4 py-3 text-sm ${
-                ["granted", "created"].includes(testResult.action) ? "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400" :
-                testResult.action === "revoked" ? "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400" :
-                "border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"
-              }`} data-testid="text-test-webhook-result">
-                {["granted", "created"].includes(testResult.action) && <UserCheck className="h-4 w-4 flex-shrink-0" />}
-                {testResult.action === "revoked" && <UserX className="h-4 w-4 flex-shrink-0" />}
-                {!["granted", "created", "revoked"].includes(testResult.action) && <AlertCircle className="h-4 w-4 flex-shrink-0" />}
-                <div>
-                  <span className="font-medium capitalize">{testResult.action.replace(/_/g, " ")}</span>
-                  {testResult.email && <span className="ml-2 opacity-70">for {testResult.email}</span>}
-                  {testResult.action === "created" && (
-                    <p className="text-xs mt-0.5 opacity-70">New account auto-provisioned for this enrollee.</p>
-                  )}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* CF Contact Lookup */}
-        <Card className="overflow-hidden">
-          <div className="h-1 bg-gradient-to-r from-sky-500 to-cyan-400" />
-          <CardHeader className="pt-4">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Search className="h-4 w-4 text-sky-500" />
-              CF Contact Lookup
-            </CardTitle>
-            <CardDescription>
-              Check a member's enrollment status directly against the ClickFunnels API.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex gap-2">
-              <input
-                type="email"
-                placeholder="user@example.com"
-                value={lookupEmail}
-                onChange={(e) => setLookupEmail(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleLookup()}
-                className="flex-1 text-sm border rounded-md px-3 py-2 bg-background"
-                data-testid="input-cf-lookup-email"
-              />
-              <Button onClick={handleLookup} disabled={lookupLoading} size="sm" data-testid="button-cf-lookup">
-                {lookupLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Look Up"}
-              </Button>
-            </div>
-            {lookupResult && (
-              <div className={`rounded-md border px-4 py-3 text-sm space-y-1 ${
-                lookupResult.error ? "border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/30" :
-                lookupResult.enrolled ? "border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950/30" :
-                "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30"
-              }`} data-testid="text-cf-lookup-result">
-                {lookupResult.error ? (
-                  <p className="text-red-700 dark:text-red-400"><span className="font-medium">Error:</span> {lookupResult.error}</p>
-                ) : (
-                  <>
-                    <p className={lookupResult.enrolled ? "text-green-700 dark:text-green-400 font-medium" : "text-amber-700 dark:text-amber-400 font-medium"}>
-                      {lookupResult.enrolled ? "✓ Active enrollment found" : "✗ Not enrolled / not found"}
-                    </p>
-                    {lookupResult.contactId && <p className="text-muted-foreground text-xs">Contact ID: <code className="font-mono">{lookupResult.contactId}</code></p>}
-                    {lookupResult.email && <p className="text-muted-foreground text-xs">Email: {lookupResult.email}</p>}
-                  </>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
+      <div className="grid grid-cols-1 gap-4">
         {/* Bulk Member Sync */}
         <Card className="overflow-hidden">
           <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-400" />
