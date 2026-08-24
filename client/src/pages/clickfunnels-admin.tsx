@@ -5,10 +5,16 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   Loader2, CheckCircle, AlertCircle, Users, Copy, ExternalLink,
   Webhook, UserCheck, UserX, Zap, Key, Search, Clock, RotateCw, Link,
+  Activity, Ban, CheckCircle2, Folder, KeyRound, LogIn, LogOut, Shield, ShieldOff, UserCog, Video,
 } from "lucide-react";
 import { CourseImportCard } from "@/components/cf-course-import";
 
@@ -61,6 +67,40 @@ interface CfUser {
   cfRevokedAt: string | null;
   cfContactId: string | null;
   cfRevokedGraceUntil: string | null;
+  createdAt: string;
+  lastLoginAt: string | null;
+  isDisabled: boolean;
+  isAdmin: boolean;
+  role: string | null;
+}
+
+interface MemberDetails {
+  user: CfUser & {
+    disabledAt: string | null;
+    disabledReason: string | null;
+    timezone: string | null;
+    themePreference: string | null;
+    totalVideos: number;
+    projectCount: number;
+    taskCount: number;
+    tasksDoneCount: number;
+    dmoLast30Days: number;
+    keywordsCreditsThisMonth: number;
+    keywordsCreditsTotalUsed: number;
+  };
+  identities: Array<{ id: string; provider: string; emailFromProvider: string | null; createdAt: string }>;
+  sessions: Array<{ id: string; title: string | null; createdAt: string; scoreJson: { totalScore: number } | null; videoDeletedAt: string | null }>;
+  sessionCount: number;
+  hasLocalPassword: boolean;
+  providers: string[];
+}
+
+interface MemberAction {
+  id: string;
+  actionType: string;
+  actionLabel: string;
+  createdAt: string;
+  ip: string | null;
 }
 
 interface CfReconciliationRun {
@@ -309,9 +349,212 @@ function MembershipOverviewTab() {
   );
 }
 
+function getMemberName(member: Pick<CfUser, "displayName" | "firstName" | "lastName" | "email">) {
+  return member.displayName || [member.firstName, member.lastName].filter(Boolean).join(" ") || member.email || "Unnamed account";
+}
+
+function ToolkitLoginStatus({ member }: { member: Pick<CfUser, "lastLoginAt" | "isDisabled"> }) {
+  if (member.isDisabled) {
+    return <Badge variant="outline" className="border-rose-300 text-rose-700 dark:border-rose-800 dark:text-rose-300">Disabled</Badge>;
+  }
+  if (!member.lastLoginAt) {
+    return <Badge variant="outline" className="border-amber-300 text-amber-700 dark:border-amber-800 dark:text-amber-300">Never logged in</Badge>;
+  }
+  return <Badge variant="outline" className="border-sky-300 text-sky-700 dark:border-sky-800 dark:text-sky-300">Logged in</Badge>;
+}
+
+function MemberDetailsSheet({
+  memberId,
+  onOpenChange,
+  onAccountChanged,
+}: {
+  memberId: string | null;
+  onOpenChange: (open: boolean) => void;
+  onAccountChanged: () => void;
+}) {
+  const { toast } = useToast();
+  const [pendingAction, setPendingAction] = useState<{ title: string; description: string; run: () => Promise<void> } | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const { data: details, isLoading } = useQuery<MemberDetails>({
+    queryKey: ["/api/admin/users", memberId],
+    queryFn: async () => {
+      const response = await fetch(`/api/admin/users/${memberId}`, { credentials: "include" });
+      if (!response.ok) throw new Error("Could not load Toolkit account details");
+      return response.json();
+    },
+    enabled: !!memberId,
+  });
+  const { data: actionData, isLoading: activityLoading } = useQuery<{ items: MemberAction[] }>({
+    queryKey: ["/api/admin/users", memberId, "actions"],
+    queryFn: async () => {
+      const response = await fetch(`/api/admin/users/${memberId}/actions?limit=20`, { credentials: "include" });
+      if (!response.ok) throw new Error("Could not load account activity");
+      return response.json();
+    },
+    enabled: !!memberId,
+  });
+
+  const runAction = async (key: string, request: () => Promise<Response>, success: string, redirect = false) => {
+    try {
+      setActionLoading(key);
+      const response = await request();
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.message || "The account update could not be completed.");
+      if (redirect) {
+        window.location.href = "/dashboard";
+        return;
+      }
+      toast({ title: success });
+      onAccountChanged();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users", memberId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users", memberId, "actions"] });
+    } catch (error) {
+      toast({
+        title: "Action could not be completed",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const account = details?.user;
+  const membershipState = account ? getMemberState(account) : "never";
+
+  return (
+    <>
+      <Sheet open={!!memberId} onOpenChange={onOpenChange}>
+        <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
+          <SheetHeader>
+            <SheetTitle>Member account</SheetTitle>
+            <SheetDescription>ClickFunnels determines Academy access. Toolkit data below describes the local account only.</SheetDescription>
+          </SheetHeader>
+
+          {isLoading ? (
+            <div className="flex justify-center py-12"><Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /></div>
+          ) : !account ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">This Toolkit account is no longer available.</p>
+          ) : (
+            <div className="mt-6 space-y-5">
+              <div className="rounded-xl border bg-gradient-to-br from-muted/50 to-muted/10 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary text-base font-semibold text-primary-foreground">
+                    {getMemberName(account).split(/\s+|@/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "?"}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="truncate text-lg font-semibold">{getMemberName(account)}</h3>
+                      {account.isAdmin && <Badge className="bg-amber-500/15 text-amber-800 hover:bg-amber-500/15 dark:text-amber-300"><Shield className="mr-1 h-3 w-3" />Admin</Badge>}
+                      <ToolkitLoginStatus member={account} />
+                    </div>
+                    <p className="mt-1 truncate text-sm text-muted-foreground">{account.email || "No email address"}</p>
+                    <p className="mt-2 text-xs text-muted-foreground">Toolkit account created {formatDateTime(account.createdAt)}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 dark:border-emerald-950 dark:bg-emerald-950/20">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">ClickFunnels access</p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <Badge variant="outline" className={memberStateClass(membershipState)}>{memberStateLabel(membershipState)}</Badge>
+                    <span className="text-xs text-muted-foreground">{membershipState === "enrolled" ? `Since ${formatDateTime(account.cfEnrolledAt)}` : account.cfRevokedAt ? `Revoked ${formatDateTime(account.cfRevokedAt)}` : "No enrollment recorded"}</span>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">This status controls Academy access, not Toolkit login history.</p>
+                </div>
+                <div className="rounded-lg border border-sky-200 bg-sky-50/50 p-3 dark:border-sky-950 dark:bg-sky-950/20">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Toolkit account</p>
+                  <p className="mt-2 text-sm font-semibold">{account.isDisabled ? "Disabled by administrator" : account.lastLoginAt ? "Has logged in" : "Never logged in"}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{account.lastLoginAt ? `Last login ${formatDateTime(account.lastLoginAt)}` : "No Toolkit sign-in recorded yet"}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {[
+                  ["Videos", details.sessionCount, Video],
+                  ["Projects", account.projectCount ?? 0, Folder],
+                  ["DMO days", `${account.dmoLast30Days ?? 0}/30`, Activity],
+                  ["KW credits", account.keywordsCreditsThisMonth ?? 0, KeyRound],
+                ].map(([label, value, Icon]) => {
+                  const StatIcon = Icon as typeof Activity;
+                  return <div key={String(label)} className="rounded-lg border bg-card p-3"><div className="flex items-center gap-1 text-xs text-muted-foreground"><StatIcon className="h-3.5 w-3.5" />{label}</div><p className="mt-1 text-lg font-semibold">{value as string | number}</p></div>;
+                })}
+              </div>
+
+              <div className="rounded-lg border p-4">
+                <div className="flex items-center gap-2"><UserCog className="h-4 w-4 text-violet-500" /><h3 className="text-sm font-semibold">Identity & sign-in</h3></div>
+                <div className="mt-3 space-y-2 text-sm">
+                  <div className="flex justify-between gap-3"><span className="text-muted-foreground">Role</span><span className="capitalize">{account.role || (account.isAdmin ? "admin" : "user")}</span></div>
+                  <div className="flex justify-between gap-3"><span className="text-muted-foreground">ClickFunnels contact</span><span className="max-w-[55%] truncate font-mono text-xs">{account.cfContactId || "Not linked"}</span></div>
+                  {account.timezone && <div className="flex justify-between gap-3"><span className="text-muted-foreground">Time zone</span><span className="text-right text-xs">{account.timezone}</span></div>}
+                  {account.disabledReason && <div className="flex justify-between gap-3"><span className="text-muted-foreground">Disabled reason</span><span className="text-right">{account.disabledReason}</span></div>}
+                </div>
+                <div className="mt-3 space-y-2 border-t pt-3">
+                  {details.hasLocalPassword && <div className="flex items-center justify-between rounded-md border p-2 text-sm"><span className="flex items-center gap-2"><Key className="h-3.5 w-3.5" />Email & password</span><Badge variant="outline">Local</Badge></div>}
+                  {details.identities.map((identity) => <div key={identity.id} className="flex items-center justify-between rounded-md border p-2 text-sm"><span className="capitalize">{identity.provider}</span><span className="text-xs text-muted-foreground">{identity.emailFromProvider || formatDateTime(identity.createdAt)}</span></div>)}
+                  {!details.hasLocalPassword && details.identities.length === 0 && <p className="text-xs text-muted-foreground">No Toolkit sign-in method is on file.</p>}
+                </div>
+              </div>
+
+              <div className="rounded-lg border p-4">
+                <div className="flex items-center justify-between"><div className="flex items-center gap-2"><Video className="h-4 w-4 text-emerald-500" /><h3 className="text-sm font-semibold">Recent video sessions</h3></div><Badge variant="outline">{details.sessionCount} total</Badge></div>
+                {details.sessions.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">No video sessions yet.</p> : <div className="mt-3 space-y-2">{details.sessions.slice(0, 5).map((session) => <div key={session.id} className="flex items-center justify-between gap-3 rounded-md border p-2 text-sm"><div className="min-w-0"><p className="truncate">{session.title || "Untitled"}</p><p className="text-xs text-muted-foreground">{formatDateTime(session.createdAt)}</p></div><span className="shrink-0 text-xs text-muted-foreground">{session.scoreJson?.totalScore != null ? `${session.scoreJson.totalScore}/100` : "Not scored"}</span></div>)}</div>}
+              </div>
+
+              <div className="rounded-lg border p-4">
+                <div className="flex items-center gap-2"><Activity className="h-4 w-4 text-indigo-500" /><h3 className="text-sm font-semibold">Recent account activity</h3>{activityLoading && <Loader2 className="ml-auto h-3.5 w-3.5 animate-spin" />}</div>
+                {!activityLoading && !(actionData?.items.length) ? <p className="mt-3 text-sm text-muted-foreground">No account activity has been recorded yet.</p> : <div className="mt-3 space-y-2">{actionData?.items.slice(0, 10).map((item) => <div key={item.id} className="flex items-start justify-between gap-3 text-sm"><div><p>{item.actionLabel || item.actionType.replace(/_/g, " ")}</p>{item.ip && <p className="font-mono text-xs text-muted-foreground">{item.ip}</p>}</div><p className="shrink-0 text-xs text-muted-foreground">{formatDateTime(item.createdAt)}</p></div>)}</div>}
+              </div>
+
+              <div className="border-t pt-4">
+                <h3 className="font-semibold">Toolkit account actions</h3>
+                <p className="mt-1 text-xs text-muted-foreground">These affect the local Toolkit account only. ClickFunnels membership remains the access authority.</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" disabled={!!actionLoading} onClick={() => setPendingAction({
+                    title: account.isAdmin ? "Demote to user" : "Promote to admin",
+                    description: account.isAdmin ? "Remove admin privileges from this Toolkit account?" : "Grant this Toolkit account admin privileges?",
+                    run: () => runAction("role", () => fetch(`/api/admin/users/${account.id}`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role: account.isAdmin ? "user" : "admin" }) }), "Role updated"),
+                  })}>{account.isAdmin ? <ShieldOff className="mr-1.5 h-3.5 w-3.5" /> : <Shield className="mr-1.5 h-3.5 w-3.5" />}{account.isAdmin ? "Demote" : "Promote"}</Button>
+                  <Button size="sm" variant="outline" disabled={!!actionLoading} onClick={() => setPendingAction({
+                    title: account.isDisabled ? "Enable Toolkit account" : "Disable Toolkit account",
+                    description: account.isDisabled ? "Allow this Toolkit account to sign in again?" : "Prevent this Toolkit account from signing in? ClickFunnels access will not change.",
+                    run: () => runAction("disabled", () => fetch(`/api/admin/users/${account.id}`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isDisabled: !account.isDisabled, disabledReason: account.isDisabled ? null : "Disabled by administrator" }) }), account.isDisabled ? "Toolkit account enabled" : "Toolkit account disabled"),
+                  })}>{account.isDisabled ? <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> : <Ban className="mr-1.5 h-3.5 w-3.5" />}{account.isDisabled ? "Enable" : "Disable"}</Button>
+                  <Button size="sm" variant="outline" disabled={!!actionLoading} onClick={() => setPendingAction({
+                    title: "Force logout",
+                    description: "End all active Toolkit sessions for this account? The member will need to sign in again.",
+                    run: () => runAction("logout", () => fetch(`/api/admin/users/${account.id}/force-logout`, { method: "POST", credentials: "include" }), "All Toolkit sessions were ended"),
+                  })}><LogOut className="mr-1.5 h-3.5 w-3.5" />Force logout</Button>
+                  <Button size="sm" variant="outline" className="border-violet-300 text-violet-700 dark:border-violet-700 dark:text-violet-300" disabled={!!actionLoading} onClick={() => setPendingAction({
+                    title: "Log in as this member",
+                    description: "You will switch into this Toolkit account. You can return to your admin account from the banner.",
+                    run: () => runAction("impersonate", () => fetch(`/api/admin/impersonate/${account.id}`, { method: "POST", credentials: "include" }), "Switching account", true),
+                  })}><LogIn className="mr-1.5 h-3.5 w-3.5" />Log in as</Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      <AlertDialog open={!!pendingAction} onOpenChange={(open) => !open && setPendingAction(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader><AlertDialogTitle>{pendingAction?.title}</AlertDialogTitle><AlertDialogDescription>{pendingAction?.description}</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={!!actionLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction disabled={!!actionLoading} onClick={(event) => { event.preventDefault(); pendingAction?.run().finally(() => setPendingAction(null)); }}>{actionLoading ? "Working…" : "Continue"}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
 function MembersTab() {
   const [filter, setFilter] = useState<MemberFilter>("all");
   const [search, setSearch] = useState("");
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const { data, isLoading } = useQuery<{ users: CfUser[] }>({
     queryKey: ["/api/admin/cf/users?filter=all"],
   });
@@ -326,7 +569,7 @@ function MembersTab() {
     <div className="space-y-5">
       <div>
         <h2 className="text-xl font-semibold">ClickFunnels Members</h2>
-        <p className="mt-1 text-sm text-muted-foreground">A local membership directory with ClickFunnels access states. General account settings remain in Admin Users.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Your complete membership directory. ClickFunnels controls Academy access; Toolkit status explains local account and sign-in activity.</p>
       </div>
       <Card>
         <CardHeader className="pb-3">
@@ -358,18 +601,18 @@ function MembersTab() {
             <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
           ) : members.length ? (
             <div className="overflow-x-auto rounded-md border">
-              <table className="w-full min-w-[680px] text-sm">
+              <table className="w-full min-w-[820px] text-sm">
                 <thead className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
-                  <tr><th className="px-4 py-3 font-medium">Member</th><th className="px-4 py-3 font-medium">Access</th><th className="px-4 py-3 font-medium">Membership activity</th></tr>
+                  <tr><th className="px-4 py-3 font-medium">Member</th><th className="px-4 py-3 font-medium">ClickFunnels access</th><th className="px-4 py-3 font-medium">Toolkit account</th><th className="px-4 py-3 font-medium">Membership activity</th></tr>
                 </thead>
                 <tbody className="divide-y">
                   {members.map((member) => {
                     const state = getMemberState(member);
-                    const name = member.displayName || [member.firstName, member.lastName].filter(Boolean).join(" ") || member.email || "Unnamed account";
                     return (
-                      <tr key={member.id}>
-                        <td className="px-4 py-3"><p className="font-medium">{name}</p><p className="mt-0.5 text-xs text-muted-foreground">{member.email || "No email address"}</p></td>
+                      <tr key={member.id} className="cursor-pointer transition-colors hover:bg-muted/50" onClick={() => setSelectedMemberId(member.id)} data-testid={`row-cf-member-${member.id}`}>
+                        <td className="px-4 py-3"><button type="button" className="text-left" onClick={() => setSelectedMemberId(member.id)}><p className="font-medium hover:underline">{getMemberName(member)}</p><p className="mt-0.5 text-xs text-muted-foreground">{member.email || "No email address"}</p></button></td>
                         <td className="px-4 py-3"><Badge variant="outline" className={memberStateClass(state)}>{memberStateLabel(state)}</Badge></td>
+                        <td className="px-4 py-3"><ToolkitLoginStatus member={member} /><p className="mt-1 text-xs text-muted-foreground">{member.lastLoginAt ? `Last login ${formatDateTime(member.lastLoginAt)}` : member.isDisabled ? "Local sign-in blocked" : "No local sign-in yet"}{member.isAdmin ? " · Admin" : ""}</p></td>
                         <td className="px-4 py-3 text-muted-foreground">{state === "enrolled" ? `Active since ${formatDateTime(member.cfEnrolledAt)}` : member.cfRevokedAt ? `Revoked ${formatDateTime(member.cfRevokedAt)}` : "No ClickFunnels enrollment recorded"}</td>
                       </tr>
                     );
@@ -382,6 +625,11 @@ function MembersTab() {
           )}
         </CardContent>
       </Card>
+      <MemberDetailsSheet
+        memberId={selectedMemberId}
+        onOpenChange={(open) => !open && setSelectedMemberId(null)}
+        onAccountChanged={() => queryClient.invalidateQueries({ queryKey: ["/api/admin/cf/users?filter=all"] })}
+      />
     </div>
   );
 }

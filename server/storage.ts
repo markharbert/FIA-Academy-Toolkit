@@ -207,7 +207,7 @@ export interface IStorage {
     revokedCount: number;
     neverEnrolledCount: number;
   }>;
-  getCfUsers(filter?: string): Promise<Array<Pick<User, 'id' | 'email' | 'displayName' | 'firstName' | 'lastName' | 'cfEnrolled' | 'cfEnrolledAt' | 'cfRevokedAt' | 'cfContactId' | 'cfRevokedGraceUntil'>>>;
+  getCfUsers(filter?: string): Promise<Array<Pick<User, 'id' | 'email' | 'displayName' | 'firstName' | 'lastName' | 'createdAt' | 'lastLoginAt' | 'isAdmin' | 'isDisabled' | 'role' | 'cfEnrolled' | 'cfEnrolledAt' | 'cfRevokedAt' | 'cfContactId' | 'cfRevokedGraceUntil'>>>;
   applyCfReconciliation(enrollments: CfReconciliationEnrollment[]): Promise<CfReconciliationChanges>;
 
   getEnrolledUsersWithContactId(): Promise<Array<{ userId: string; email: string; contactId: string }>>;
@@ -1198,7 +1198,7 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getCfUsers(filter?: string): Promise<Array<Pick<User, 'id' | 'email' | 'displayName' | 'firstName' | 'lastName' | 'cfEnrolled' | 'cfEnrolledAt' | 'cfRevokedAt' | 'cfContactId' | 'cfRevokedGraceUntil'>>> {
+  async getCfUsers(filter?: string): Promise<Array<Pick<User, 'id' | 'email' | 'displayName' | 'firstName' | 'lastName' | 'createdAt' | 'lastLoginAt' | 'isAdmin' | 'isDisabled' | 'role' | 'cfEnrolled' | 'cfEnrolledAt' | 'cfRevokedAt' | 'cfContactId' | 'cfRevokedGraceUntil'>>> {
     const memberAccount = sql`COALESCE(${users.isAdmin}, false) = false`;
     let condition = memberAccount;
     if (filter === 'enrolled') {
@@ -1223,6 +1223,11 @@ export class DatabaseStorage implements IStorage {
       displayName: users.displayName,
       firstName: users.firstName,
       lastName: users.lastName,
+      createdAt: users.createdAt,
+      lastLoginAt: users.lastLoginAt,
+      isAdmin: users.isAdmin,
+      isDisabled: users.isDisabled,
+      role: users.role,
       cfEnrolled: users.cfEnrolled,
       cfEnrolledAt: users.cfEnrolledAt,
       cfRevokedAt: users.cfRevokedAt,

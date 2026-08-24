@@ -3249,24 +3249,15 @@ export default function AdminPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-white" data-testid="text-admin-title">Admin Dashboard</h1>
-              <p className="text-sm text-white/60 mt-0.5">Manage users, integrations, and system settings</p>
+              <p className="text-sm text-white/60 mt-0.5">Manage integrations, communications, and system settings</p>
             </div>
           </div>
         </div>
       </div>
 
       <div className="container mx-auto px-4 py-8">
-      <Tabs defaultValue="overview" className="space-y-6">
+      <Tabs defaultValue="integrations" className="space-y-6">
         <TabsList className="h-auto flex-wrap">
-          <TabsTrigger value="overview" data-testid="tab-overview" className="gap-1.5">
-            <Activity className="h-3.5 w-3.5 text-indigo-400" />
-            Overview
-          </TabsTrigger>
-          <TabsTrigger value="users" data-testid="tab-users" className="gap-1.5">
-            <Users className="h-3.5 w-3.5 text-sky-400" />
-            Users
-          </TabsTrigger>
-
           <TabsTrigger value="integrations" data-testid="tab-integrations" className="gap-1.5">
             <Webhook className="h-3.5 w-3.5 text-emerald-400" />
             Integrations
@@ -3793,6 +3784,7 @@ export default function AdminPage() {
 
 
         <TabsContent value="integrations" className="space-y-6">
+          <ApiAccessToggleCard />
           <Card>
             <CardHeader>
               <div className="flex items-center gap-3">

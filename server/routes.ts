@@ -2538,7 +2538,10 @@ export async function registerRoutes(
 
       // Mirror the list-endpoint shape: include KW credits + total videos so the
       // admin User Details panel shows real numbers instead of silent zeros.
-      const credits = await storage.getVideoTrendsCredits(id);
+      const [credits, activityStats] = await Promise.all([
+        storage.getVideoTrendsCredits(id),
+        storage.getUserActivityStats(id),
+      ]);
 
       res.json({
         ...userDetails,
@@ -2547,6 +2550,10 @@ export async function registerRoutes(
           totalVideos: userDetails.sessionCount,
           keywordsCreditsThisMonth: credits.creditsUsed,
           keywordsCreditsTotalUsed: credits.totalCreditsUsed || 0,
+          projectCount: activityStats.projectCount,
+          taskCount: activityStats.taskCount,
+          tasksDoneCount: activityStats.tasksDoneCount,
+          dmoLast30Days: activityStats.dmoLast30Days,
         },
         providers,
         hasLocalPassword,
