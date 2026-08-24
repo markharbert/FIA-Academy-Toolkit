@@ -193,7 +193,7 @@ export default function TrainingSchedulePage() {
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
                       <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-fuchsia-700">Next session</p>
-                      <p className="mt-1 truncate text-base font-bold text-slate-950">{nextEvent.title}</p>
+                      <p className="mt-1 break-words text-base font-bold leading-5 text-slate-950">{nextEvent.title}</p>
                       <p className="mt-1 text-sm font-medium text-slate-600">
                         {nextEvent.isAllDay ? format(eventStartDate(nextEvent), "EEEE, MMMM d") : `${format(eventStartDate(nextEvent), "EEEE, MMMM d")} · ${displayTime(nextEvent)}`}
                       </p>
