@@ -1901,6 +1901,9 @@ export async function registerRoutes(
       const health = await storage.getMemberHealth();
       const memberContactIds = new Set(health.map((member) => member.cfContactId).filter((id): id is string => !!id));
       const snapshot = await getCfCommercialSnapshot(memberContactIds);
+      // This ledger is exclusively for the current FIA-only reporting view.
+      // Replace any earlier broad rows rather than preserving stale records.
+      await db.execute(sql`DELETE FROM cf_commercial_orders`);
       for (const order of snapshot.orders) {
         await db.execute(sql`
           INSERT INTO cf_commercial_orders (
