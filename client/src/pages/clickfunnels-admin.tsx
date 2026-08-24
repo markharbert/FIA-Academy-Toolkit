@@ -1051,7 +1051,7 @@ function CfIntegrationSection() {
 
 export default function ClickFunnelsAdminPage() {
   return (
-    <div className="container mx-auto py-8 px-4 max-w-5xl space-y-6">
+    <div className="container mx-auto py-8 px-4 max-w-6xl space-y-6">
       <Tabs defaultValue="overview">
         <TabsList className="h-auto flex-wrap">
           <TabsTrigger value="overview">Overview</TabsTrigger>
