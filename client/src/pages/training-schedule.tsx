@@ -338,8 +338,10 @@ export default function TrainingSchedulePage() {
           <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-xl shadow-slate-200/70">
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-slate-50/80 px-5 py-4 md:px-6">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Calendar view</p>
-                <h2 className="mt-1 text-xl font-semibold text-slate-950">{format(currentMonth, "MMMM yyyy")}</h2>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{viewMode === "month" ? "Calendar view" : "Schedule list"}</p>
+                <h2 className="mt-1 text-xl font-semibold text-slate-950">
+                  {viewMode === "month" ? format(currentMonth, "MMMM yyyy") : `${format(listMonths[0], "MMMM")} – ${format(listMonths[3], "MMMM yyyy")}`}
+                </h2>
               </div>
                <div className="flex flex-wrap items-center justify-end gap-2">
                  {viewMode === "month" && (
@@ -418,6 +420,56 @@ export default function TrainingSchedulePage() {
                 );
               })}
             </div>
+             </>
+             ) : (
+               <div className="divide-y divide-slate-200">
+                 {listEventsQuery.isLoading ? (
+                   <div className="p-8 text-center text-sm font-medium text-slate-500">Loading the next four months…</div>
+                 ) : listEventsQuery.isError ? (
+                   <div className="p-8 text-center text-sm font-medium text-amber-800">The event list could not be loaded. Please reload the page.</div>
+                 ) : (
+                   listMonths.map((month) => {
+                     const monthKey = format(month, "yyyy-MM");
+                     const monthEvents = listEventsByMonth.get(monthKey) || [];
+                     return (
+                       <section key={monthKey} className="p-5 md:p-6">
+                         <div className="mb-4 flex items-baseline justify-between gap-3">
+                           <h3 className="text-lg font-semibold text-slate-950">{format(month, "MMMM yyyy")}</h3>
+                           <span className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                             {monthEvents.length} {monthEvents.length === 1 ? "session" : "sessions"}
+                           </span>
+                         </div>
+                         {monthEvents.length > 0 ? (
+                           <div className="space-y-2">
+                             {monthEvents.map((event) => {
+                               const tone = eventTone(event);
+                               return (
+                                 <button
+                                   key={event.id}
+                                   onClick={() => setSelectedEvent(event)}
+                                   className="flex w-full items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left transition hover:-translate-y-px hover:border-cyan-300 hover:shadow-md"
+                                 >
+                                   <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${tone.dot}`} />
+                                   <span className="min-w-0 flex-1">
+                                     <span className="block break-words text-sm font-bold text-slate-950">{event.title}</span>
+                                     <span className="mt-1 block text-xs font-medium text-slate-600">
+                                       {event.isAllDay ? displayAllDayDate(event, timezone) : displayRange(event, timezone)}
+                                     </span>
+                                     {event.location && <span className="mt-1 block text-xs text-slate-500">{event.location}</span>}
+                                   </span>
+                                 </button>
+                               );
+                             })}
+                           </div>
+                         ) : (
+                           <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">No sessions scheduled.</p>
+                         )}
+                       </section>
+                     );
+                   })
+                 )}
+               </div>
+             )}
           </div>
 
           <aside className="space-y-5">
