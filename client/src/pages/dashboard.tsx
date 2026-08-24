@@ -204,6 +204,9 @@ function DashboardNextEventWidget({ timezone }: { timezone: string }) {
                 ? formatInTz(new Date(`${nextEvent.start.slice(0, 10)}T12:00:00Z`), timezone, "EEEE, MMMM d")
                 : `${formatInTz(dashboardEventStart(nextEvent), timezone, "EEEE, MMMM d")} · ${formatInTz(dashboardEventStart(nextEvent), timezone, "h:mm a")}`}
             </p>
+            <p className="mt-1 text-[10px] font-semibold text-teal-200/70">
+              Time zone: {formatInTz(now, timezone, "zzzz")}
+            </p>
           </div>
           <div className="shrink-0 rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-center">
             <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-teal-100/70">Starts in</p>
