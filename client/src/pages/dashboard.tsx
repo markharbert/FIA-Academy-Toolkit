@@ -198,7 +198,7 @@ function DashboardNextEventWidget({ timezone }: { timezone: string }) {
       ) : nextEvent ? (
         <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <p className="break-words text-sm font-bold leading-5 text-white">{nextEvent.title}</p>
+            <p className="line-clamp-2 break-words text-sm font-bold leading-5 text-white">{nextEvent.title}</p>
             <p className="mt-1 text-xs font-medium text-teal-100/80">
               {nextEvent.isAllDay
                 ? formatInTz(new Date(`${nextEvent.start.slice(0, 10)}T12:00:00Z`), timezone, "EEEE, MMMM d")
