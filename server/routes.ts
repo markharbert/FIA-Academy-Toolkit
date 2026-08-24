@@ -14090,7 +14090,15 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
           const bStart = b.isAllDay ? new Date(`${b.start.slice(0, 10)}T00:00:00Z`) : new Date(b.start);
           return aStart.getTime() - bStart.getTime();
         })[0] || null;
-      res.json({ event });
+      res.json({
+        event: event && {
+          id: event.id,
+          title: event.title,
+          start: event.start,
+          end: event.end,
+          isAllDay: event.isAllDay,
+        },
+      });
     } catch (error) {
       console.error("[training-schedule] dashboard upcoming event error:", error);
       const status = error instanceof GoogleCalendarError && error.status === 404 ? 404 : 502;
