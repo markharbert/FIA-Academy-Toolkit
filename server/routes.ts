@@ -1487,6 +1487,11 @@ export async function registerRoutes(
   app.get("/api/admin/email-preview/:template", requireAdmin, async (req: Request, res: Response) => {
     const { template } = req.params;
     try {
+      // This endpoint is intentionally rendered inside the same-origin admin
+      // preview iframe. Override the app-wide anti-framing header for this
+      // response only; all other routes remain protected by X-Frame-Options.
+      res.removeHeader("X-Frame-Options");
+      res.setHeader("Content-Security-Policy", "frame-ancestors 'self'");
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
       res.setHeader("Pragma", "no-cache");
       // Rewrite production asset URLs so images load correctly in the dev preview
