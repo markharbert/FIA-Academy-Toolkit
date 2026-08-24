@@ -18,7 +18,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
-  Link2,
   MapPin,
   Repeat2,
   Sparkles,
@@ -330,10 +329,11 @@ export default function TrainingSchedulePage() {
                     />
                   )}
                 </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {selectedEvent.meetingUrl && <Button size="sm" asChild className="bg-cyan-500 text-slate-950 hover:bg-cyan-400"><a href={selectedEvent.meetingUrl} target="_blank" rel="noreferrer"><Video className="mr-1.5 h-3.5 w-3.5" /> Join session</a></Button>}
-                  {!selectedEvent.meetingUrl && <span className="inline-flex items-center gap-1.5 text-xs text-slate-600"><Link2 className="h-3.5 w-3.5" /> No link attached</span>}
-                </div>
+                {selectedEvent.meetingUrl && (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button size="sm" asChild className="bg-cyan-500 text-slate-950 hover:bg-cyan-400"><a href={selectedEvent.meetingUrl} target="_blank" rel="noreferrer"><Video className="mr-1.5 h-3.5 w-3.5" /> Join session</a></Button>
+                  </div>
+                )}
               </section>
             ) : (
               <section className="rounded-[22px] border border-dashed border-slate-300 bg-slate-50 p-5 text-center">
