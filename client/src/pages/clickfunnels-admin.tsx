@@ -25,7 +25,6 @@ interface CfStatus {
   };
   enrolledCount: number;
   revokedCount: number;
-  gracePeriodCount: number;
   neverEnrolledCount: number;
   workspaceDomain: string | null;
   courseId: string | null;
@@ -90,11 +89,10 @@ const formatDateTime = (value: string | null | undefined) =>
     ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value))
     : "Never";
 
-type MemberFilter = "all" | "enrolled" | "grace" | "revoked" | "never";
+type MemberFilter = "all" | "enrolled" | "revoked" | "never";
 
 function getMemberState(member: CfUser): Exclude<MemberFilter, "all"> {
   if (member.cfEnrolled) return "enrolled";
-  if (member.cfRevokedAt && member.cfRevokedGraceUntil && new Date(member.cfRevokedGraceUntil) > new Date()) return "grace";
   if (member.cfRevokedAt) return "revoked";
   return "never";
 }
@@ -102,7 +100,6 @@ function getMemberState(member: CfUser): Exclude<MemberFilter, "all"> {
 function memberStateLabel(state: Exclude<MemberFilter, "all">) {
   return {
     enrolled: "Active",
-    grace: "Grace period",
     revoked: "Revoked",
     never: "Never enrolled",
   }[state];
@@ -111,7 +108,6 @@ function memberStateLabel(state: Exclude<MemberFilter, "all">) {
 function memberStateClass(state: Exclude<MemberFilter, "all">) {
   return {
     enrolled: "border-emerald-300 text-emerald-700 dark:border-emerald-800 dark:text-emerald-300",
-    grace: "border-amber-300 text-amber-700 dark:border-amber-800 dark:text-amber-300",
     revoked: "border-rose-300 text-rose-700 dark:border-rose-800 dark:text-rose-300",
     never: "border-slate-300 text-slate-700 dark:border-slate-700 dark:text-slate-300",
   }[state];
@@ -146,7 +142,6 @@ function MembershipOverviewTab() {
   const latestSuccessful = status?.latestSuccessfulReconciliation;
   const metrics = [
     { label: "Active", value: status?.enrolledCount ?? 0, detail: "Current course access", color: "from-emerald-500 to-teal-400", icon: <UserCheck className="h-4 w-4 text-emerald-500" /> },
-    { label: "In grace period", value: status?.gracePeriodCount ?? 0, detail: "Access still active temporarily", color: "from-amber-500 to-orange-400", icon: <Clock className="h-4 w-4 text-amber-500" /> },
     { label: "Revoked", value: status?.revokedCount ?? 0, detail: "No current course access", color: "from-rose-500 to-red-400", icon: <UserX className="h-4 w-4 text-rose-500" /> },
     { label: "Never enrolled", value: status?.neverEnrolledCount ?? 0, detail: "Local accounts without CF history", color: "from-slate-500 to-slate-400", icon: <Users className="h-4 w-4 text-slate-500" /> },
   ];
@@ -164,7 +159,7 @@ function MembershipOverviewTab() {
         </Button>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {metrics.map((metric) => (
           <Card key={metric.label} className="overflow-hidden">
             <div className={`h-1 bg-gradient-to-r ${metric.color}`} />
@@ -221,7 +216,7 @@ function MembershipOverviewTab() {
                   <div className="rounded-md bg-muted/50 px-3 py-2"><span className="text-muted-foreground">Scanned</span><p className="font-semibold">{latest.totalFetched} ClickFunnels records</p></div>
                   <div className="rounded-md bg-muted/50 px-3 py-2"><span className="text-muted-foreground">Created</span><p className="font-semibold">{latest.accountsCreated} local accounts</p></div>
                   <div className="rounded-md bg-muted/50 px-3 py-2"><span className="text-muted-foreground">Restored</span><p className="font-semibold">{latest.accountsReactivated} members</p></div>
-                  <div className="rounded-md bg-muted/50 px-3 py-2"><span className="text-muted-foreground">Grace period</span><p className="font-semibold">{latest.accountsRevoked} members</p></div>
+                  <div className="rounded-md bg-muted/50 px-3 py-2"><span className="text-muted-foreground">Revoked</span><p className="font-semibold">{latest.accountsRevoked} members</p></div>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -280,7 +275,6 @@ function MembersTab() {
             {([
               ["all", "All"],
               ["enrolled", "Active"],
-              ["grace", "Grace period"],
               ["revoked", "Revoked"],
               ["never", "Never enrolled"],
             ] as Array<[MemberFilter, string]>).map(([value, label]) => (
@@ -295,7 +289,7 @@ function MembersTab() {
             <div className="overflow-x-auto rounded-md border">
               <table className="w-full min-w-[680px] text-sm">
                 <thead className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
-                  <tr><th className="px-4 py-3 font-medium">Member</th><th className="px-4 py-3 font-medium">Access</th><th className="px-4 py-3 font-medium">Membership activity</th><th className="px-4 py-3 font-medium">Grace period</th></tr>
+                  <tr><th className="px-4 py-3 font-medium">Member</th><th className="px-4 py-3 font-medium">Access</th><th className="px-4 py-3 font-medium">Membership activity</th></tr>
                 </thead>
                 <tbody className="divide-y">
                   {members.map((member) => {
@@ -306,7 +300,6 @@ function MembersTab() {
                         <td className="px-4 py-3"><p className="font-medium">{name}</p><p className="mt-0.5 text-xs text-muted-foreground">{member.email || "No email address"}</p></td>
                         <td className="px-4 py-3"><Badge variant="outline" className={memberStateClass(state)}>{memberStateLabel(state)}</Badge></td>
                         <td className="px-4 py-3 text-muted-foreground">{state === "enrolled" ? `Active since ${formatDateTime(member.cfEnrolledAt)}` : member.cfRevokedAt ? `Revoked ${formatDateTime(member.cfRevokedAt)}` : "No ClickFunnels enrollment recorded"}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{state === "grace" ? `Until ${formatDateTime(member.cfRevokedGraceUntil)}` : "—"}</td>
                       </tr>
                     );
                   })}
@@ -319,85 +312,6 @@ function MembersTab() {
         </CardContent>
       </Card>
     </div>
-  );
-}
-
-// ─── GracePeriodCard ──────────────────────────────────────────────────────────
-
-function GracePeriodCard() {
-  const { toast } = useToast();
-  const { data, isLoading } = useQuery<{ hours: number }>({
-    queryKey: ["/api/admin/settings/cf-grace-period"],
-  });
-  const [hoursInput, setHoursInput] = useState("");
-  const [edited, setEdited] = useState(false);
-
-  useEffect(() => {
-    if (data !== undefined && !edited) {
-      setHoursInput(String(data.hours));
-    }
-  }, [data, edited]);
-
-  const save = useMutation({
-    mutationFn: () =>
-      apiRequest("PUT", "/api/admin/settings/cf-grace-period", {
-        hours: parseFloat(hoursInput),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/settings/cf-grace-period"] });
-      setEdited(false);
-      toast({ title: "Grace period saved" });
-    },
-    onError: () => toast({ title: "Failed to save grace period", variant: "destructive" }),
-  });
-
-  const parsedHours = parseFloat(hoursInput);
-  const isValid = !isNaN(parsedHours) && parsedHours >= 0;
-
-  return (
-    <Card data-testid="card-cf-grace-period">
-      <CardHeader className="pb-3">
-        <div className="flex items-center gap-2">
-          <Clock className="h-4 w-4 text-muted-foreground" />
-          <div>
-            <CardTitle className="text-base">Revocation Grace Period</CardTitle>
-            <CardDescription className="text-sm mt-0.5">
-              How many hours a member retains access after a revocation webhook before their account is locked.
-              Default is 48 hours. Set to 0 to revoke access immediately.
-            </CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <div className="flex justify-center py-4">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
-          <div className="flex items-center gap-3">
-            <input
-              type="number"
-              min={0}
-              step={1}
-              value={hoursInput}
-              onChange={(e) => { setHoursInput(e.target.value); setEdited(true); }}
-              className="w-28 text-sm border rounded-md px-3 py-1.5 bg-background text-right font-mono"
-              data-testid="input-cf-grace-period-hours"
-            />
-            <span className="text-sm text-muted-foreground">hours</span>
-            <Button
-              size="sm"
-              onClick={() => save.mutate()}
-              disabled={save.isPending || !isValid}
-              data-testid="button-save-cf-grace-period"
-            >
-              {save.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-              Save
-            </Button>
-          </div>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 
@@ -835,7 +749,6 @@ export default function ClickFunnelsAdminPage() {
         </TabsContent>
         <TabsContent value="integration" className="mt-4 space-y-6">
           <CfIntegrationSection />
-          <GracePeriodCard />
         </TabsContent>
         <TabsContent value="webhook-activity" className="mt-4">
           <WebhookActivityTab />

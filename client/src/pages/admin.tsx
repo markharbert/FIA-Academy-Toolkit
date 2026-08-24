@@ -294,7 +294,6 @@ interface CfStatus {
   courseId: string;
   enrolledCount: number;
   revokedCount: number;
-  gracePeriodCount: number;
   neverEnrolledCount: number;
 }
 
@@ -520,83 +519,6 @@ function SyncContactIdsButton() {
       </Button>
       {result && <p className="text-xs text-muted-foreground">{result}</p>}
     </div>
-  );
-}
-
-function GracePeriodCard() {
-  const { toast } = useToast();
-  const { data, isLoading } = useQuery<{ hours: number }>({
-    queryKey: ["/api/admin/settings/cf-grace-period"],
-  });
-  const [hoursInput, setHoursInput] = useState("");
-  const [edited, setEdited] = useState(false);
-
-  useEffect(() => {
-    if (data !== undefined && !edited) {
-      setHoursInput(String(data.hours));
-    }
-  }, [data, edited]);
-
-  const save = useMutation({
-    mutationFn: () =>
-      apiRequest("PUT", "/api/admin/settings/cf-grace-period", {
-        hours: parseFloat(hoursInput),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/settings/cf-grace-period"] });
-      setEdited(false);
-      toast({ title: "Grace period saved" });
-    },
-    onError: () => toast({ title: "Failed to save grace period", variant: "destructive" }),
-  });
-
-  const parsedHours = parseFloat(hoursInput);
-  const isValid = !isNaN(parsedHours) && parsedHours >= 0;
-
-  return (
-    <Card data-testid="card-cf-grace-period">
-      <CardHeader className="pb-3">
-        <div className="flex items-center gap-2">
-          <Clock className="h-4 w-4 text-muted-foreground" />
-          <div>
-            <CardTitle className="text-base">Revocation Grace Period</CardTitle>
-            <CardDescription className="text-sm mt-0.5">
-              How many hours a member retains access after a revocation webhook before their account is locked.
-              Default is 48 hours. Set to 0 to revoke access immediately.
-            </CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <div className="flex justify-center py-4">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
-          <div className="flex items-center gap-3">
-            <input
-              type="number"
-              min={0}
-              step={1}
-              value={hoursInput}
-              onChange={(e) => { setHoursInput(e.target.value); setEdited(true); }}
-              className="w-28 text-sm border rounded-md px-3 py-1.5 bg-background text-right font-mono"
-              data-testid="input-cf-grace-period-hours"
-            />
-            <span className="text-sm text-muted-foreground">hours</span>
-            <Button
-              size="sm"
-              onClick={() => save.mutate()}
-              disabled={save.isPending || !isValid}
-              data-testid="button-save-cf-grace-period"
-            >
-              {save.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-              Save
-            </Button>
-          </div>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 
@@ -3465,10 +3387,6 @@ export default function AdminPage() {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Active members</span>
                   <span className="font-medium">{cfStatus?.enrolledCount ?? "—"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">In grace period</span>
-                  <span className="font-medium">{cfStatus?.gracePeriodCount ?? "—"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Revoked</span>

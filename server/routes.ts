@@ -12,7 +12,7 @@ import multer from "multer";
 import rateLimit from "express-rate-limit";
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
-import { sendPasswordResetEmail, sendWorkspaceInviteEmail, sendWelcomeEmail, sendMembershipLapsedEmail, sendGraceExpiryWarningEmail, isEmailConfigured } from "./email";
+import { sendPasswordResetEmail, sendWorkspaceInviteEmail, sendWelcomeEmail, isEmailConfigured } from "./email";
 import path from "path";
 import fs from "fs";
 import session from "express-session";
@@ -245,31 +245,19 @@ async function requireAuth(req: Request, res: Response, next: NextFunction) {
         return res.status(403).json({ message: "Workspace access has been revoked" });
       }
       if (process.env.CF_API_TOKEN && process.env.CF_COURSE_ID && owner.cfEnrolled !== true) {
-        const ownerInGrace =
-          owner.cfRevokedGraceUntil &&
-          new Date(owner.cfRevokedGraceUntil) > new Date();
-        if (!ownerInGrace) {
-          req.session.destroy(() => {});
-          return res.status(403).json({ message: "Workspace access has been revoked" });
-        }
+        req.session.destroy(() => {});
+        return res.status(403).json({ message: "Workspace access has been revoked" });
       }
     } else if (!isImpersonating && process.env.CF_API_TOKEN && process.env.CF_COURSE_ID && !user.isAdmin) {
       // When CF is configured, enforce active membership on every authenticated
       // request so revoked members are denied mid-session without waiting for
       // their session to naturally expire. Admins are always exempt.
       if (user.cfEnrolled !== true) {
-        // If the member is within their revocation grace window, let the request
-        // through — their payment may still succeed during the retry window.
-        const inGrace =
-          user.cfRevokedGraceUntil &&
-          new Date(user.cfRevokedGraceUntil) > new Date();
-        if (!inGrace) {
-          req.session.destroy(() => {});
-          return res.status(403).json({
-            message: "Active ClickFunnels membership required",
-            error: "cf_not_enrolled",
-          });
-        }
+        req.session.destroy(() => {});
+        return res.status(403).json({
+          message: "Active ClickFunnels membership required",
+          error: "cf_not_enrolled",
+        });
       }
     }
   } catch (err) {
@@ -1766,7 +1754,6 @@ export async function registerRoutes(
         courseId,
         enrolledCount: enrolledResult.enrolledCount,
         revokedCount: enrolledResult.revokedCount,
-        gracePeriodCount: enrolledResult.gracePeriodCount,
         neverEnrolledCount: enrolledResult.neverEnrolledCount,
         latestReconciliation: latestReconciliation ?? null,
         latestSuccessfulReconciliation: latestSuccessfulReconciliation ?? null,
@@ -1794,7 +1781,7 @@ export async function registerRoutes(
   // Admin: list users with CF enrollment info
   app.get("/api/admin/cf/users", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const allowedFilters = new Set(["all", "enrolled", "grace", "revoked", "never"]);
+      const allowedFilters = new Set(["all", "enrolled", "revoked", "never"]);
       const filter = String(req.query.filter || "all");
       if (!allowedFilters.has(filter)) {
         return res.status(400).json({ message: "Invalid member filter" });
@@ -1825,12 +1812,10 @@ export async function registerRoutes(
       const enrollments = await getAllCfEnrollments();
       const activeFetched = enrollments.filter((enrollment) => enrollment.active).length;
       const inactiveFetched = enrollments.length - activeFetched;
-      const gracePeriodHours = await storage.getCfGracePeriodHours();
-
       // getAllCfEnrollments only resolves after following every page. If its
       // request or pagination fails, execution jumps to the catch block before
       // applyCfReconciliation can make any membership change.
-      const changes = await storage.applyCfReconciliation(enrollments, gracePeriodHours);
+      const changes = await storage.applyCfReconciliation(enrollments);
       membershipChangesApplied = true;
       const completedAt = new Date();
       const completedRun = await storage.updateCfReconciliationRun(run.id, {
@@ -1850,7 +1835,7 @@ export async function registerRoutes(
       res.json({
         run: completedRun,
         summary,
-        message: `Reconciliation complete. ${changes.accountsCreated} accounts created, ${changes.accountsReactivated} restored, and ${changes.accountsRevoked} moved into the ${gracePeriodHours}-hour grace period.`,
+        message: `Reconciliation complete. ${changes.accountsCreated} accounts created, ${changes.accountsReactivated} restored, and ${changes.accountsRevoked} immediately revoked.`,
       });
     } catch (err: any) {
       const error = String(err?.message || "ClickFunnels reconciliation failed").slice(0, 1000);
@@ -2245,33 +2230,6 @@ export async function registerRoutes(
   });
 
   // ── end CF Course Import ──────────────────────────────────────────────────────
-
-  // Admin: manually grant CF access to a user
-  app.post("/api/admin/users/:id/cf-access", requireAdmin, async (req: Request, res: Response) => {
-    try {
-      const { id } = req.params;
-      const { grant } = req.body as { grant: boolean };
-      const user = await storage.getUser(id);
-      if (!user) return res.status(404).json({ message: "User not found" });
-
-      await storage.updateUser(id, {
-        cfEnrolled: grant,
-        cfEnrolledAt: grant ? new Date() : user.cfEnrolledAt,
-        cfRevokedAt: grant ? null : new Date(),
-        // Reset the warning flag on grant so a new warning fires on any future revocation.
-        ...(grant ? { cfRevokedGraceUntil: null, cfGraceExpirySentAt: null } : {}),
-        // Mirror webhook revocation semantics: revoke disables the account so
-        // existing sessions are terminated by requireAuth on the next request.
-        // Granting re-enables the account so the user can log in again.
-        isDisabled: !grant,
-      });
-
-      res.json({ ok: true, cfEnrolled: grant });
-    } catch (err) {
-      console.error("[CF Admin] Error:", err);
-      res.status(500).json({ message: "Failed to update CF access" });
-    }
-  });
 
   // Admin: get CF button customizer settings
   app.get("/api/admin/cf/button-settings", requireAdmin, async (_req: Request, res: Response) => {
@@ -10482,31 +10440,6 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
-  // ─── Admin: CF Grace Period Setting ──────────────────────────────────────
-  app.get("/api/admin/settings/cf-grace-period", requireAdmin, async (_req: Request, res: Response) => {
-    try {
-      const hours = await storage.getCfGracePeriodHours();
-      res.json({ hours });
-    } catch (err) {
-      console.error("[cf-grace-period] get error:", err);
-      res.status(500).json({ message: "Failed to get CF grace period setting" });
-    }
-  });
-
-  app.put("/api/admin/settings/cf-grace-period", requireAdmin, async (req: Request, res: Response) => {
-    try {
-      const { hours } = req.body as { hours: number };
-      if (typeof hours !== "number" || isNaN(hours) || hours < 0) {
-        return res.status(400).json({ message: "hours must be a non-negative number" });
-      }
-      await storage.setCfGracePeriodHours(hours);
-      res.json({ hours });
-    } catch (err) {
-      console.error("[cf-grace-period] set error:", err);
-      res.status(500).json({ message: "Failed to update CF grace period setting" });
-    }
-  });
-
   // ─── User: Public API Key Management ─────────────────────────────────────
   app.get("/api/account/api-key", requireAuth, async (req: Request, res: Response) => {
     try {
@@ -10596,14 +10529,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       }
 
       if (!cfEnrolled && !user.isAdmin) {
-        // Honour the revocation grace window so that API key callers mid-session
-        // are not immediately cut off when the webhook arrives.
-        const inGrace =
-          user.cfRevokedGraceUntil &&
-          new Date(user.cfRevokedGraceUntil) > new Date();
-        if (!inGrace) {
-          return res.status(403).json({ message: "Active Fearless Influencer Academy membership required." });
-        }
+        return res.status(403).json({ message: "Active Fearless Influencer Academy membership required." });
       }
 
       (req as any).apiUser = user;
@@ -13501,82 +13427,6 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       res.status(500).json({ message: "Failed to send notifications" });
     }
   });
-
-  // ── Hourly sweep: disable accounts whose CF grace period has expired ─────────
-  // When a revoke webhook fires, members get a 48-hour grace window in case
-  // their payment retry succeeds. If it doesn't, `isDisabled` is never set to
-  // true automatically, so the admin panel never reflects the real state.
-  // This job corrects that by scanning for cfEnrolled=false users whose
-  // cfRevokedGraceUntil has passed and who are still not flagged as disabled.
-  // It also sends a 24-hour warning email before the grace period expires.
-  async function runGracePeriodExpirySweep() {
-    if (!process.env.CF_API_TOKEN && !process.env.CF_COURSE_ID) {
-      // CF not configured — nothing to do
-      return;
-    }
-
-    // ── Part 1: Send 24-hour warning emails ───────────────────────────────────
-    try {
-      const approaching = await storage.getUsersApproachingGraceExpiry();
-      if (approaching.length > 0) {
-        console.log(`[GracePeriodSweep] Found ${approaching.length} account(s) approaching grace expiry — sending warning`);
-        const reactivateUrl = CF_WORKSPACE_DOMAIN
-          ? `https://${CF_WORKSPACE_DOMAIN}`
-          : "https://members.fearlessinfluenceracademy.com";
-        for (const user of approaching) {
-          try {
-            let warned = true; // assume warned if email not configured (skip without re-attempting)
-            if (user.email && isEmailConfigured()) {
-              warned = await sendGraceExpiryWarningEmail({
-                email: user.email,
-                firstName: user.firstName ?? null,
-                expiresAt: user.cfRevokedGraceUntil!,
-                reactivateUrl,
-              });
-            }
-            if (warned) {
-              // Only stamp as sent after a confirmed successful delivery
-              await storage.updateUser(user.id, { cfGraceExpirySentAt: new Date() });
-              console.log(`[GracePeriodSweep] Grace-expiry warning sent to ${user.email}`);
-            } else {
-              console.warn(`[GracePeriodSweep] Email delivery failed for ${user.email} — will retry on next sweep`);
-            }
-          } catch (userErr) {
-            console.warn(`[GracePeriodSweep] Failed to warn user ${user.id}:`, userErr);
-          }
-        }
-      }
-    } catch (warnErr) {
-      console.error("[GracePeriodSweep] Warning sweep error:", warnErr);
-    }
-
-    // ── Part 2: Disable accounts whose grace period has now expired ───────────
-    try {
-      const expired = await storage.getUsersWithExpiredGracePeriod();
-      if (expired.length === 0) return;
-
-      console.log(`[GracePeriodSweep] Found ${expired.length} account(s) with expired grace period — disabling`);
-      for (const user of expired) {
-        try {
-          await storage.updateUser(user.id, { isDisabled: true });
-          console.log(`[GracePeriodSweep] Disabled account: ${user.email}`);
-          // Send a lapsed-membership notification if email is configured
-          if (user.email && isEmailConfigured()) {
-            await sendMembershipLapsedEmail({ email: user.email, firstName: user.firstName ?? null });
-          }
-        } catch (userErr) {
-          console.warn(`[GracePeriodSweep] Failed to process user ${user.id}:`, userErr);
-        }
-      }
-    } catch (sweepErr) {
-      console.error("[GracePeriodSweep] Sweep error:", sweepErr);
-    }
-  }
-
-  // Run once at startup (catches anything that expired while the server was down)
-  // then repeat every hour.
-  runGracePeriodExpirySweep().catch(() => {});
-  setInterval(runGracePeriodExpirySweep, 60 * 60 * 1000); // every hour
 
   // ── Course Management Routes ─────────────────────────────────────────────────
 

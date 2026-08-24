@@ -873,13 +873,14 @@ async function runStartupMigrations() {
     await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS swipe_promo_links JSONB NOT NULL DEFAULT '[]'::jsonb`);
     console.log("[startup] swipe_promo_links migration complete");
 
-    // CF grace period and revocation columns (may be absent on older DBs)
+    // Historical CF revocation columns (may be absent on older DBs).
+    // The former grace timestamp is retained so existing member records are not altered.
     await db.execute(sql`
       ALTER TABLE users
         ADD COLUMN IF NOT EXISTS cf_revoked_grace_until TIMESTAMP,
         ADD COLUMN IF NOT EXISTS cf_revoked_at TIMESTAMP
     `);
-    console.log("[startup] users cf_revoked_grace_until + cf_revoked_at migration complete");
+    console.log("[startup] users CF revocation history migration complete");
 
     // Chrome extension push notification subscriptions
     await db.execute(sql`

@@ -1219,13 +1219,19 @@ export class DatabaseStorage implements IStorage {
       const localUsers = await tx.select().from(users);
       const activeByEmail = new Map<string, CfReconciliationEnrollment>();
       const activeByContactId = new Map<string, CfReconciliationEnrollment>();
+      const inactiveByEmail = new Map<string, CfReconciliationEnrollment>();
+      const inactiveByContactId = new Map<string, CfReconciliationEnrollment>();
 
       for (const enrollment of enrollments) {
-        if (!enrollment.active) continue;
         const email = normalizeEmail(enrollment.email);
         if (!email) continue;
-        activeByEmail.set(email, enrollment);
-        activeByContactId.set(enrollment.contactId, enrollment);
+        if (enrollment.active) {
+          activeByEmail.set(email, enrollment);
+          activeByContactId.set(enrollment.contactId, enrollment);
+        } else {
+          inactiveByEmail.set(email, enrollment);
+          inactiveByContactId.set(enrollment.contactId, enrollment);
+        }
       }
 
       const localByEmail = new Map(
@@ -1293,20 +1299,35 @@ export class DatabaseStorage implements IStorage {
         if (needsAccessRestore) changes.accountsReactivated++;
       }
 
-      // A local member is revoked only if this full scan confirms that a
-      // previously-active member has no current active enrollment. Because this
-      // work runs inside the same transaction, a failed update cannot leave a
-      // partially reconciled directory behind.
+      // Revoke a local member only after a complete scan confirms no active
+      // enrollment. An inactive CF enrollment also establishes past membership
+      // for an existing local profile, even when that person never logged in.
       for (const localUser of localUsers) {
-        if (localUser.isAdmin || localUser.cfEnrolled !== true) continue;
+        if (localUser.isAdmin) continue;
         const activeEnrollment =
           (localUser.cfContactId ? activeByContactId.get(localUser.cfContactId) : undefined) ||
           (normalizeEmail(localUser.email) ? activeByEmail.get(normalizeEmail(localUser.email)!) : undefined);
         if (activeEnrollment) continue;
 
+        const inactiveEnrollment =
+          (localUser.cfContactId ? inactiveByContactId.get(localUser.cfContactId) : undefined) ||
+          (normalizeEmail(localUser.email) ? inactiveByEmail.get(normalizeEmail(localUser.email)!) : undefined);
+        if (localUser.cfEnrolled !== true && !inactiveEnrollment) continue;
+
+        const needsRevocation =
+          localUser.cfEnrolled !== false ||
+          !localUser.cfRevokedAt ||
+          !localUser.isDisabled ||
+          (inactiveEnrollment && localUser.cfContactId !== inactiveEnrollment.contactId);
+        if (!needsRevocation) {
+          changes.unchanged++;
+          continue;
+        }
+
         await tx.update(users).set({
           cfEnrolled: false,
-          cfRevokedAt: now,
+          cfContactId: inactiveEnrollment?.contactId ?? localUser.cfContactId,
+          cfRevokedAt: localUser.cfRevokedAt ?? now,
           cfRevokedGraceUntil: null,
           cfGraceExpirySentAt: null,
           isDisabled: true,
@@ -1385,51 +1406,6 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(cfReconciliationRuns.completedAt), desc(cfReconciliationRuns.startedAt))
       .limit(1);
     return row;
-  }
-
-  async getUsersWithExpiredGracePeriod(): Promise<Array<Pick<User, 'id' | 'email' | 'firstName' | 'lastName'>>> {
-    const now = new Date();
-    const rows = await db
-      .select({ id: users.id, email: users.email, firstName: users.firstName, lastName: users.lastName })
-      .from(users)
-      .where(
-        and(
-          eq(users.cfEnrolled, false),
-          eq(users.isDisabled, false),
-          eq(users.isAdmin, false),
-          sql`${users.cfRevokedGraceUntil} IS NOT NULL`,
-          lt(users.cfRevokedGraceUntil, now),
-        )
-      );
-    return rows;
-  }
-
-  async getUsersApproachingGraceExpiry(): Promise<Array<Pick<User, 'id' | 'email' | 'firstName' | 'lastName' | 'cfRevokedGraceUntil'>>> {
-    const now = new Date();
-    const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-    const rows = await db
-      .select({
-        id: users.id,
-        email: users.email,
-        firstName: users.firstName,
-        lastName: users.lastName,
-        cfRevokedGraceUntil: users.cfRevokedGraceUntil,
-      })
-      .from(users)
-      .where(
-        and(
-          eq(users.cfEnrolled, false),
-          eq(users.isDisabled, false),
-          eq(users.isAdmin, false),
-          sql`${users.cfRevokedGraceUntil} IS NOT NULL`,
-          // Grace period expires within the next 24 hours (but not already expired)
-          sql`${users.cfRevokedGraceUntil} > ${now}`,
-          sql`${users.cfRevokedGraceUntil} <= ${in24h}`,
-          // Haven't sent the warning yet for this revocation cycle
-          sql`${users.cfGraceExpirySentAt} IS NULL`,
-        )
-      );
-    return rows;
   }
 
   async getEnrolledUsersWithContactId(): Promise<Array<{ userId: string; email: string; contactId: string }>> {
@@ -2751,22 +2727,6 @@ export class DatabaseStorage implements IStorage {
         .values({ key: "email_from_email", value: fromEmail, updatedAt: now })
         .onConflictDoUpdate({ target: appSettings.key, set: { value: fromEmail, updatedAt: now } }),
     ]);
-  }
-
-  async getCfGracePeriodHours(): Promise<number> {
-    const [row] = await db.select().from(appSettings).where(eq(appSettings.key, "cf_grace_period_hours"));
-    if (row) {
-      const parsed = parseFloat(row.value);
-      if (!isNaN(parsed) && parsed >= 0) return parsed;
-    }
-    return 48; // default
-  }
-
-  async setCfGracePeriodHours(hours: number): Promise<void> {
-    const now = new Date();
-    await db.insert(appSettings)
-      .values({ key: "cf_grace_period_hours", value: String(hours), updatedAt: now })
-      .onConflictDoUpdate({ target: appSettings.key, set: { value: String(hours), updatedAt: now } });
   }
 
   // Public API Keys
