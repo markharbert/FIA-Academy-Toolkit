@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   addMonths,
   addDays,
@@ -25,10 +25,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import DOMPurify from "dompurify";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
-import { formatInTz, getCommonTimezones } from "@shared/datetime";
+import { formatInTz } from "@shared/datetime";
 import { fromZonedTime } from "date-fns-tz";
 
 type CalendarSettings = {
@@ -129,12 +127,11 @@ function sanitizeEventDescription(description: string) {
 }
 
 export default function TrainingSchedulePage() {
-  const { user, refetch: refetchUser } = useAuth();
+  const { user } = useAuth();
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
   const [selectedEvent, setSelectedEvent] = useState<ScheduleEvent | null>(null);
   const [now, setNow] = useState(() => new Date());
   const timezone = user?.timezone || "America/New_York";
-  const timezoneOptions = useMemo(() => getCommonTimezones(), []);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
@@ -151,14 +148,6 @@ export default function TrainingSchedulePage() {
       requestEnd: fromZonedTime(addDays(end, 1), timezone),
     };
   }, [currentMonth, timezone]);
-
-  const updateTimezoneMutation = useMutation({
-    mutationFn: async (nextTimezone: string) => {
-      const response = await apiRequest("PATCH", "/api/account", { timezone: nextTimezone });
-      return response.json();
-    },
-    onSuccess: () => refetchUser(),
-  });
 
   const eventsQuery = useQuery<ScheduleResponse>({
     queryKey: ["/api/training/schedule/events", range.requestStart.toISOString(), range.requestEnd.toISOString(), timezone],
@@ -226,6 +215,9 @@ export default function TrainingSchedulePage() {
               </div>
               <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">
                 This is the live event calendar for Fearless Influencer Academy. It updates regularly with the latest event information.
+              </p>
+              <p className="mt-2 text-xs font-semibold text-cyan-700" data-testid="text-training-timezone">
+                Times shown in your account time zone: {formatInTz(now, timezone, "zzzz")}.
               </p>
             </div>
             <div className="flex w-full max-w-xl flex-col sm:items-end">
@@ -334,34 +326,6 @@ export default function TrainingSchedulePage() {
           </div>
 
           <aside className="space-y-5">
-            <section className="rounded-[22px] border border-slate-200 bg-white p-5 shadow-lg shadow-slate-200/60">
-              <div className="flex items-start gap-3">
-                <Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-cyan-600" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Time zone</p>
-                  <p className="mt-1 text-sm text-slate-600">Event times are shown in your selected time zone.</p>
-                  <Select
-                    value={timezone}
-                    onValueChange={(value) => updateTimezoneMutation.mutate(value)}
-                    disabled={updateTimezoneMutation.isPending}
-                  >
-                    <SelectTrigger className="mt-3 w-full" data-testid="select-training-timezone">
-                      <SelectValue placeholder="Select your time zone" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-80">
-                      {timezoneOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {updateTimezoneMutation.isError && (
-                    <p className="mt-2 text-xs text-red-600">Could not save your time zone. Please try again.</p>
-                  )}
-                </div>
-              </div>
-            </section>
             {selectedEvent ? (
               <section className="rounded-[22px] border border-cyan-200 bg-white p-5 shadow-lg shadow-cyan-100">
                 <div className="mb-3 flex items-start gap-3">
