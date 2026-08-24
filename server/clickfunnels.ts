@@ -20,9 +20,11 @@ export interface CfCommercialSnapshot {
   orders: Array<{ id: string; contactId: string | null; offer: string; createdAt: string | null; amount: number; source: string | null; campaign: string | null }>;
 }
 
+const FIA_PRODUCT_RE = /fearless\s+influencer\s+academy/i;
+
 // Read-only commercial reporting. This intentionally stays narrow: it never
 // creates, updates, or cancels orders, subscriptions, products, or contacts.
-export async function getCfCommercialSnapshot(): Promise<CfCommercialSnapshot> {
+export async function getCfCommercialSnapshot(memberContactIds?: Set<string>): Promise<CfCommercialSnapshot> {
   if (!CF_API_TOKEN || !CF_WORKSPACE_DOMAIN || !CF_WORKSPACE_ID) {
     throw new Error("CF_API_TOKEN, CF_WORKSPACE_DOMAIN, and CF_WORKSPACE_ID must be configured");
   }
@@ -39,21 +41,44 @@ export async function getCfCommercialSnapshot(): Promise<CfCommercialSnapshot> {
     const link = response.headers.get("link") || "";
     nextUrl = link.match(/<([^>]+)>;\s*rel="next"/)?.[1] || null;
   }
+  const recentCutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
+  // The collection endpoint can omit line items. Enrich only recent records
+  // so product matching remains strict without making a broad catalog sync.
+  const recentOrders: any[] = [];
+  for (let offset = 0; offset < orders.length; offset += 10) {
+    const batch = await Promise.all(orders.slice(offset, offset + 10).map(async (order) => {
+      if (!order.created_at || new Date(order.created_at).getTime() < recentCutoff || order.line_items || order.order_items || order.items) return order;
+      try {
+        const detailResponse = await fetch(`https://${CF_WORKSPACE_DOMAIN}/api/v2/workspaces/${CF_WORKSPACE_ID}/orders/${order.id}`, { headers });
+        if (!detailResponse.ok) return order;
+        const detailBody = await detailResponse.json();
+        const detail = detailBody.data || detailBody;
+        return { ...order, ...detail };
+      } catch {
+        return order;
+      }
+    }));
+    recentOrders.push(...batch);
+  }
   const offerMap = new Map<string, { orders: number; revenue: number }>();
   const attributionMap = new Map<string, { source: string; campaign: string; orders: number; revenue: number }>();
   const orderDetails: Array<{ id: string; contactId: string | null; offer: string; createdAt: string | null; amount: number; source: string | null; campaign: string | null }> = [];
   let revenue = 0;
-  for (const order of orders) {
+  for (const order of recentOrders) {
     const amount = Number(order.total_amount || order.amount || 0) || 0;
-    revenue += amount;
     const item = order.line_items?.[0] || order.order_items?.[0] || order.items?.[0] || {};
-    const offer = item.product?.name || item.product_name || order.product?.name || order.product_name || "Unattributed product";
+    const offer = item.product?.name || item.product_name || order.product?.name || order.product_name || order.offer_name || "";
+    if (!FIA_PRODUCT_RE.test(String(offer))) continue;
+    if (!order.created_at || new Date(order.created_at).getTime() < recentCutoff) continue;
+    const contactId = order.contact_id ? String(order.contact_id) : order.contact?.id ? String(order.contact.id) : null;
+    if (!contactId || (memberContactIds && !memberContactIds.has(contactId))) continue;
+    revenue += amount;
     const offerEntry = offerMap.get(offer) || { orders: 0, revenue: 0 };
     offerEntry.orders++; offerEntry.revenue += amount; offerMap.set(offer, offerEntry);
     const visit = order.last_visit_with_utm || order.contact?.last_visit_with_utm || order.utm || {};
     const source = String(visit.utm_source || order.utm_source || "");
     const campaign = String(visit.utm_campaign || order.utm_campaign || "");
-    orderDetails.push({ id: String(order.id || order.public_id), contactId: order.contact_id ? String(order.contact_id) : order.contact?.id ? String(order.contact.id) : null, offer, createdAt: order.created_at || null, amount, source: source || null, campaign: campaign || null });
+    orderDetails.push({ id: String(order.id || order.public_id), contactId, offer, createdAt: order.created_at || null, amount, source: source || null, campaign: campaign || null });
     if (source || campaign) {
       const key = `${source}|${campaign}`;
       const entry = attributionMap.get(key) || { source: source || "Direct / unknown", campaign: campaign || "No campaign", orders: 0, revenue: 0 };
@@ -62,7 +87,7 @@ export async function getCfCommercialSnapshot(): Promise<CfCommercialSnapshot> {
   }
   return {
     syncedAt: new Date(),
-    orderCount: orders.length,
+    orderCount: orderDetails.length,
     revenue,
     offers: Array.from(offerMap, ([name, value]) => ({ name, ...value })).sort((a, b) => b.revenue - a.revenue),
     attribution: Array.from(attributionMap.values()).sort((a, b) => b.orders - a.orders),

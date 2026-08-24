@@ -1898,7 +1898,9 @@ export async function registerRoutes(
     try {
       // A manual refresh keeps third-party reporting intentional and avoids
       // background API load. It is strictly read-only in ClickFunnels.
-      const [snapshot, health] = await Promise.all([getCfCommercialSnapshot(), storage.getMemberHealth()]);
+      const health = await storage.getMemberHealth();
+      const memberContactIds = new Set(health.map((member) => member.cfContactId).filter((id): id is string => !!id));
+      const snapshot = await getCfCommercialSnapshot(memberContactIds);
       for (const order of snapshot.orders) {
         await db.execute(sql`
           INSERT INTO cf_commercial_orders (
