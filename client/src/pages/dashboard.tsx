@@ -273,6 +273,25 @@ class WidgetErrorBoundary extends Component<
   }
 }
 
+class DashboardHeaderErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error("[Dashboard] next training session header widget failed to render:", error);
+  }
+
+  render() {
+    return this.state.hasError ? null : this.props.children;
+  }
+}
+
 function SafeWidgetRenderer({ id }: { id: WidgetId }) {
   return (
     <WidgetErrorBoundary key={id} widgetId={id}>
@@ -781,7 +800,9 @@ export default function DashboardPage() {
               Your private marketing command center.
             </p>
             </div>
-            <DashboardNextEventWidget timezone={user?.timezone || "America/New_York"} />
+            <DashboardHeaderErrorBoundary>
+              <DashboardNextEventWidget timezone={user?.timezone || "America/New_York"} />
+            </DashboardHeaderErrorBoundary>
           </div>
         </div>
       </div>

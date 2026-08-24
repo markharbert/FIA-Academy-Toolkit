@@ -17,3 +17,4 @@
 - [Readable training URLs](readable-training-urls.md) — learner links use course/module/lesson title slugs, with legacy ID links redirected to canonical paths.
 - [Learner course delivery performance](learner-course-delivery-performance.md) — keep navigation responses lightweight; fetch rich lesson data only for the active lesson.
 - [Training Schedule Calendar](training-schedule-calendar.md) — Google Calendar is the admin-only source of truth; public access is a separate, safe rollout.
+- [Production startup readiness](production-startup-readiness.md) — open the HTTP listener before additive startup migrations so autoscale health checks do not restart a healthy app.
