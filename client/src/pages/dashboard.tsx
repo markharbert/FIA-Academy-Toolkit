@@ -22,8 +22,10 @@ import {
   Plus,
   Bell, Megaphone, Info, AlertTriangle, AlertCircle, Star, Gift, Zap, Rocket,
   Sparkles, PartyPopper, Trophy, Heart, Lightbulb, Flame, CheckCircle2, Tag, Calendar,
+  CalendarDays,
   type LucideIcon,
 } from "lucide-react";
+import { formatInTz } from "@shared/datetime";
 
 import {
   DndContext,
@@ -114,6 +116,112 @@ function nowTimeLabel(tz?: string | null) {
       minute: "2-digit",
     });
   }
+}
+
+type DashboardScheduleEvent = {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  isAllDay: boolean;
+};
+
+type DashboardScheduleResponse = {
+  events: DashboardScheduleEvent[];
+};
+
+function dashboardEventStart(event: DashboardScheduleEvent) {
+  return event.isAllDay
+    ? new Date(`${event.start.slice(0, 10)}T00:00:00`)
+    : new Date(event.start);
+}
+
+function dashboardCountdownParts(milliseconds: number) {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return [
+    { value: String(days), label: "days" },
+    { value: String(hours).padStart(2, "0"), label: "hours" },
+    { value: String(minutes).padStart(2, "0"), label: "minutes" },
+    { value: String(seconds).padStart(2, "0"), label: "seconds" },
+  ];
+}
+
+function DashboardNextEventWidget({ timezone }: { timezone: string }) {
+  const [now, setNow] = useState(() => new Date());
+  const upcomingRange = useRef<{ start: Date; end: Date }>();
+  if (!upcomingRange.current) {
+    const start = new Date();
+    upcomingRange.current = { start, end: new Date(start.getTime() + 99 * 24 * 60 * 60 * 1000) };
+  }
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const range = upcomingRange.current;
+  const eventsQuery = useQuery<DashboardScheduleResponse>({
+    queryKey: ["/api/training/schedule/events/dashboard", range.start.toISOString(), range.end.toISOString(), timezone],
+    enabled: true,
+    queryFn: async () => {
+      const params = new URLSearchParams({ start: range.start.toISOString(), end: range.end.toISOString() });
+      const response = await fetch(`/api/training/schedule/events?${params}`, {
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error(await response.text());
+      return response.json();
+    },
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+
+  const nextEvent = (eventsQuery.data?.events || [])
+    .filter((event) => dashboardEventStart(event).getTime() >= now.getTime())
+    .sort((a, b) => dashboardEventStart(a).getTime() - dashboardEventStart(b).getTime())[0];
+
+  return (
+    <div
+      className="w-full max-w-xl rounded-2xl border border-teal-300/30 bg-gradient-to-br from-slate-950/80 via-indigo-950/80 to-teal-950/70 p-4 shadow-2xl shadow-black/20 sm:p-5 xl:max-w-[430px]"
+      data-testid="widget-dashboard-next-training"
+    >
+      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-teal-200">
+        <CalendarDays className="h-4 w-4 text-teal-300" />
+        Next training session
+      </div>
+      {eventsQuery.isLoading ? (
+        <p className="mt-3 text-sm font-semibold text-white/70">Loading upcoming session…</p>
+      ) : nextEvent ? (
+        <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="break-words text-sm font-bold leading-5 text-white">{nextEvent.title}</p>
+            <p className="mt-1 text-xs font-medium text-teal-100/80">
+              {nextEvent.isAllDay
+                ? formatInTz(new Date(`${nextEvent.start.slice(0, 10)}T12:00:00Z`), timezone, "EEEE, MMMM d")
+                : `${formatInTz(dashboardEventStart(nextEvent), timezone, "EEEE, MMMM d")} · ${formatInTz(dashboardEventStart(nextEvent), timezone, "h:mm a")}`}
+            </p>
+          </div>
+          <div className="shrink-0 rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-center">
+            <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-teal-100/70">Starts in</p>
+            <div className="mt-1 grid grid-cols-4 gap-1.5">
+              {dashboardCountdownParts(dashboardEventStart(nextEvent).getTime() - now.getTime()).map((part) => (
+                <div key={part.label} className="min-w-[32px]">
+                  <p className="font-mono text-lg font-black leading-none tabular-nums text-white">{part.value}</p>
+                  <p className="mt-1 text-[8px] font-bold uppercase tracking-wide text-white/60">{part.label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <p className="mt-3 text-sm font-semibold text-white/70">No upcoming training sessions scheduled.</p>
+      )}
+    </div>
+  );
 }
 
 // ─── Widget renderer ─────────────────────────────────────────────────────────
@@ -655,7 +763,9 @@ export default function DashboardPage() {
         <div className="absolute top-0 left-1/2 h-56 w-56 rounded-full bg-teal-500/8 blur-3xl" />
 
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-6">
-          <p className="text-xs font-medium tracking-wide uppercase text-white/60 flex items-center gap-2 flex-wrap">
+          <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
+            <div className="min-w-0">
+            <p className="text-xs font-medium tracking-wide uppercase text-white/60 flex items-center gap-2 flex-wrap">
             <span data-testid="text-dashboard-date">{todayLabel(user?.timezone)}</span>
             <span className="opacity-40">·</span>
             <span className="tabular-nums" data-testid="text-dashboard-time">
@@ -670,9 +780,12 @@ export default function DashboardPage() {
               ? `${timeGreeting(user?.timezone)}, ${firstName}`
               : timeGreeting(user?.timezone)}
           </h1>
-          <p className="text-white/60 mt-1 text-sm">
-            Your private marketing command center.
-          </p>
+            <p className="text-white/60 mt-1 text-sm">
+              Your private marketing command center.
+            </p>
+            </div>
+            {user?.isAdmin && <DashboardNextEventWidget timezone={user?.timezone || "America/New_York"} />}
+          </div>
         </div>
       </div>
 
