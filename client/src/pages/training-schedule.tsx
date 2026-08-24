@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   addMonths,
+  addDays,
   eachDayOfInterval,
   endOfMonth,
   endOfWeek,
   format,
   isSameMonth,
-  isToday,
   startOfMonth,
   startOfWeek,
   subMonths,
@@ -28,7 +28,8 @@ import DOMPurify from "dompurify";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
-import { formatInTimeZone, getCommonTimezones } from "@shared/datetime";
+import { formatInTz, getCommonTimezones } from "@shared/datetime";
+import { fromZonedTime } from "date-fns-tz";
 
 type CalendarSettings = {
   calendarId: string;
@@ -71,22 +72,22 @@ function eventTone(event: ScheduleEvent) {
 }
 
 function eventDayKey(event: ScheduleEvent, timezone: string) {
-  return event.isAllDay ? event.start.slice(0, 10) : formatInTimeZone(new Date(event.start), timezone, "yyyy-MM-dd");
+  return event.isAllDay ? event.start.slice(0, 10) : formatInTz(new Date(event.start), timezone, "yyyy-MM-dd");
 }
 
 function displayTime(event: ScheduleEvent, timezone: string) {
   if (event.isAllDay) return "All day";
-  return formatInTimeZone(new Date(event.start), timezone, "h:mm a");
+  return formatInTz(new Date(event.start), timezone, "h:mm a");
 }
 
 function displayRange(event: ScheduleEvent, timezone: string) {
   if (event.isAllDay) return "All-day experience";
-  const day = formatInTimeZone(new Date(event.start), timezone, "EEEE, MMMM d");
-  return `${day} · ${formatInTimeZone(new Date(event.start), timezone, "h:mm a")} – ${formatInTimeZone(new Date(event.end), timezone, "h:mm a")}`;
+  const day = formatInTz(new Date(event.start), timezone, "EEEE, MMMM d");
+  return `${day} · ${formatInTz(new Date(event.start), timezone, "h:mm a")} – ${formatInTz(new Date(event.end), timezone, "h:mm a")}`;
 }
 
 function displayAllDayDate(event: ScheduleEvent, timezone: string) {
-  return formatInTimeZone(new Date(`${event.start.slice(0, 10)}T12:00:00Z`), timezone, "EEEE, MMMM d");
+  return formatInTz(new Date(`${event.start.slice(0, 10)}T12:00:00Z`), timezone, "EEEE, MMMM d");
 }
 
 function eventStartDate(event: ScheduleEvent) {
@@ -143,8 +144,13 @@ export default function TrainingSchedulePage() {
   const range = useMemo(() => {
     const start = startOfWeek(startOfMonth(currentMonth), { weekStartsOn: 0 });
     const end = endOfWeek(endOfMonth(currentMonth), { weekStartsOn: 0 });
-    return { start, end };
-  }, [currentMonth]);
+    return {
+      start,
+      end,
+      requestStart: fromZonedTime(start, timezone),
+      requestEnd: fromZonedTime(addDays(end, 1), timezone),
+    };
+  }, [currentMonth, timezone]);
 
   const updateTimezoneMutation = useMutation({
     mutationFn: async (nextTimezone: string) => {
@@ -155,9 +161,9 @@ export default function TrainingSchedulePage() {
   });
 
   const eventsQuery = useQuery<ScheduleResponse>({
-    queryKey: ["/api/training/schedule/events", range.start.toISOString(), range.end.toISOString(), timezone],
+    queryKey: ["/api/training/schedule/events", range.requestStart.toISOString(), range.requestEnd.toISOString(), timezone],
     queryFn: async () => {
-      const params = new URLSearchParams({ start: range.start.toISOString(), end: range.end.toISOString() });
+      const params = new URLSearchParams({ start: range.requestStart.toISOString(), end: range.requestEnd.toISOString() });
       const response = await fetch(`/api/training/schedule/events?${params}`, {
         credentials: "include",
         cache: "no-store",
@@ -234,7 +240,7 @@ export default function TrainingSchedulePage() {
                       <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-fuchsia-700">Next session</p>
                       <p className="mt-1 break-words text-base font-bold leading-5 text-slate-950">{nextEvent.title}</p>
                       <p className="mt-1 text-sm font-medium text-slate-600">
-                        {nextEvent.isAllDay ? format(eventStartDate(nextEvent), "EEEE, MMMM d") : `${format(eventStartDate(nextEvent), "EEEE, MMMM d")} · ${displayTime(nextEvent)}`}
+                        {nextEvent.isAllDay ? displayAllDayDate(nextEvent, timezone) : `${formatInTz(eventStartDate(nextEvent), timezone, "EEEE, MMMM d")} · ${displayTime(nextEvent, timezone)}`}
                       </p>
                     </div>
                     <div className="shrink-0 rounded-2xl bg-white px-4 py-3 text-center shadow-md ring-1 ring-fuchsia-100 sm:min-w-[250px]">
@@ -297,7 +303,7 @@ export default function TrainingSchedulePage() {
                 return (
                   <div key={day.toISOString()} className={`min-h-[106px] border-b border-r border-slate-200 p-1.5 sm:min-h-[124px] sm:p-2 ${inMonth ? "bg-white" : "bg-slate-50"}`}>
                     <div className="mb-1 flex justify-end">
-                      <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${isToday(day) ? "bg-gradient-to-br from-fuchsia-600 to-violet-600 text-white shadow-md shadow-fuchsia-500/30" : inMonth ? "text-slate-800" : "text-slate-400"}`}>
+                      <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${format(day, "yyyy-MM-dd") === formatInTz(now, timezone, "yyyy-MM-dd") ? "bg-gradient-to-br from-fuchsia-600 to-violet-600 text-white shadow-md shadow-fuchsia-500/30" : inMonth ? "text-slate-800" : "text-slate-400"}`}>
                         {format(day, "d")}
                       </span>
                     </div>
@@ -315,7 +321,7 @@ export default function TrainingSchedulePage() {
                           >
                             <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${tone.dot}`} />
                             <span className="hidden truncate sm:inline">{event.title}</span>
-                            <span className="truncate sm:hidden">{format(new Date(event.start), "h")}</span>
+                            <span className="truncate sm:hidden">{formatInTz(new Date(event.start), timezone, "h")}</span>
                           </button>
                         );
                       })}
@@ -328,6 +334,34 @@ export default function TrainingSchedulePage() {
           </div>
 
           <aside className="space-y-5">
+            <section className="rounded-[22px] border border-slate-200 bg-white p-5 shadow-lg shadow-slate-200/60">
+              <div className="flex items-start gap-3">
+                <Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-cyan-600" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Time zone</p>
+                  <p className="mt-1 text-sm text-slate-600">Event times are shown in your selected time zone.</p>
+                  <Select
+                    value={timezone}
+                    onValueChange={(value) => updateTimezoneMutation.mutate(value)}
+                    disabled={updateTimezoneMutation.isPending}
+                  >
+                    <SelectTrigger className="mt-3 w-full" data-testid="select-training-timezone">
+                      <SelectValue placeholder="Select your time zone" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-80">
+                      {timezoneOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {updateTimezoneMutation.isError && (
+                    <p className="mt-2 text-xs text-red-600">Could not save your time zone. Please try again.</p>
+                  )}
+                </div>
+              </div>
+            </section>
             {selectedEvent ? (
               <section className="rounded-[22px] border border-cyan-200 bg-white p-5 shadow-lg shadow-cyan-100">
                 <div className="mb-3 flex items-start gap-3">
@@ -338,7 +372,7 @@ export default function TrainingSchedulePage() {
                   </div>
                 </div>
                 <div className="space-y-3 text-xs text-slate-700">
-                  <div className="flex gap-2"><Clock3 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-400" /><span>{displayRange(selectedEvent)}</span></div>
+                  <div className="flex gap-2"><Clock3 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-400" /><span>{displayRange(selectedEvent, timezone)}</span></div>
                   {selectedEvent.location && <div className="flex gap-2"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-400" /><span>{selectedEvent.location}</span></div>}
                   {selectedEvent.recurring && <div className="flex gap-2"><Repeat2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-400" /><span>Repeating Academy event</span></div>}
                   {selectedEvent.description && (
