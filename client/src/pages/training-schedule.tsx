@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   addMonths,
   addDays,
+  addYears,
   eachDayOfInterval,
   endOfMonth,
   endOfWeek,
@@ -165,6 +166,29 @@ export default function TrainingSchedulePage() {
     refetchOnMount: "always",
   });
 
+  const upcomingRange = useMemo(() => {
+    const start = new Date();
+    return { start, end: addYears(start, 2) };
+  }, []);
+
+  const upcomingEventsQuery = useQuery<ScheduleResponse>({
+    queryKey: ["/api/training/schedule/events/upcoming", upcomingRange.start.toISOString(), upcomingRange.end.toISOString(), timezone],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        start: upcomingRange.start.toISOString(),
+        end: upcomingRange.end.toISOString(),
+      });
+      const response = await fetch(`/api/training/schedule/events?${params}`, {
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error(await response.text());
+      return response.json();
+    },
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+
   const days = useMemo(
     () => eachDayOfInterval({ start: range.start, end: range.end }),
     [range],
@@ -179,10 +203,10 @@ export default function TrainingSchedulePage() {
     return map;
   }, [events, timezone]);
   const nextEvent = useMemo(
-    () => events
+    () => (upcomingEventsQuery.data?.events || [])
       .filter((event) => eventStartDate(event).getTime() >= now.getTime())
       .sort((a, b) => eventStartDate(a).getTime() - eventStartDate(b).getTime())[0] || null,
-    [events, now],
+    [upcomingEventsQuery.data?.events, now],
   );
   const isLoading = eventsQuery.isLoading;
   const subscribeUrl = eventsQuery.data?.calendar.subscribeUrl;
