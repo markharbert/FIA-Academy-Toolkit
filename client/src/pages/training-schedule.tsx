@@ -151,10 +151,6 @@ export default function TrainingSchedulePage() {
     placeholderData: (previousData) => previousData,
     staleTime: 0,
     refetchOnMount: "always",
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
-    refetchInterval: 60_000,
-    refetchIntervalInBackground: false,
   });
 
   const days = useMemo(
