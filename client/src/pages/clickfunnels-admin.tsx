@@ -411,7 +411,7 @@ function WebhookActivityTab() {
 function CfIntegrationSection() {
   const { toast } = useToast();
 
-  const { data: cfStatus, isLoading: statusLoading, refetch: refetchStatus } = useQuery<CfStatus>({
+  const { data: cfStatus, isLoading: statusLoading } = useQuery<CfStatus>({
     queryKey: ["/api/admin/cf/status"],
   });
 
@@ -420,8 +420,6 @@ function CfIntegrationSection() {
     queryKey: [`/api/admin/cf/users?filter=${memberFilter}`],
   });
   const cfUsers = cfUsersData?.users ?? [];
-
-  const webhookUrl = `${window.location.protocol}//${window.location.host}/api/webhooks/clickfunnels`;
 
   const handleCopy = (text: string, label: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -435,14 +433,6 @@ function CfIntegrationSection() {
     { key: "courseId", label: "Course ID", desc: "Secret: CF_COURSE_ID" },
     { key: "webhookSecret", label: "Webhook Secret", desc: "Secret: CF_WEBHOOK_SECRET" },
   ] as const;
-
-  const webhookEvents = [
-    { event: "courses/enrollment.created", action: "Grants access", icon: <UserCheck className="h-4 w-4 text-green-500" /> },
-    { event: "courses/enrollment.suspended", action: "Revokes access", icon: <UserX className="h-4 w-4 text-red-500" /> },
-    { event: "courses/enrollment.deleted", action: "Revokes access", icon: <UserX className="h-4 w-4 text-red-500" /> },
-    { event: "subscription.cancelled", action: "Revokes access", icon: <UserX className="h-4 w-4 text-red-500" /> },
-    { event: "subscription.churned", action: "Revokes access", icon: <UserX className="h-4 w-4 text-red-500" /> },
-  ];
 
   return (
     <div className="space-y-6">
@@ -549,7 +539,7 @@ function CfIntegrationSection() {
         </Card>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div>
         {/* Configuration Health */}
         <Card className="overflow-hidden">
           <div className="h-1 bg-gradient-to-r from-violet-500 to-indigo-400" />
@@ -600,74 +590,6 @@ function CfIntegrationSection() {
           </CardContent>
         </Card>
 
-        {/* Webhook Setup */}
-        <Card className="overflow-hidden">
-          <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-400" />
-          <CardHeader className="pt-4">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Webhook className="h-4 w-4 text-emerald-500" />
-              Webhook Setup
-            </CardTitle>
-            <CardDescription>
-              Add this endpoint in ClickFunnels to sync enrollment events automatically.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-xs font-medium text-muted-foreground mb-1">Webhook URL</p>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 text-xs bg-muted px-3 py-2 rounded font-mono break-all">
-                  {webhookUrl}
-                </code>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleCopy(webhookUrl, "Webhook URL")}
-                  data-testid="button-copy-webhook-url"
-                >
-                  <Copy className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
-
-            <div>
-              <p className="text-xs font-medium text-muted-foreground mb-2">Subscribe to these events</p>
-              <div className="space-y-2">
-                {webhookEvents.map(({ event, action, icon }) => (
-                  <div key={event} className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      {icon}
-                      <code className="text-xs font-mono">{event}</code>
-                    </div>
-                    <span className="text-xs text-muted-foreground">{action}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="pt-2 border-t text-xs text-muted-foreground space-y-1">
-              <p className="font-medium">How to set it up in ClickFunnels:</p>
-              <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
-                <li>Go to <strong>Workspace Settings → Webhooks</strong></li>
-                <li>Click <strong>Add New Endpoint</strong></li>
-                <li>Paste the webhook URL above</li>
-                <li>Select all 5 events listed above</li>
-                <li>Set the signing secret to your <code className="font-mono">CF_WEBHOOK_SECRET</code> value</li>
-              </ol>
-            </div>
-
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              onClick={() => window.open("https://app.myclickfunnels.com/settings/webhooks", "_blank")}
-              data-testid="button-open-cf-webhooks"
-            >
-              <ExternalLink className="h-3.5 w-3.5 mr-2" />
-              Open ClickFunnels Webhooks
-            </Button>
-          </CardContent>
-        </Card>
       </div>
 
       <div className="grid grid-cols-1 gap-4">
@@ -700,11 +622,15 @@ export default function ClickFunnelsAdminPage() {
       <Tabs defaultValue="integration">
         <TabsList>
           <TabsTrigger value="integration">Integration</TabsTrigger>
+          <TabsTrigger value="webhook-activity">Webhook Activity</TabsTrigger>
           <TabsTrigger value="course-import">Course Import</TabsTrigger>
         </TabsList>
         <TabsContent value="integration" className="mt-4 space-y-6">
           <CfIntegrationSection />
           <GracePeriodCard />
+        </TabsContent>
+        <TabsContent value="webhook-activity" className="mt-4">
+          <WebhookActivityTab />
         </TabsContent>
         <TabsContent value="course-import" className="mt-4">
           <CourseImportCard />
