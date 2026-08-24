@@ -69,7 +69,7 @@ export function ProjectsWidget() {
   }>({ queryKey: ["/api/dashboard/projects"] });
 
   const { data: openTasks = [] } = useQuery<OpenTask[]>({
-    queryKey: ["/api/projects/all-tasks"],
+    queryKey: ["/api/projects/all-tasks?limit=30"],
   });
 
   const s = summary ?? {

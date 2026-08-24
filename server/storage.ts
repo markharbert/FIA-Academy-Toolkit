@@ -130,7 +130,7 @@ export interface IStorage {
   
   // Sessions
   getSession(id: string): Promise<Session | undefined>;
-  getSessionsByUser(userId: string): Promise<Session[]>;
+  getSessionsByUser(userId: string, limit?: number): Promise<Session[]>;
   getStaleUploadingSessions(olderThanMs: number): Promise<Session[]>;
   createSession(session: InsertSession): Promise<Session>;
   updateSession(id: string, updates: Partial<Session>): Promise<Session | undefined>;
@@ -455,7 +455,7 @@ export interface IStorage {
     totalOverdue: number;
   }>;
   getUrgentTasksForUser(userId: string, hoursAhead?: number): Promise<Array<ProjectTask & { projectName: string; projectColor: string }>>;
-  getAllOpenTasksForUser(userId: string): Promise<Array<ProjectTask & { projectName: string; projectColor: string }>>;
+  getAllOpenTasksForUser(userId: string, limit?: number): Promise<Array<ProjectTask & { projectName: string; projectColor: string }>>;
   getAllTasksWithDueDatesForUser(userId: string): Promise<Array<ProjectTask & { projectName: string }>>;
   getUserByIcalToken(token: string): Promise<User | null>;
   rotateIcalToken(userId: string): Promise<string>;
@@ -815,10 +815,11 @@ export class DatabaseStorage implements IStorage {
     return session || undefined;
   }
 
-  async getSessionsByUser(userId: string): Promise<Session[]> {
-    return db.select().from(sessions)
+  async getSessionsByUser(userId: string, limit?: number): Promise<Session[]> {
+    const query = db.select().from(sessions)
       .where(eq(sessions.userId, userId))
       .orderBy(desc(sessions.createdAt));
+    return typeof limit === "number" ? query.limit(limit) : query;
   }
 
   async getStaleUploadingSessions(olderThanMs: number): Promise<Session[]> {
@@ -3391,6 +3392,7 @@ export class DatabaseStorage implements IStorage {
       id: r.id,
       userId: r.user_id,
       projectId: r.project_id,
+      columnId: r.column_id,
       parentTaskId: r.parent_task_id,
       title: r.title,
       notes: r.notes,
@@ -3408,7 +3410,8 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getAllOpenTasksForUser(userId: string): Promise<Array<ProjectTask & { projectName: string; projectColor: string }>> {
+  async getAllOpenTasksForUser(userId: string, limit?: number): Promise<Array<ProjectTask & { projectName: string; projectColor: string }>> {
+    const limitClause = typeof limit === "number" ? sql`LIMIT ${limit}` : sql``;
     const result = await db.execute(sql`
       SELECT t.*, p.name AS project_name, p.color AS project_color
       FROM project_tasks t
@@ -3418,11 +3421,13 @@ export class DatabaseStorage implements IStorage {
         AND p.status = 'active'
         AND t.parent_task_id IS NULL
       ORDER BY (t.due_date IS NULL) ASC, t.due_date ASC, t.created_at ASC
+      ${limitClause}
     `);
     return (result.rows as any[]).map(r => ({
       id: r.id,
       userId: r.user_id,
       projectId: r.project_id,
+      columnId: r.column_id,
       parentTaskId: r.parent_task_id,
       title: r.title,
       notes: r.notes,

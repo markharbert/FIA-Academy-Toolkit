@@ -13,10 +13,10 @@ type GscStatus = {
 
 type GscData = {
   overview?: {
-    clicks?: number;
-    impressions?: number;
-    ctr?: number;
-    position?: number;
+    totalClicks?: number;
+    totalImpressions?: number;
+    avgCtr?: number;
+    avgPosition?: number;
   } | null;
   clicks?: number;
   impressions?: number;
@@ -28,8 +28,8 @@ export function SearchConsoleWidget() {
   const { data: status } = useQuery<GscStatus>({
     queryKey: ["/api/analytics/gsc/status"],
   });
-  const { data: gscData } = useQuery<GscData>({
-    queryKey: ["/api/analytics/gsc/data"],
+  const { data: gscData, isError: isAnalyticsError, refetch } = useQuery<GscData>({
+    queryKey: ["/api/analytics/gsc/data", status?.selectedSiteUrl ?? null, 28],
     enabled: status?.connected === true,
     queryFn: () =>
       fetch("/api/analytics/gsc/data?days=28", { credentials: "include" }).then((r) =>
@@ -37,10 +37,10 @@ export function SearchConsoleWidget() {
       ),
   });
 
-  const clicks = gscData?.overview?.clicks ?? gscData?.clicks;
-  const impressions = gscData?.overview?.impressions ?? gscData?.impressions;
-  const ctr = gscData?.overview?.ctr ?? gscData?.ctr;
-  const position = gscData?.overview?.position ?? gscData?.position;
+  const clicks = gscData?.overview?.totalClicks ?? gscData?.clicks;
+  const impressions = gscData?.overview?.totalImpressions ?? gscData?.impressions;
+  const ctr = gscData?.overview?.avgCtr ?? gscData?.ctr;
+  const position = gscData?.overview?.avgPosition ?? gscData?.position;
 
   return (
     <Tile accent="bg-gradient-to-r from-blue-500 to-indigo-500" testId="card-search-console">
@@ -67,7 +67,14 @@ export function SearchConsoleWidget() {
             </div>
           )}
 
-          <div className="mt-3 grid grid-cols-2 gap-2">
+          {isAnalyticsError ? (
+            <div className="mt-4 rounded-lg border border-dashed border-border p-3 text-center">
+              <p className="text-xs text-muted-foreground">Search data could not be loaded.</p>
+              <Button size="sm" variant="ghost" className="mt-1 h-7 text-xs" onClick={() => refetch()}>
+                Try again
+              </Button>
+            </div>
+          ) : <><div className="mt-3 grid grid-cols-2 gap-2">
             <div className="rounded-xl bg-blue-500/10 p-3">
               <div className="flex items-center gap-1.5 mb-1.5">
                 <MousePointerClick className="h-3 w-3 text-blue-600 dark:text-blue-400" />
@@ -107,6 +114,7 @@ export function SearchConsoleWidget() {
               </span>
             </div>
           </div>
+          </>}
         </>
       ) : (
         <div className="mt-4 text-center py-4">

@@ -24,7 +24,7 @@ type ReputationStatus = {
 type AddressResponse = {
   token: string;
   email: string;
-  lastPlacementResults: Record<string, string> | null;
+  lastPlacementResults: Array<{ status?: string }> | null;
   lastPlacementCheckedAt: string | null;
 };
 
@@ -49,13 +49,11 @@ export function EmailHealthWidget() {
 
   const placement = useMemo(() => {
     const r = address?.lastPlacementResults;
-    if (!r || typeof r !== "object") return null;
-    const entries = Object.entries(r);
-    if (entries.length === 0) return null;
-    const primary = entries.filter(([, status]) => status === "primary").length;
+    if (!Array.isArray(r) || r.length === 0) return null;
+    const primary = r.filter((result) => result?.status === "primary").length;
     return {
       primary,
-      total: entries.length,
+      total: r.length,
       checkedAt: address?.lastPlacementCheckedAt ?? null,
     };
   }, [address]);

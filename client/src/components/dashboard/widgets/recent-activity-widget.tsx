@@ -9,7 +9,7 @@ import {
   Activity,
   ChevronRight,
 } from "lucide-react";
-import { Tile, TileTitle, scoreColor, timeAgo, ANOMALY_META } from "../widget-registry";
+import { Tile, TileTitle, scoreColor, timeAgo, anomalyMeta } from "../widget-registry";
 import type { Session, EmailAnalysis, Script, InsightsResponse } from "@shared/schema";
 
 type ActivityItem = {
@@ -24,7 +24,7 @@ type ActivityItem = {
 
 export function RecentActivityWidget() {
   const { data: sessions = [] } = useQuery<Session[]>({
-    queryKey: ["/api/sessions"],
+    queryKey: ["/api/sessions?limit=5"],
   });
   const { data: emails = [] } = useQuery<EmailAnalysis[]>({
     queryKey: ["/api/inbox-analyzer/emails"],
@@ -38,7 +38,13 @@ export function RecentActivityWidget() {
 
   const recentActivity = useMemo<ActivityItem[]>(() => {
     const items: ActivityItem[] = [];
+    const validDate = (value: unknown) => {
+      const date = new Date(String(value));
+      return Number.isFinite(date.getTime()) ? date : null;
+    };
     sessions.slice(0, 3).forEach((s) => {
+      const createdAt = validDate(s.createdAt);
+      if (!createdAt) return;
       items.push({
         id: `session-${s.id}`,
         icon: <Video className="h-3.5 w-3.5 text-rose-500" />,
@@ -50,39 +56,45 @@ export function RecentActivityWidget() {
             ? "Scoring in progress"
             : "Video uploaded",
         score: s.scoreStatus === "final" ? s.scoreJson?.totalScore : null,
-        ts: new Date(s.createdAt),
+        ts: createdAt,
         href: `/video-score-upload/${s.id}`,
       });
     });
     emails.slice(0, 3).forEach((e) => {
+      const receivedAt = validDate(e.receivedAt);
+      if (!receivedAt) return;
       items.push({
         id: `email-${e.id}`,
         icon: <Mail className="h-3.5 w-3.5 text-sky-500" />,
         label: e.subject || "(No subject)",
         sub: e.overallScore != null ? `Email scored ${e.overallScore}/100` : "Email analyzed",
         score: e.overallScore,
-        ts: new Date(e.receivedAt),
+        ts: receivedAt,
         href: "/email-tools/inbox-analyzer",
       });
     });
     scripts.slice(0, 2).forEach((s) => {
+      const createdAt = validDate(s.createdAt);
+      if (!createdAt) return;
       items.push({
         id: `script-${s.id}`,
         icon: <FileText className="h-3.5 w-3.5 text-emerald-500" />,
         label: s.title || "Untitled script",
         sub: "Script generated",
-        ts: new Date(s.createdAt),
+        ts: createdAt,
         href: "/video-studio/scripts",
       });
     });
     insights?.anomalies?.slice(0, 4).forEach((a) => {
-      const meta = ANOMALY_META[a.type];
+      const occurredAt = validDate(a.occurredAt);
+      if (!occurredAt) return;
+      const meta = anomalyMeta(a.type);
       items.push({
         id: `anom-${a.id}`,
         icon: <meta.icon className={`h-3.5 w-3.5 ${meta.color}`} />,
         label: a.trackerName,
         sub: a.message,
-        ts: new Date(a.occurredAt),
+        ts: occurredAt,
         href: `/email-tools/inbox-intel/${a.trackerId}`,
       });
     });

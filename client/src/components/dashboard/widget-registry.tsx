@@ -70,9 +70,9 @@ export const WIDGET_META: Record<WidgetId, { title: string; description: string 
 };
 
 export const SIZE_CLASSES: Record<WidgetSize, string> = {
-  "third":      "col-span-12 sm:col-span-6 lg:col-span-4",
+  "third":      "col-span-12 sm:col-span-4",
   "half":       "col-span-12 sm:col-span-6",
-  "two-thirds": "col-span-12 lg:col-span-8",
+  "two-thirds": "col-span-12 sm:col-span-8",
   "full":       "col-span-12",
 };
 
@@ -222,7 +222,9 @@ export function scoreColor(s: number | null | undefined) {
 }
 
 export function timeAgo(date: Date) {
-  const s = Math.floor((Date.now() - date.getTime()) / 1000);
+  const timestamp = date.getTime();
+  if (!Number.isFinite(timestamp)) return "Unknown time";
+  const s = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
   if (s < 60) return "just now";
   const m = Math.floor(s / 60);
   if (m < 60) return `${m}m ago`;
@@ -277,7 +279,9 @@ export const DMO_ACTIVITIES = [
 ];
 
 export function calcActivityPts(seconds: number, targetMinutes: number) {
-  return Math.min(5, Math.floor((seconds / 60) / (targetMinutes / 5)));
+  const safeSeconds = Number(seconds);
+  if (!Number.isFinite(safeSeconds) || safeSeconds <= 0 || targetMinutes <= 0) return 0;
+  return Math.min(5, Math.max(0, Math.floor((safeSeconds / 60) / (targetMinutes / 5))));
 }
 
 export function dmoTotalPts(entry: DmoEntry | null) {
@@ -300,10 +304,24 @@ export const ANOMALY_META: Record<
   auth_regression: { icon: AlertTriangle, label: "Auth regression", color: "text-rose-600 dark:text-rose-400",     bg: "bg-rose-500/10",    ring: "ring-rose-500/30" },
 };
 
+const FALLBACK_ANOMALY_META = {
+  icon: AlertTriangle,
+  label: "New alert",
+  color: "text-muted-foreground",
+  bg: "bg-muted",
+  ring: "ring-border",
+};
+
+export function anomalyMeta(type: unknown) {
+  return typeof type === "string" && type in ANOMALY_META
+    ? ANOMALY_META[type as AnomalyEvent["type"]]
+    : FALLBACK_ANOMALY_META;
+}
+
 // ─── Number formatter ─────────────────────────────────────────────────────────
 
 export function fmtNum(n: number | null | undefined, decimals = 0): string {
-  if (n == null) return "—";
+  if (n == null || !Number.isFinite(n)) return "—";
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return n.toFixed(decimals);

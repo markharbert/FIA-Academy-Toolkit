@@ -3301,7 +3301,11 @@ export async function registerRoutes(
 
   app.get("/api/sessions", requireAuth, async (req: Request, res: Response) => {
     try {
-      const sessions = await storage.getSessionsByUser(req.session.userId!);
+      const requestedLimit = Number.parseInt(String(req.query.limit ?? ""), 10);
+      const limit = Number.isFinite(requestedLimit)
+        ? Math.min(Math.max(requestedLimit, 1), 50)
+        : undefined;
+      const sessions = await storage.getSessionsByUser(req.session.userId!, limit);
       res.json(sessions);
     } catch (err) {
       console.error("Get sessions error:", err);
@@ -9644,7 +9648,11 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.get("/api/projects/all-tasks", requireAuth, async (req: Request, res: Response) => {
     try {
-      const tasks = await storage.getAllOpenTasksForUser(getEffectiveUserId(req));
+      const requestedLimit = Number.parseInt(String(req.query.limit ?? ""), 10);
+      const limit = Number.isFinite(requestedLimit)
+        ? Math.min(Math.max(requestedLimit, 1), 50)
+        : undefined;
+      const tasks = await storage.getAllOpenTasksForUser(getEffectiveUserId(req), limit);
       res.json(tasks);
     } catch (err) {
       console.error("[projects] all-tasks error:", err);

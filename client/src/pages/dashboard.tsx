@@ -569,52 +569,86 @@ export default function DashboardPage() {
   const activeAnnouncements = announcementData?.announcements ?? [];
 
   // ── Layout — local state synced once from server ─────────────────────────────
-  const { data: layoutData } = useQuery<{ layout: WidgetConfig[] | null }>({
+  const { data: layoutData, isFetched: isLayoutFetched } = useQuery<{ layout: WidgetConfig[] | null }>({
     queryKey: ["/api/dashboard/layout"],
   });
 
   const [localLayout, setLocalLayout] = useState<WidgetConfig[]>(() => mergeLayout(null));
   const hasInitialized = useRef(false);
+  const layoutDirtyRef = useRef(false);
 
   useEffect(() => {
-    if (layoutData !== undefined && !hasInitialized.current) {
-      setLocalLayout(mergeLayout(layoutData.layout ?? null));
+    if (isLayoutFetched && !hasInitialized.current) {
+      if (!layoutDirtyRef.current) {
+        setLocalLayout(mergeLayout(layoutData?.layout ?? null));
+      }
       hasInitialized.current = true;
     }
-  }, [layoutData]);
+  }, [isLayoutFetched, layoutData]);
 
   // ── Save mutation ────────────────────────────────────────────────────────────
   const saveLayoutMutation = useMutation({
     mutationFn: (newLayout: WidgetConfig[]) =>
       apiRequest("PATCH", "/api/dashboard/layout", { layout: newLayout }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/layout"] });
+    onSuccess: (_response, savedLayout) => {
+      queryClient.setQueryData(["/api/dashboard/layout"], { layout: savedLayout });
     },
     onError: () => {
       toast({ title: "Couldn't save layout", variant: "destructive" });
     },
   });
 
-  // ── Debounced auto-save ──────────────────────────────────────────────────────
+  // ── Serialized, latest-wins layout persistence ───────────────────────────────
+  // A user can reorder, change a preset, and close a panel within a short window.
+  // Keep writes ordered so an older delayed request can never replace a newer layout.
   const saveTimer = useRef<NodeJS.Timeout>();
+  const queuedLayoutRef = useRef<WidgetConfig[] | null>(null);
+  const isFlushingLayoutRef = useRef(false);
+
+  const persistLayout = useCallback((layout: WidgetConfig[]) => {
+    queuedLayoutRef.current = layout.map((widget) => ({ ...widget }));
+    if (isFlushingLayoutRef.current) return;
+
+    isFlushingLayoutRef.current = true;
+    void (async () => {
+      try {
+        while (queuedLayoutRef.current) {
+          const nextLayout = queuedLayoutRef.current;
+          queuedLayoutRef.current = null;
+          try {
+            await saveLayoutMutation.mutateAsync(nextLayout);
+          } catch {
+            // The mutation's onError shows the failure. Continue so a newer
+            // layout queued while this request failed still gets a chance to save.
+          }
+        }
+      } finally {
+        isFlushingLayoutRef.current = false;
+      }
+    })();
+  }, [saveLayoutMutation]);
+
   const scheduleAutoSave = useCallback((newLayout: WidgetConfig[]) => {
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      saveLayoutMutation.mutate(newLayout);
+      persistLayout(newLayout);
     }, 800);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [persistLayout]);
 
   // ── Panels: layout preset applied + widgets panel save ───────────────────────
   function handleApplyLayout(newLayout: WidgetConfig[]) {
+    layoutDirtyRef.current = true;
+    clearTimeout(saveTimer.current);
     setLocalLayout(newLayout);
-    saveLayoutMutation.mutate(newLayout);
+    persistLayout(newLayout);
     toast({ title: "Layout updated" });
   }
 
   function handleSaveWidgets(newLayout: WidgetConfig[]) {
+    layoutDirtyRef.current = true;
+    clearTimeout(saveTimer.current);
     setLocalLayout(newLayout);
-    saveLayoutMutation.mutate(newLayout);
+    persistLayout(newLayout);
     setActivePanel(null);
     toast({ title: "Widgets updated" });
   }
@@ -630,6 +664,12 @@ export default function DashboardPage() {
   //            consumed in useLayoutEffect after React re-renders the new order).
   const widgetElsRef = useRef<Map<WidgetId, HTMLDivElement | null>>(new Map());
   const snapRects = useRef<Map<WidgetId, { x: number; y: number }>>(new Map());
+  const flipAnimationFrames = useRef<number[]>([]);
+
+  const cancelFlipAnimations = useCallback(() => {
+    flipAnimationFrames.current.forEach((frame) => cancelAnimationFrame(frame));
+    flipAnimationFrames.current = [];
+  }, []);
 
   const registerWidgetEl = useCallback(
     (id: WidgetId, el: HTMLDivElement | null) => {
@@ -670,14 +710,17 @@ export default function DashboardPage() {
 
     // Play: two rAFs so the browser paints the "Invert" frame first,
     // then triggers the transition to the natural (new) position.
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
+    const firstFrame = requestAnimationFrame(() => {
+      const secondFrame = requestAnimationFrame(() => {
         toAnimate.forEach((el) => {
           el.style.transition = "transform 280ms cubic-bezier(0.2,0,0,1)";
           el.style.transform = "";
         });
+        flipAnimationFrames.current = [];
       });
+      flipAnimationFrames.current = [secondFrame];
     });
+    flipAnimationFrames.current = [firstFrame];
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localLayout]);
 
@@ -693,9 +736,32 @@ export default function DashboardPage() {
   const activeWidgetIdRef = useRef<WidgetId | null>(null);
   const activeDragWidth = useRef<number>(0);
   const activeDragHeight = useRef<number>(0);
+  const dragStartLayoutRef = useRef<WidgetConfig[] | null>(null);
+
+  useEffect(() => () => {
+    clearTimeout(saveTimer.current);
+    cancelFlipAnimations();
+  }, [cancelFlipAnimations]);
+
+  const clearActiveDrag = useCallback(() => {
+    setActiveWidgetId(null);
+    activeWidgetIdRef.current = null;
+    activeDragWidth.current = 0;
+    activeDragHeight.current = 0;
+    dragStartLayoutRef.current = null;
+    snapRects.current.clear();
+    cancelFlipAnimations();
+    widgetElsRef.current.forEach((el) => {
+      if (!el) return;
+      el.style.transition = "";
+      el.style.transform = "";
+    });
+  }, [cancelFlipAnimations]);
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     const id = event.active.id as WidgetId;
+    layoutDirtyRef.current = true;
+    dragStartLayoutRef.current = localLayoutRef.current.map((widget) => ({ ...widget }));
     setActiveWidgetId(id);
     activeWidgetIdRef.current = id;
     const rect = (event.active.rect.current as any)?.initial;
@@ -744,14 +810,21 @@ export default function DashboardPage() {
   // On drop: DOM is already in the correct order (from live handleDragOver reorders).
   // Just clear the overlay and persist whatever order we landed on.
   const handleDragEnd = useCallback((_event: DragEndEvent) => {
-    setActiveWidgetId(null);
-    activeWidgetIdRef.current = null;
-    snapRects.current.clear(); // discard any pending snapshot
+    clearActiveDrag();
     scheduleAutoSave(localLayoutRef.current);
-  }, [scheduleAutoSave]);
+  }, [clearActiveDrag, scheduleAutoSave]);
+
+  const handleDragCancel = useCallback(() => {
+    const startingLayout = dragStartLayoutRef.current;
+    clearActiveDrag();
+    if (startingLayout) {
+      setLocalLayout(startingLayout);
+    }
+  }, [clearActiveDrag]);
 
   // ── Arrange mode: remove widget ──────────────────────────────────────────────
   function removeWidget(id: WidgetId) {
+    layoutDirtyRef.current = true;
     setLocalLayout((prev) => {
       const next = prev.map((w) => (w.id === id ? { ...w, visible: false } : w));
       scheduleAutoSave(next);
@@ -762,7 +835,7 @@ export default function DashboardPage() {
   // ── Done arranging ───────────────────────────────────────────────────────────
   function doneArranging() {
     clearTimeout(saveTimer.current);
-    saveLayoutMutation.mutate(localLayout);
+    persistLayout(localLayout);
     setArrangeMode(false);
     toast({ title: "Layout saved" });
   }
@@ -859,6 +932,7 @@ export default function DashboardPage() {
               <DropdownMenuContent align="end" className="w-52">
                 <DropdownMenuItem
                   onClick={() => setActivePanel("layout")}
+                  disabled={!isLayoutFetched}
                   data-testid="menu-change-layout"
                 >
                   <LayoutGrid className="h-4 w-4 mr-2 text-muted-foreground" />
@@ -866,6 +940,7 @@ export default function DashboardPage() {
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => setActivePanel("widgets")}
+                  disabled={!isLayoutFetched}
                   data-testid="menu-add-remove-widgets"
                 >
                   <Eye className="h-4 w-4 mr-2 text-muted-foreground" />
@@ -874,6 +949,7 @@ export default function DashboardPage() {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => setArrangeMode(true)}
+                  disabled={!isLayoutFetched}
                   data-testid="menu-arrange-widgets"
                 >
                   <Move className="h-4 w-4 mr-2 text-muted-foreground" />
@@ -974,6 +1050,7 @@ export default function DashboardPage() {
                 onDragStart={handleDragStart}
                 onDragOver={handleDragOver}
                 onDragEnd={handleDragEnd}
+                onDragCancel={handleDragCancel}
               >
                 {/*
                   strategy={() => null} — dnd-kit computes no CSS transforms for
@@ -988,7 +1065,7 @@ export default function DashboardPage() {
                   {fullGrid}
                 </SortableContext>
 
-                {/* Floating widget clone that follows the cursor — no distortion */}
+                {/* Lightweight drag preview: never mount another live widget tree. */}
                 <DragOverlay dropAnimation={{ duration: 200, easing: "cubic-bezier(0.2, 0, 0, 1)" }}>
                   {activeWidgetId ? (
                     <div
@@ -996,9 +1073,12 @@ export default function DashboardPage() {
                         width: activeDragWidth.current || undefined,
                         willChange: "transform",
                       }}
-                      className="opacity-90 shadow-2xl rounded-xl rotate-1 scale-[1.02] pointer-events-none"
+                      className="rounded-xl border border-border bg-card p-4 opacity-90 shadow-2xl rotate-1 scale-[1.02] pointer-events-none"
                     >
-                      <SafeWidgetRenderer id={activeWidgetId} />
+                      <p className="text-sm font-semibold">{WIDGET_META[activeWidgetId].title}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {WIDGET_META[activeWidgetId].description}
+                      </p>
                     </div>
                   ) : null}
                 </DragOverlay>

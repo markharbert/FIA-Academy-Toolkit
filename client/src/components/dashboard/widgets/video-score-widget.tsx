@@ -27,24 +27,27 @@ function ScoreRing({ score, size = 76 }: { score: number; size?: number }) {
 }
 
 export function VideoScoreWidget() {
-  const { data: sessions = [] } = useQuery<Session[]>({ queryKey: ["/api/sessions"] });
+  const { data: sessions = [] } = useQuery<Session[]>({ queryKey: ["/api/sessions?limit=10"] });
 
-  const scored = (sessions as any[]).filter(
-    (s) => s.scoreStatus === "final" && s.scoreJson?.totalScore != null,
-  );
-  const latest = scored[0] ?? null;
-  const latestScore: number | null = latest?.scoreJson?.totalScore ?? null;
+  const scored = (sessions as Session[])
+    .map((session) => {
+      const rawScore = (session.scoreJson as { totalScore?: unknown } | null)?.totalScore;
+      const score = Number(rawScore);
+      return { session, score };
+    })
+    .filter(({ session, score }) => session.scoreStatus === "final" && Number.isFinite(score))
+    .map(({ session, score }) => ({ session, score: Math.min(100, Math.max(0, score)) }));
+  const latest = scored[0]?.session ?? null;
+  const latestScore = scored[0]?.score ?? null;
 
   const trend = useMemo(() => {
     if (scored.length < 2) return null;
-    const prev = scored[1].scoreJson?.totalScore;
-    if (prev == null || latestScore == null) return null;
-    return latestScore - prev;
+    return latestScore == null ? null : latestScore - scored[1].score;
   }, [scored, latestScore]);
 
   const miniScores: number[] = scored
     .slice(0, 7)
-    .map((s: any) => s.scoreJson?.totalScore ?? 0)
+    .map((entry) => entry.score)
     .reverse();
   const maxMini = Math.max(...miniScores, 1);
 

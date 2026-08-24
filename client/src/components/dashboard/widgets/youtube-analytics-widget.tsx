@@ -21,8 +21,7 @@ type YtStatus = {
 type YtAnalytics = {
   totals?: {
     views?: number;
-    watchTimeMinutes?: number;
-    estimatedMinutesWatched?: number;
+    watchHours?: number;
     subscribersGained?: number;
     subscribersLost?: number;
   } | null;
@@ -34,8 +33,8 @@ export function YoutubeAnalyticsWidget() {
   const { data: status } = useQuery<YtStatus>({
     queryKey: ["/api/analytics/youtube/status"],
   });
-  const { data: analytics } = useQuery<YtAnalytics>({
-    queryKey: ["/api/analytics/youtube/channel-analytics"],
+  const { data: analytics, isError: isAnalyticsError, refetch } = useQuery<YtAnalytics>({
+    queryKey: ["/api/analytics/youtube/channel-analytics", 28],
     enabled: status?.connected === true,
     queryFn: () =>
       fetch("/api/analytics/youtube/channel-analytics?days=28", {
@@ -45,12 +44,9 @@ export function YoutubeAnalyticsWidget() {
 
   const channel = status?.channel;
   const totals = analytics?.totals;
-  const watchHours =
-    totals?.watchTimeMinutes != null
-      ? Math.round(totals.watchTimeMinutes / 60)
-      : totals?.estimatedMinutesWatched != null
-      ? Math.round(totals.estimatedMinutesWatched / 60)
-      : null;
+  const watchHours = totals?.watchHours != null && Number.isFinite(totals.watchHours)
+    ? Math.round(totals.watchHours)
+    : null;
 
   const netSubs =
     totals?.subscribersGained != null
@@ -88,7 +84,14 @@ export function YoutubeAnalyticsWidget() {
             </div>
           )}
 
-          <div className="mt-3 grid grid-cols-3 gap-2">
+          {isAnalyticsError ? (
+            <div className="mt-4 rounded-lg border border-dashed border-border p-3 text-center">
+              <p className="text-xs text-muted-foreground">YouTube analytics could not be loaded.</p>
+              <Button size="sm" variant="ghost" className="mt-1 h-7 text-xs" onClick={() => refetch()}>
+                Try again
+              </Button>
+            </div>
+          ) : <><div className="mt-3 grid grid-cols-3 gap-2">
             <div className="rounded-xl bg-red-500/10 p-2.5 text-center">
               <Users className="h-3.5 w-3.5 text-red-500 mx-auto mb-1" />
               <p className="text-base font-bold tabular-nums text-red-600 dark:text-red-400">
@@ -138,6 +141,7 @@ export function YoutubeAnalyticsWidget() {
               Analytics data requires YouTube Partner Program access.
             </p>
           )}
+          </>}
         </>
       ) : (
         <div className="mt-4 text-center py-4">

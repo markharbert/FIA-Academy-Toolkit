@@ -2,12 +2,14 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Radar, ChevronRight, Plus } from "lucide-react";
-import { Tile, TileTitle, StatChip, ANOMALY_META } from "../widget-registry";
+import { Tile, TileTitle, StatChip, anomalyMeta } from "../widget-registry";
 import type { InsightsResponse } from "@shared/schema";
 
 export function CompetitorPulseWidget() {
-  const { data: insights } = useQuery<InsightsResponse>({
+  const { data: insights, isError, refetch } = useQuery<InsightsResponse>({
     queryKey: ["/api/inbox-intel/insights"],
+    staleTime: 2 * 60 * 1000,
+    retry: 1,
   });
 
   return (
@@ -35,10 +37,17 @@ export function CompetitorPulseWidget() {
         <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">
           Alerts
         </p>
-        {insights?.anomalies && insights.anomalies.length > 0 ? (
+        {isError ? (
+          <div className="rounded-md border border-dashed border-border p-2 text-center">
+            <p className="text-xs text-muted-foreground">Alerts could not be loaded.</p>
+            <Button size="sm" variant="ghost" className="mt-1 h-6 text-xs" onClick={() => refetch()}>
+              Try again
+            </Button>
+          </div>
+        ) : insights?.anomalies && insights.anomalies.length > 0 ? (
           <div className="space-y-1.5">
             {insights.anomalies.slice(0, 2).map((a) => {
-              const meta = ANOMALY_META[a.type];
+              const meta = anomalyMeta(a.type);
               return (
                 <Link key={a.id} href={`/email-tools/inbox-intel/${a.trackerId}`}>
                   <div
