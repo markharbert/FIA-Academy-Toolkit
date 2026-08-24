@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Loader2, CheckCircle, AlertCircle, Users, Copy, ExternalLink,
   Webhook, UserCheck, UserX, Zap, Key, Search, Clock, RotateCw, Link,
-  Activity, Ban, CheckCircle2, Folder, KeyRound, LogIn, LogOut, Shield, ShieldOff, UserCog, Video,
+  Activity, Ban, CheckCircle2, Folder, KeyRound, LogIn, LogOut, Shield, ShieldOff, UserCog, Video, Download,
 } from "lucide-react";
 import { CourseImportCard } from "@/components/cf-course-import";
 
@@ -114,6 +114,19 @@ interface MemberEngagement {
 
 interface MemberFeatureUsage {
   features: Array<{ key: string; label: string; events: number; lastUsedAt: string | null }>;
+}
+
+interface MemberHealthRecord {
+  id: string; email: string | null; displayName: string | null; cfEnrolled: boolean | null; cfEnrolledAt: string | null;
+  lastLoginAt: string | null; lastActivityAt: string | null; courseCompleted: number; courseStarted: number;
+  dmoDays30: number; meaningfulActions30: number; segment: "not_started" | "active" | "engaged" | "at_risk"; reasons: string[];
+}
+
+interface CommercialSnapshot {
+  syncedAt: string; orderCount: number; revenue: number;
+  offers: Array<{ name: string; orders: number; revenue: number }>;
+  attribution: Array<{ source: string; campaign: string; orders: number; revenue: number }>;
+  cohorts: Array<{ month: string; offer: string; members: number; activated: number; retained: number; churned: number }>;
 }
 
 interface CfReconciliationRun {
@@ -737,6 +750,73 @@ function MembersTab() {
   );
 }
 
+function MemberHealthTab() {
+  const [filter, setFilter] = useState<"all" | MemberHealthRecord["segment"]>("all");
+  const [accessFilter, setAccessFilter] = useState<"all" | "active" | "revoked">("all");
+  const [enrollmentMonth, setEnrollmentMonth] = useState("all");
+  const [activityRange, setActivityRange] = useState<"all" | "7" | "30" | "90" | "inactive">("all");
+  const [progressFilter, setProgressFilter] = useState<"all" | "none" | "started" | "completed">("all");
+  const { data, isLoading } = useQuery<{ members: MemberHealthRecord[]; segments: Record<string, number> }>({
+    queryKey: ["/api/admin/cf/member-health"],
+  });
+  const enrollmentMonths = Array.from(new Set((data?.members || []).map((member) => member.cfEnrolledAt?.slice(0, 7)).filter(Boolean))).sort().reverse() as string[];
+  const members = (data?.members || []).filter((member) => {
+    if (filter !== "all" && member.segment !== filter) return false;
+    if (accessFilter === "active" && !member.cfEnrolled) return false;
+    if (accessFilter === "revoked" && member.cfEnrolled) return false;
+    if (enrollmentMonth !== "all" && member.cfEnrolledAt?.slice(0, 7) !== enrollmentMonth) return false;
+    if (progressFilter === "none" && member.courseStarted > 0) return false;
+    if (progressFilter === "started" && !(member.courseStarted > 0 && member.courseCompleted < member.courseStarted)) return false;
+    if (progressFilter === "completed" && !(member.courseStarted > 0 && member.courseCompleted === member.courseStarted)) return false;
+    if (activityRange !== "all") {
+      if (activityRange === "inactive") return !member.lastActivityAt || new Date(member.lastActivityAt) >= new Date(Date.now() - 90 * 86400000);
+      return !!member.lastActivityAt && new Date(member.lastActivityAt) >= new Date(Date.now() - Number(activityRange) * 86400000);
+    }
+    return true;
+  });
+  const labels = { not_started: "Not started", active: "Active", engaged: "Engaged", at_risk: "At risk" };
+  const tones = {
+    not_started: "border-amber-300 text-amber-800 dark:border-amber-800 dark:text-amber-300",
+    active: "border-sky-300 text-sky-800 dark:border-sky-800 dark:text-sky-300",
+    engaged: "border-emerald-300 text-emerald-800 dark:border-emerald-800 dark:text-emerald-300",
+    at_risk: "border-rose-300 text-rose-800 dark:border-rose-800 dark:text-rose-300",
+  };
+  return <div className="space-y-5">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div><h2 className="text-xl font-semibold">Member Health</h2><p className="mt-1 text-sm text-muted-foreground">Explainable engagement segments combine enrollment, login, training, DMO, and meaningful Toolkit activity.</p></div>
+      <a href="/api/admin/cf/member-health/export" className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-accent"><Download className="mr-2 h-4 w-4" />Export CSV</a>
+    </div>
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {(["engaged", "active", "at_risk", "not_started"] as const).map((segment) => <button type="button" key={segment} onClick={() => setFilter(filter === segment ? "all" : segment)} className={`rounded-xl border bg-card p-4 text-left transition-colors hover:bg-muted/40 ${filter === segment ? "ring-2 ring-primary/40" : ""}`}><p className="text-sm font-medium">{labels[segment]}</p><p className="mt-1 text-2xl font-bold">{data?.segments?.[segment] || 0}</p><p className="mt-1 text-xs text-muted-foreground">{segment === "engaged" ? "Recent activity across two or more signals" : segment === "at_risk" ? "Previously active, but no recent activity" : segment === "not_started" ? "Has access but no Toolkit sign-in" : "Recently active Toolkit members"}</p></button>)}
+    </div>
+    <div className="grid gap-3 rounded-lg border bg-muted/20 p-3 sm:grid-cols-2 lg:grid-cols-4">
+      <label className="text-xs font-medium text-muted-foreground">Access<select value={accessFilter} onChange={(event) => setAccessFilter(event.target.value as typeof accessFilter)} className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm text-foreground"><option value="all">All access states</option><option value="active">Active access</option><option value="revoked">Revoked / inactive</option></select></label>
+      <label className="text-xs font-medium text-muted-foreground">Enrollment month<select value={enrollmentMonth} onChange={(event) => setEnrollmentMonth(event.target.value)} className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm text-foreground"><option value="all">All enrollment months</option>{enrollmentMonths.map((month) => <option key={month} value={month}>{month}</option>)}</select></label>
+      <label className="text-xs font-medium text-muted-foreground">Activity range<select value={activityRange} onChange={(event) => setActivityRange(event.target.value as typeof activityRange)} className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm text-foreground"><option value="all">Any activity date</option><option value="7">Active in 7 days</option><option value="30">Active in 30 days</option><option value="90">Active in 90 days</option><option value="inactive">Inactive 90+ days</option></select></label>
+      <label className="text-xs font-medium text-muted-foreground">Course progress<select value={progressFilter} onChange={(event) => setProgressFilter(event.target.value as typeof progressFilter)} className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm text-foreground"><option value="all">Any course progress</option><option value="none">No lessons started</option><option value="started">In progress</option><option value="completed">All recorded lessons complete</option></select></label>
+    </div>
+    <Card><CardHeader className="pb-3"><CardTitle className="text-base">{filter === "all" ? "All members" : labels[filter]}</CardTitle><CardDescription>{members.length} member{members.length === 1 ? "" : "s"} · click a row in Members for full account detail</CardDescription></CardHeader><CardContent>{isLoading ? <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" /></div> : <div className="overflow-x-auto rounded-md border"><table className="w-full min-w-[960px] text-sm"><thead className="border-b bg-muted/50 text-left text-xs text-muted-foreground"><tr><th className="px-3 py-3">Member</th><th className="px-3 py-3">Segment</th><th className="px-3 py-3">Training</th><th className="px-3 py-3">DMO</th><th className="px-3 py-3">Toolkit use</th><th className="px-3 py-3">Why</th></tr></thead><tbody className="divide-y">{members.map((member) => <tr key={member.id}><td className="px-3 py-3"><p className="font-medium">{member.displayName || member.email || "Unnamed account"}</p><p className="text-xs text-muted-foreground">{member.lastLoginAt ? `Logged in ${formatDateTime(member.lastLoginAt)}` : "No Toolkit login"}</p></td><td className="px-3 py-3"><Badge variant="outline" className={tones[member.segment]}>{labels[member.segment]}</Badge></td><td className="px-3 py-3">{member.courseCompleted}/{member.courseStarted} lessons</td><td className="px-3 py-3">{member.dmoDays30} days / 30</td><td className="px-3 py-3">{member.meaningfulActions30} actions / 30d</td><td className="max-w-sm px-3 py-3 text-xs text-muted-foreground">{member.reasons.slice(0, 2).join(" · ")}</td></tr>)}</tbody></table></div>}</CardContent></Card>
+  </div>;
+}
+
+function CommercialInsightsTab() {
+  const [snapshot, setSnapshot] = useState<CommercialSnapshot | null>(null);
+  const sync = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/admin/cf/commercial-sync");
+      if (!response.ok) throw new Error("Commercial sync could not be completed");
+      return response.json() as Promise<CommercialSnapshot>;
+    },
+    onSuccess: setSnapshot,
+  });
+  const money = (value: number) => new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value);
+  return <div className="space-y-5">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="text-xl font-semibold">Commercial Insights</h2><p className="mt-1 text-sm text-muted-foreground">A read-only ClickFunnels order refresh, joined to local enrollment and engagement history.</p></div><Button onClick={() => sync.mutate()} disabled={sync.isPending}>{sync.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCw className="mr-2 h-4 w-4" />}{snapshot ? "Refresh orders" : "Sync orders & products"}</Button></div>
+    {sync.isError && <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">The ClickFunnels order refresh could not complete. Check that the configured token has orders and products read permission.</div>}
+    {!snapshot ? <Card className="border-dashed"><CardContent className="py-10 text-center text-sm text-muted-foreground">Run a read-only sync to see offer, cohort, retention, churn, and reliable campaign attribution data.</CardContent></Card> : <><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><div className="rounded-xl border bg-card p-4"><p className="text-sm text-muted-foreground">Orders synced</p><p className="mt-1 text-2xl font-bold">{snapshot.orderCount}</p></div><div className="rounded-xl border bg-card p-4"><p className="text-sm text-muted-foreground">Recorded order value</p><p className="mt-1 text-2xl font-bold">{money(snapshot.revenue)}</p></div><div className="rounded-xl border bg-card p-4"><p className="text-sm text-muted-foreground">Last refresh</p><p className="mt-1 text-base font-semibold">{formatDateTime(snapshot.syncedAt)}</p></div></div><div className="grid gap-5 lg:grid-cols-2"><Card><CardHeader className="pb-3"><CardTitle className="text-base">Offers</CardTitle><CardDescription>Only product names returned with the order are shown.</CardDescription></CardHeader><CardContent className="space-y-2">{snapshot.offers.slice(0, 8).map((offer) => <div key={offer.name} className="flex justify-between gap-3 rounded-md border px-3 py-2 text-sm"><span className="truncate">{offer.name}</span><span className="shrink-0 font-medium">{offer.orders} · {money(offer.revenue)}</span></div>)}</CardContent></Card><Card><CardHeader className="pb-3"><CardTitle className="text-base">Reliable attribution</CardTitle><CardDescription>Shown only when ClickFunnels provided UTM source or campaign data.</CardDescription></CardHeader><CardContent className="space-y-2">{snapshot.attribution.length ? snapshot.attribution.slice(0, 8).map((item) => <div key={`${item.source}-${item.campaign}`} className="flex justify-between gap-3 rounded-md border px-3 py-2 text-sm"><span className="truncate">{item.source} · {item.campaign}</span><span className="shrink-0 font-medium">{item.orders} orders</span></div>) : <p className="text-sm text-muted-foreground">No reliable campaign attribution was returned with the orders.</p>}</CardContent></Card></div><Card><CardHeader className="pb-3"><CardTitle className="text-base">Enrollment cohorts</CardTitle><CardDescription>Activation is a Toolkit login. Retention means the member remained active at least 30 days after enrollment. Churn reflects currently inactive ClickFunnels access.</CardDescription></CardHeader><CardContent><div className="overflow-x-auto rounded-md border"><table className="w-full min-w-[760px] text-sm"><thead className="border-b bg-muted/50 text-left text-xs text-muted-foreground"><tr><th className="px-3 py-3">Enrollment month</th><th className="px-3 py-3">Offer</th><th className="px-3 py-3">Members</th><th className="px-3 py-3">Activated</th><th className="px-3 py-3">Retained</th><th className="px-3 py-3">Churned</th></tr></thead><tbody className="divide-y">{snapshot.cohorts.map((cohort) => <tr key={`${cohort.month}-${cohort.offer}`}><td className="px-3 py-2">{cohort.month}</td><td className="max-w-64 truncate px-3 py-2">{cohort.offer}</td><td className="px-3 py-2">{cohort.members}</td><td className="px-3 py-2">{cohort.activated}</td><td className="px-3 py-2">{cohort.retained}</td><td className="px-3 py-2">{cohort.churned}</td></tr>)}</tbody></table></div></CardContent></Card></>}
+  </div>;
+}
+
 function WebhookActivityTab() {
   const [eventFilter, setEventFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -1159,6 +1239,8 @@ export default function ClickFunnelsAdminPage() {
         <TabsList className="h-auto flex-wrap">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="members">Members</TabsTrigger>
+          <TabsTrigger value="member-health">Member Health</TabsTrigger>
+          <TabsTrigger value="commercial">Commercial Insights</TabsTrigger>
           <TabsTrigger value="integration">Integration</TabsTrigger>
           <TabsTrigger value="webhook-activity">Webhook Activity</TabsTrigger>
           <TabsTrigger value="course-import">Course Import</TabsTrigger>
@@ -1168,6 +1250,12 @@ export default function ClickFunnelsAdminPage() {
         </TabsContent>
         <TabsContent value="members" className="mt-4">
           <MembersTab />
+        </TabsContent>
+        <TabsContent value="member-health" className="mt-4">
+          <MemberHealthTab />
+        </TabsContent>
+        <TabsContent value="commercial" className="mt-4">
+          <CommercialInsightsTab />
         </TabsContent>
         <TabsContent value="integration" className="mt-4 space-y-6">
           <CfIntegrationSection />

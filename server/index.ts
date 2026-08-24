@@ -151,6 +151,21 @@ async function runStartupMigrations() {
     `);
     console.log("[startup] cf_webhook_activity migration complete");
     await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS cf_commercial_orders (
+        cf_order_id TEXT PRIMARY KEY,
+        cf_contact_id TEXT,
+        offer_name TEXT NOT NULL,
+        order_date TIMESTAMPTZ,
+        amount NUMERIC,
+        attribution_source TEXT,
+        attribution_campaign TEXT,
+        synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_cf_commercial_orders_contact ON cf_commercial_orders (cf_contact_id);
+      CREATE INDEX IF NOT EXISTS idx_cf_commercial_orders_order_date ON cf_commercial_orders (order_date DESC);
+    `);
+    console.log("[startup] cf_commercial_orders migration complete");
+    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS cf_reconciliation_runs (
         id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
         status TEXT NOT NULL,

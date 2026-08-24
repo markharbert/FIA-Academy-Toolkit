@@ -217,6 +217,12 @@ export interface IStorage {
     weeklyActivity: Array<{ week: string; members: number }>;
   }>;
   getUserFeatureUsage(userId: string, days: number): Promise<Array<{ key: string; label: string; events: number; lastUsedAt: Date | null }>>;
+  getMemberHealth(): Promise<Array<{
+    id: string; email: string | null; displayName: string | null; cfContactId: string | null; cfEnrolled: boolean | null; cfEnrolledAt: Date | null;
+    lastLoginAt: Date | null; lastActivityAt: Date | null; courseCompleted: number; courseStarted: number;
+    dmoDays30: number; meaningfulActions30: number; segment: "not_started" | "active" | "engaged" | "at_risk";
+    reasons: string[];
+  }>>;
   applyCfReconciliation(enrollments: CfReconciliationEnrollment[]): Promise<CfReconciliationChanges>;
 
   getEnrolledUsersWithContactId(): Promise<Array<{ userId: string; email: string; contactId: string }>>;
@@ -5504,6 +5510,65 @@ export class DatabaseStorage implements IStorage {
     return rows.filter((row) => row.key !== "other").map((row) => ({
       key: row.key, label: row.label, events: Number(row.events), lastUsedAt: row.lastUsedAt,
     }));
+  }
+
+  async getMemberHealth(): Promise<Array<{
+    id: string; email: string | null; displayName: string | null; cfContactId: string | null; cfEnrolled: boolean | null; cfEnrolledAt: Date | null;
+    lastLoginAt: Date | null; lastActivityAt: Date | null; courseCompleted: number; courseStarted: number;
+    dmoDays30: number; meaningfulActions30: number; segment: "not_started" | "active" | "engaged" | "at_risk";
+    reasons: string[];
+  }>> {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const rows = await db.select({
+      id: users.id,
+      email: users.email,
+      displayName: users.displayName,
+      cfContactId: users.cfContactId,
+      cfEnrolled: users.cfEnrolled,
+      cfEnrolledAt: users.cfEnrolledAt,
+      lastLoginAt: users.lastLoginAt,
+      lastActivityAt: sql<Date | null>`greatest(max(${userActionLog.createdAt}), max(${courseProgress.lastAccessedAt}), max(${dmoEntries.updatedAt}))`,
+      courseCompleted: sql<number>`count(distinct ${courseProgress.id}) filter (where ${courseProgress.completedAt} is not null)::int`,
+      courseStarted: sql<number>`count(distinct ${courseProgress.id})::int`,
+      dmoDays30: sql<number>`count(distinct ${dmoEntries.id}) filter (where ${dmoEntries.date} >= ${thirtyDaysAgo.toISOString().slice(0, 10)})::int`,
+      meaningfulActions30: sql<number>`count(distinct ${userActionLog.id}) filter (where ${userActionLog.createdAt} >= ${thirtyDaysAgo} and ${userActionLog.actionType} not in ('login_success', 'logout', 'account_updated', 'feature_viewed'))::int`,
+    }).from(users)
+      .leftJoin(courseProgress, eq(courseProgress.userId, users.id))
+      .leftJoin(dmoEntries, eq(dmoEntries.userId, users.id))
+      .leftJoin(userActionLog, eq(userActionLog.userId, users.id))
+      .where(sql`COALESCE(${users.isAdmin}, false) = false`)
+      .groupBy(users.id)
+      .orderBy(desc(users.cfEnrolledAt), desc(users.createdAt));
+
+    return rows.map((row) => {
+      const lastActivityAt = row.lastActivityAt;
+      const recent = !!lastActivityAt && lastActivityAt >= thirtyDaysAgo;
+      const signals = (Number(row.courseStarted) > 0 ? 1 : 0)
+        + (Number(row.dmoDays30) > 0 ? 1 : 0)
+        + (Number(row.meaningfulActions30) > 0 ? 1 : 0);
+      const segment = !row.lastLoginAt
+        ? "not_started"
+        : !recent
+          ? "at_risk"
+          : signals >= 2
+            ? "engaged"
+            : "active";
+      const reasons = [
+        !row.lastLoginAt ? "Has access but has not signed in" : `Last login ${row.lastLoginAt.toLocaleDateString()}`,
+        Number(row.courseStarted) ? `${row.courseCompleted}/${row.courseStarted} recorded lessons completed` : "No training lesson progress recorded",
+        Number(row.dmoDays30) ? `${row.dmoDays30} DMO day${Number(row.dmoDays30) === 1 ? "" : "s"} in the last 30 days` : "No DMO activity in the last 30 days",
+        Number(row.meaningfulActions30) ? `${row.meaningfulActions30} meaningful Toolkit action${Number(row.meaningfulActions30) === 1 ? "" : "s"} in the last 30 days` : "No meaningful Toolkit action in the last 30 days",
+      ];
+      return {
+        ...row,
+        courseCompleted: Number(row.courseCompleted),
+        courseStarted: Number(row.courseStarted),
+        dmoDays30: Number(row.dmoDays30),
+        meaningfulActions30: Number(row.meaningfulActions30),
+        segment,
+        reasons,
+      };
+    });
   }
 
   async createWorkspaceInvite(ownerId: string, inviteEmail: string, token: string, firstName?: string, lastName?: string): Promise<WorkspaceInvite> {

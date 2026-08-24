@@ -43,6 +43,7 @@ import {
   parseCfWebhookEvent,
   handleCfEnrollmentEvent,
   checkCfEnrollmentByEmail,
+  getCfCommercialSnapshot,
   CF_WORKSPACE_DOMAIN,
   CF_API_TOKEN,
   CF_COURSE_ID,
@@ -1855,6 +1856,82 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[CF Admin] Engagement analytics error:", err);
       res.status(500).json({ message: "Failed to load member engagement analytics" });
+    }
+  });
+
+  app.get("/api/admin/cf/member-health", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const members = await storage.getMemberHealth();
+      const segments = members.reduce<Record<string, number>>((counts, member) => {
+        counts[member.segment] = (counts[member.segment] || 0) + 1;
+        return counts;
+      }, {});
+      res.json({ members, segments });
+    } catch (err) {
+      console.error("[CF Admin] Member health error:", err);
+      res.status(500).json({ message: "Failed to load member health" });
+    }
+  });
+
+  app.get("/api/admin/cf/member-health/export", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const members = await storage.getMemberHealth();
+      const escapeCsv = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+      const columns = ["Name", "Email", "Health segment", "ClickFunnels access", "Enrolled at", "Last login", "Last activity", "Lessons completed", "Lessons started", "DMO days (30d)", "Meaningful Toolkit actions (30d)", "Why"];
+      const lines = members.map((member) => [
+        member.displayName, member.email, member.segment.replace(/_/g, " "),
+        member.cfEnrolled ? "Active" : "Not active", member.cfEnrolledAt?.toISOString() || "",
+        member.lastLoginAt?.toISOString() || "", member.lastActivityAt?.toISOString() || "",
+        member.courseCompleted, member.courseStarted, member.dmoDays30, member.meaningfulActions30,
+        member.reasons.join("; "),
+      ].map(escapeCsv).join(","));
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", 'attachment; filename="member-health.csv"');
+      res.send([columns.map(escapeCsv).join(","), ...lines].join("\n"));
+    } catch (err) {
+      console.error("[CF Admin] Member health export error:", err);
+      res.status(500).json({ message: "Failed to export member health" });
+    }
+  });
+
+  app.post("/api/admin/cf/commercial-sync", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      // A manual refresh keeps third-party reporting intentional and avoids
+      // background API load. It is strictly read-only in ClickFunnels.
+      const [snapshot, health] = await Promise.all([getCfCommercialSnapshot(), storage.getMemberHealth()]);
+      for (const order of snapshot.orders) {
+        await db.execute(sql`
+          INSERT INTO cf_commercial_orders (
+            cf_order_id, cf_contact_id, offer_name, order_date, amount, attribution_source, attribution_campaign, synced_at
+          ) VALUES (
+            ${order.id}, ${order.contactId}, ${order.offer}, ${order.createdAt ? new Date(order.createdAt) : null},
+            ${String(order.amount)}, ${order.source}, ${order.campaign}, NOW()
+          )
+          ON CONFLICT (cf_order_id) DO UPDATE SET
+            cf_contact_id = EXCLUDED.cf_contact_id, offer_name = EXCLUDED.offer_name, order_date = EXCLUDED.order_date,
+            amount = EXCLUDED.amount, attribution_source = EXCLUDED.attribution_source,
+            attribution_campaign = EXCLUDED.attribution_campaign, synced_at = NOW()
+        `);
+      }
+      const offerByContactId = new Map(snapshot.orders.filter((order) => order.contactId).map((order) => [order.contactId!, order.offer]));
+      const cohortMap = new Map<string, { month: string; offer: string; members: number; activated: number; retained: number; churned: number }>();
+      for (const member of health) {
+        if (!member.cfEnrolledAt) continue;
+        const month = member.cfEnrolledAt.toISOString().slice(0, 7);
+        const offer = member.cfContactId ? offerByContactId.get(member.cfContactId) || "Unattributed product" : "Unattributed product";
+        const key = `${month}|${offer}`;
+        const cohort = cohortMap.get(key) || { month, offer, members: 0, activated: 0, retained: 0, churned: 0 };
+        cohort.members++;
+        if (member.lastLoginAt) cohort.activated++;
+        if (member.cfEnrolled && member.lastActivityAt && member.lastActivityAt >= new Date(member.cfEnrolledAt.getTime() + 30 * 24 * 60 * 60 * 1000)) cohort.retained++;
+        if (!member.cfEnrolled) cohort.churned++;
+        cohortMap.set(key, cohort);
+      }
+      const { orders, ...summary } = snapshot;
+      res.json({ ...summary, cohorts: Array.from(cohortMap.values()).sort((a, b) => b.month.localeCompare(a.month)) });
+    } catch (err: any) {
+      console.error("[CF Admin] Commercial sync error:", err?.message || err);
+      res.status(502).json({ message: err?.message || "ClickFunnels commercial sync failed" });
     }
   });
 

@@ -11,6 +11,65 @@ const CF_COURSE_ID = process.env.CF_COURSE_ID || "";
 const CF_API_TOKEN = process.env.CF_API_TOKEN || "";
 const CF_WEBHOOK_SECRET = process.env.CF_WEBHOOK_SECRET || "";
 
+export interface CfCommercialSnapshot {
+  syncedAt: Date;
+  orderCount: number;
+  revenue: number;
+  offers: Array<{ name: string; orders: number; revenue: number }>;
+  attribution: Array<{ source: string; campaign: string; orders: number; revenue: number }>;
+  orders: Array<{ id: string; contactId: string | null; offer: string; createdAt: string | null; amount: number; source: string | null; campaign: string | null }>;
+}
+
+// Read-only commercial reporting. This intentionally stays narrow: it never
+// creates, updates, or cancels orders, subscriptions, products, or contacts.
+export async function getCfCommercialSnapshot(): Promise<CfCommercialSnapshot> {
+  if (!CF_API_TOKEN || !CF_WORKSPACE_DOMAIN || !CF_WORKSPACE_ID) {
+    throw new Error("CF_API_TOKEN, CF_WORKSPACE_DOMAIN, and CF_WORKSPACE_ID must be configured");
+  }
+  const headers = { Authorization: `Bearer ${CF_API_TOKEN}`, Accept: "application/json" };
+  let nextUrl: string | null = `https://${CF_WORKSPACE_DOMAIN}/api/v2/workspaces/${CF_WORKSPACE_ID}/orders?sort_order=desc`;
+  const orders: any[] = [];
+  let pages = 0;
+  while (nextUrl && pages < 100) {
+    pages++;
+    const response = await fetch(nextUrl, { headers });
+    if (!response.ok) throw new Error(`ClickFunnels order sync failed: ${response.status}`);
+    const body = await response.json();
+    orders.push(...(Array.isArray(body) ? body : body.data || []));
+    const link = response.headers.get("link") || "";
+    nextUrl = link.match(/<([^>]+)>;\s*rel="next"/)?.[1] || null;
+  }
+  const offerMap = new Map<string, { orders: number; revenue: number }>();
+  const attributionMap = new Map<string, { source: string; campaign: string; orders: number; revenue: number }>();
+  const orderDetails: Array<{ id: string; contactId: string | null; offer: string; createdAt: string | null; amount: number; source: string | null; campaign: string | null }> = [];
+  let revenue = 0;
+  for (const order of orders) {
+    const amount = Number(order.total_amount || order.amount || 0) || 0;
+    revenue += amount;
+    const item = order.line_items?.[0] || order.order_items?.[0] || order.items?.[0] || {};
+    const offer = item.product?.name || item.product_name || order.product?.name || order.product_name || "Unattributed product";
+    const offerEntry = offerMap.get(offer) || { orders: 0, revenue: 0 };
+    offerEntry.orders++; offerEntry.revenue += amount; offerMap.set(offer, offerEntry);
+    const visit = order.last_visit_with_utm || order.contact?.last_visit_with_utm || order.utm || {};
+    const source = String(visit.utm_source || order.utm_source || "");
+    const campaign = String(visit.utm_campaign || order.utm_campaign || "");
+    orderDetails.push({ id: String(order.id || order.public_id), contactId: order.contact_id ? String(order.contact_id) : order.contact?.id ? String(order.contact.id) : null, offer, createdAt: order.created_at || null, amount, source: source || null, campaign: campaign || null });
+    if (source || campaign) {
+      const key = `${source}|${campaign}`;
+      const entry = attributionMap.get(key) || { source: source || "Direct / unknown", campaign: campaign || "No campaign", orders: 0, revenue: 0 };
+      entry.orders++; entry.revenue += amount; attributionMap.set(key, entry);
+    }
+  }
+  return {
+    syncedAt: new Date(),
+    orderCount: orders.length,
+    revenue,
+    offers: Array.from(offerMap, ([name, value]) => ({ name, ...value })).sort((a, b) => b.revenue - a.revenue),
+    attribution: Array.from(attributionMap.values()).sort((a, b) => b.orders - a.orders),
+    orders: orderDetails,
+  };
+}
+
 // Verify the HMAC signature ClickFunnels sends on every webhook
 export function verifyCfWebhookSignature(
   rawBody: string,
