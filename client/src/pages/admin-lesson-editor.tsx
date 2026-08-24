@@ -266,12 +266,33 @@ export default function AdminLessonEditorPage() {
     queryFn: () => apiFetch("/api/admin/vimeo/folders"),
     enabled: vimeoPickerOpen,
   });
-  const vimeoAcademyFolders = useMemo(
-    () => (vimeoFoldersData?.folders ?? []).filter(
-      (folder) => folder.name.trim().toLowerCase() === "fearless influencer academy",
-    ),
-    [vimeoFoldersData?.folders],
-  );
+  const vimeoAcademyFolders = useMemo(() => {
+    const folders = vimeoFoldersData?.folders ?? [];
+    const academyName = "fearless influencer academy";
+    const allowedIds = new Set(
+      folders
+        .filter((folder) => folder.name.trim().toLowerCase() === academyName)
+        .map((folder) => folder.id),
+    );
+
+    // Keep the Academy root and walk down through every descendant. This
+    // handles both Vimeo's ancestor_path response and a plain parentId tree.
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const folder of folders) {
+        if (folder.parentId && allowedIds.has(folder.parentId) && !allowedIds.has(folder.id)) {
+          allowedIds.add(folder.id);
+          changed = true;
+        }
+        if (folder.path?.some((part) => part.trim().toLowerCase() === academyName) && !allowedIds.has(folder.id)) {
+          allowedIds.add(folder.id);
+          changed = true;
+        }
+      }
+    }
+    return folders.filter((folder) => allowedIds.has(folder.id));
+  }, [vimeoFoldersData?.folders]);
 
   const { data: vimeoVideosData, isLoading: vimeoVideosLoading, error: vimeoVideosError } = useQuery<VimeoVideoPage>({
     queryKey: ["/api/admin/vimeo/folders", selectedVimeoFolderId, "videos", vimeoVideoPage],
@@ -308,7 +329,9 @@ export default function AdminLessonEditorPage() {
 
   useEffect(() => {
     if (!vimeoPickerOpen || !vimeoFoldersData?.folders) return;
-    const academyFolder = vimeoAcademyFolders[0];
+    const academyFolder = vimeoAcademyFolders.find(
+      (folder) => folder.name.trim().toLowerCase() === "fearless influencer academy",
+    );
     if (academyFolder && selectedVimeoFolderId !== academyFolder.id) {
       setSelectedVimeoFolderId(academyFolder.id);
       setVimeoVideoPage(1);
