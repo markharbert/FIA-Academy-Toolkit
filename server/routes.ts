@@ -14066,6 +14066,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   });
 
   app.get("/api/training/schedule/events", requireAdmin, async (req, res) => {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate");
     const schema = z.object({
       start: z.string().datetime({ offset: true }),
       end: z.string().datetime({ offset: true }),

@@ -141,12 +141,20 @@ export default function TrainingSchedulePage() {
     queryKey: ["/api/training/schedule/events", range.start.toISOString(), range.end.toISOString()],
     queryFn: async () => {
       const params = new URLSearchParams({ start: range.start.toISOString(), end: range.end.toISOString() });
-      const response = await fetch(`/api/training/schedule/events?${params}`, { credentials: "include" });
+      const response = await fetch(`/api/training/schedule/events?${params}`, {
+        credentials: "include",
+        cache: "no-store",
+      });
       if (!response.ok) throw new Error(await response.text());
       return response.json();
     },
+    placeholderData: (previousData) => previousData,
     staleTime: 0,
     refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
   });
 
   const days = useMemo(
