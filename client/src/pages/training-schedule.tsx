@@ -89,6 +89,12 @@ function displayAllDayDate(event: ScheduleEvent, timezone: string) {
   return formatInTz(new Date(`${event.start.slice(0, 10)}T12:00:00Z`), timezone, "EEEE, MMMM d");
 }
 
+function eventDayNumber(event: ScheduleEvent, timezone: string) {
+  return event.isAllDay
+    ? String(Number(event.start.slice(8, 10)))
+    : formatInTz(new Date(event.start), timezone, "d");
+}
+
 function eventStartDate(event: ScheduleEvent) {
   return event.isAllDay
     ? new Date(`${event.start.slice(0, 10)}T00:00:00`)
@@ -449,7 +455,10 @@ export default function TrainingSchedulePage() {
                                    onClick={() => setSelectedEvent(event)}
                                    className="flex w-full items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left transition hover:-translate-y-px hover:border-cyan-300 hover:shadow-md"
                                  >
-                                   <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${tone.dot}`} />
+                                   <span className={`relative flex h-14 w-14 shrink-0 items-center justify-center rounded-xl ${tone.soft} ${tone.text}`}>
+                                     <CalendarDays className="absolute h-11 w-11 opacity-25" />
+                                     <span className="relative z-10 text-xl font-black leading-none">{eventDayNumber(event, timezone)}</span>
+                                   </span>
                                    <span className="min-w-0 flex-1">
                                      <span className="block break-words text-sm font-bold text-slate-950">{event.title}</span>
                                      <span className="mt-1 block text-xs font-medium text-slate-600">
