@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   addMonths,
@@ -6,7 +6,6 @@ import {
   endOfMonth,
   endOfWeek,
   format,
-  isSameDay,
   isSameMonth,
   isToday,
   startOfMonth,
@@ -14,14 +13,12 @@ import {
   subMonths,
 } from "date-fns";
 import {
-  CalendarDays,
   ChevronLeft,
   ChevronRight,
   Clock3,
   ExternalLink,
   Link2,
   MapPin,
-  RefreshCw,
   Repeat2,
   Sparkles,
   Video,
@@ -83,6 +80,22 @@ function displayRange(event: ScheduleEvent) {
   return `${day} · ${format(new Date(event.start), "h:mm a")} – ${format(new Date(event.end), "h:mm a")}`;
 }
 
+function eventStartDate(event: ScheduleEvent) {
+  return event.isAllDay
+    ? new Date(`${event.start.slice(0, 10)}T00:00:00`)
+    : new Date(event.start);
+}
+
+function countdownLabel(milliseconds: number) {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (days > 0) return `${days}d ${String(hours).padStart(2, "0")}h`;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
 function sanitizeEventDescription(description: string) {
   const hasHtml = /<\s*[a-z][^>]*>/i.test(description);
   const source = hasHtml
@@ -104,6 +117,12 @@ function sanitizeEventDescription(description: string) {
 export default function TrainingSchedulePage() {
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
   const [selectedEvent, setSelectedEvent] = useState<ScheduleEvent | null>(null);
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const range = useMemo(() => {
     const start = startOfWeek(startOfMonth(currentMonth), { weekStartsOn: 0 });
@@ -111,9 +130,6 @@ export default function TrainingSchedulePage() {
     return { start, end };
   }, [currentMonth]);
 
-  const { data: settings } = useQuery<CalendarSettings>({
-    queryKey: ["/api/training/schedule/settings"],
-  });
   const eventsQuery = useQuery<ScheduleResponse>({
     queryKey: ["/api/training/schedule/events", range.start.toISOString(), range.end.toISOString()],
     queryFn: async () => {
@@ -122,6 +138,8 @@ export default function TrainingSchedulePage() {
       if (!response.ok) throw new Error(await response.text());
       return response.json();
     },
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const days = useMemo(
@@ -137,11 +155,13 @@ export default function TrainingSchedulePage() {
     });
     return map;
   }, [events]);
-  const upcoming = useMemo(
-    () => events.filter((event) => new Date(event.end) >= new Date()).slice(0, 6),
-    [events],
+  const nextEvent = useMemo(
+    () => events
+      .filter((event) => eventStartDate(event).getTime() >= now.getTime())
+      .sort((a, b) => eventStartDate(a).getTime() - eventStartDate(b).getTime())[0] || null,
+    [events, now],
   );
-  const isLoading = eventsQuery.isLoading || !settings;
+  const isLoading = eventsQuery.isLoading;
 
   return (
     <main className="min-h-full bg-white text-slate-900 px-4 py-6 md:px-7 lg:px-10">
@@ -159,25 +179,33 @@ export default function TrainingSchedulePage() {
                 A polished view of every live session, workshop, and Academy moment — always sourced from your Google Calendar.
               </p>
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">Schedule source</p>
-                <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.45)]" />
-                  FIA Event Schedule
+            <div className="flex w-full max-w-md flex-col sm:items-end">
+              {nextEvent ? (
+                <button
+                  onClick={() => setSelectedEvent(nextEvent)}
+                  className="w-full rounded-2xl border border-fuchsia-200 bg-gradient-to-br from-fuchsia-50 to-cyan-50 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                  data-testid="card-next-training-event"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-fuchsia-700">Next session</p>
+                      <p className="mt-1 truncate text-sm font-bold text-slate-950">{nextEvent.title}</p>
+                      <p className="mt-1 text-xs font-medium text-slate-600">
+                        {nextEvent.isAllDay ? format(eventStartDate(nextEvent), "EEEE, MMMM d") : `${format(eventStartDate(nextEvent), "EEEE, MMMM d")} · ${displayTime(nextEvent)}`}
+                      </p>
+                    </div>
+                    <div className="shrink-0 rounded-xl bg-white px-3 py-2 text-right shadow-sm ring-1 ring-fuchsia-100">
+                      <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500">Starts in</p>
+                      <p className="mt-0.5 font-mono text-sm font-bold tabular-nums text-fuchsia-700">{countdownLabel(eventStartDate(nextEvent).getTime() - now.getTime())}</p>
+                    </div>
+                  </div>
+                </button>
+              ) : (
+                <div className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Next session</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-800">No upcoming sessions in this view</p>
                 </div>
-              </div>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  eventsQuery.refetch();
-                }}
-                className="h-auto border-slate-300 bg-white text-slate-700 shadow-sm hover:bg-slate-50 hover:text-slate-950"
-                data-testid="button-refresh-training-schedule"
-              >
-                <RefreshCw className={`mr-2 h-4 w-4 ${eventsQuery.isFetching ? "animate-spin" : ""}`} />
-                Refresh
-              </Button>
+              )}
             </div>
           </div>
         </section>
@@ -185,7 +213,7 @@ export default function TrainingSchedulePage() {
         {eventsQuery.isError ? (
           <section className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-950">
             <p className="font-semibold">Google Calendar needs attention</p>
-            <p className="mt-1 text-amber-900/80">The FIA Event Schedule could not be loaded. Confirm the Google Calendar connection, then refresh.</p>
+            <p className="mt-1 text-amber-900/80">The FIA Event Schedule could not be loaded. Confirm the Google Calendar connection, then reload the page.</p>
           </section>
         ) : null}
 
@@ -250,33 +278,6 @@ export default function TrainingSchedulePage() {
           </div>
 
           <aside className="space-y-5">
-            <section className="overflow-hidden rounded-[22px] border border-fuchsia-200 bg-[linear-gradient(145deg,#fff7ff,#f8fafc)] p-5 shadow-lg shadow-fuchsia-100">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.15em] text-fuchsia-300/80">Coming up</p>
-                  <h2 className="mt-1 text-lg font-semibold">Your next sessions</h2>
-                </div>
-                <CalendarDays className="h-5 w-5 text-fuchsia-300" />
-              </div>
-              <div className="mt-4 space-y-2">
-                {isLoading ? Array.from({ length: 3 }).map((_, index) => <div key={index} className="h-16 animate-pulse rounded-xl bg-muted/70" />) : upcoming.length ? upcoming.map((event) => {
-                  const tone = eventTone(event);
-                  return (
-                    <button key={event.id} onClick={() => setSelectedEvent(event)} className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left transition hover:border-fuchsia-200 hover:bg-fuchsia-50/40">
-                      <div className={`flex h-9 w-9 shrink-0 flex-col items-center justify-center rounded-lg ${tone.soft}`}>
-                        <span className={`text-[9px] font-bold uppercase ${tone.text}`}>{format(new Date(event.start), "MMM")}</span>
-                        <span className={`text-sm font-bold leading-3 ${tone.text}`}>{event.isAllDay ? event.start.slice(8, 10) : format(new Date(event.start), "d")}</span>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-xs font-semibold text-slate-900">{event.title}</p>
-                        <p className="mt-0.5 text-[11px] text-slate-600">{displayTime(event)}</p>
-                      </div>
-                    </button>
-                  );
-                }) : <p className="rounded-xl border border-dashed border-slate-300 p-4 text-center text-xs leading-5 text-slate-600">Nothing scheduled in this view yet.</p>}
-              </div>
-            </section>
-
             {selectedEvent ? (
               <section className="rounded-[22px] border border-cyan-200 bg-white p-5 shadow-lg shadow-cyan-100">
                 <div className="mb-3 flex items-start gap-3">
