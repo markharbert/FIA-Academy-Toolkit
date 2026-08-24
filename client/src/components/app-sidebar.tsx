@@ -44,6 +44,7 @@ import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 import lionLogo from "@assets/FI_Lion_Logo_(2)_1777779197459.png";
 import cfLogo from "@/assets/cf-logo.png";
 import { CourseIcon } from "@/lib/course-icons";
+import { trainingCoursePath } from "@shared/training-url";
 
 type NavChild = {
   title: string;
@@ -277,7 +278,7 @@ export function AppSidebar() {
     ? allNavItems.filter((item) => item.collaboratorVisible)
     : allNavItems.filter((item) => !item.adminOnly || user?.isAdmin);
 
-  // Training: extract active courseId from URL
+  // Training: extract active course slug (legacy ID links still resolve too).
   const trainingMatch = location.match(/^\/training\/([^/]+)/);
   const activeCourseId = trainingMatch?.[1] ?? null;
 
@@ -359,13 +360,13 @@ export function AppSidebar() {
               <SidebarGroupContent>
                 <SidebarMenu>
                   {trainingCourses.map((course) => {
-                    const isCourseActive = course.id === activeCourseId;
+                    const isCourseActive = course.id === activeCourseId || course.slug === activeCourseId;
                     return (
                       <SidebarMenuItem key={course.id}>
                         <SidebarMenuButton
                           isActive={isCourseActive}
                           tooltip={course.title}
-                          onClick={() => setLocation(`/training/${course.id}`)}
+                          onClick={() => setLocation(trainingCoursePath(course))}
                           className={isCourseActive ? "!bg-violet-500/15" : ""}
                         >
                           <CourseIcon icon={course.icon} className={isCourseActive ? undefined : "text-violet-400"} />

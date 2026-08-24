@@ -34,6 +34,7 @@ import { fireWebhooks } from "./webhooks";
 import { formatSwipeListResponse } from "./swipe-api";
 import { safeNormalizeWebsite } from "./inboxIntelScreenshots";
 import { hasExactIds } from "@shared/course-structure";
+import { slugify } from "@shared/slug";
 import OpenAI from "openai";
 import {
   verifyCfWebhookSignature,
@@ -1857,7 +1858,12 @@ export async function registerRoutes(
 
     const existing = await storage.getCourseModuleByExternalId(courseId, extId);
     if (existing) {
-      if (existing.title !== node.title) await storage.updateCourseModule(existing.id, { title: node.title });
+      if (existing.title !== node.title) {
+        await storage.updateCourseModule(existing.id, {
+          title: node.title,
+          slug: await uniqueModuleSlug(courseId, node.title, existing.id),
+        });
+      }
       moduleId = existing.id;
       result.updated++;
     } else {
@@ -1865,6 +1871,7 @@ export async function registerRoutes(
         courseId,
         parentModuleId,
         title: node.title,
+        slug: await uniqueModuleSlug(courseId, node.title),
         status: node.published ? "published" : "draft",
         sortOrder,
         externalId: extId,
@@ -1892,8 +1899,11 @@ export async function registerRoutes(
     const existing = await storage.getCourseLessonByExternalId(courseId, extId);
     const videoUrl = node.videoUrl ? extractVimeoUrl(node.videoUrl) : null;
     if (existing) {
-      const updates: { title?: string; videoUrl?: string } = {};
-      if (existing.title !== node.title) updates.title = node.title;
+      const updates: { title?: string; slug?: string; videoUrl?: string } = {};
+      if (existing.title !== node.title) {
+        updates.title = node.title;
+        updates.slug = await uniqueLessonSlug(moduleId, node.title, existing.id);
+      }
       // Never replace an existing admin-entered video URL; re-imports only fill
       // missing video fields with a newly discovered ClickFunnels Vimeo URL.
       if (videoUrl && !existing.videoUrl) {
@@ -1911,6 +1921,7 @@ export async function registerRoutes(
         courseId,
         moduleId,
         title: node.title,
+        slug: await uniqueLessonSlug(moduleId, node.title),
         status: node.published ? "published" : "draft",
         sortOrder,
         externalId: extId,
@@ -2009,14 +2020,7 @@ export async function registerRoutes(
 
       if (destination.type === "new") {
         const rawTitle = (destination.title?.trim() || promotedTitle || cfCourseTitle || "CF Import").slice(0, 200);
-        const baseSlug = generateCourseSlug(rawTitle);
-        let finalSlug = baseSlug;
-        let slugAttempt = 0;
-        while (true) {
-          const { rows } = await pool.query("SELECT id FROM courses WHERE slug = $1 LIMIT 1", [finalSlug]);
-          if (!rows.length) break;
-          finalSlug = `${baseSlug}-${++slugAttempt}`;
-        }
+        const finalSlug = await uniqueCourseSlug(rawTitle);
         const course = await storage.createCourse({ title: rawTitle, slug: finalSlug, status: "draft", sortOrder: 0 });
         targetCourseId = course.id;
         courseName = rawTitle;
@@ -2050,6 +2054,7 @@ export async function registerRoutes(
           courseId: targetCourseId,
           parentModuleId: null,
           title: "Bonus",
+        slug: await uniqueModuleSlug(targetCourseId, "Bonus"),
           status: "draft",
           sortOrder: sortIdx++,
         });
@@ -13472,7 +13477,52 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   // ── Course Management Routes ─────────────────────────────────────────────────
 
   function generateCourseSlug(title: string): string {
-    return title.toLowerCase().replace(/[^\w\s-]/g, "").replace(/[\s_-]+/g, "-").replace(/^-+|-+$/g, "") + "-" + Date.now().toString(36);
+    return slugify(title);
+  }
+
+  async function uniqueCourseSlug(title: string, excludeId?: string): Promise<string> {
+    const taken = new Set(
+      (await storage.getCourses())
+        .filter((course) => course.id !== excludeId)
+        .map((course) => course.slug),
+    );
+    const base = slugify(title);
+    let slug = base;
+    let suffix = 2;
+    while (taken.has(slug)) slug = `${base}-${suffix++}`;
+    return slug;
+  }
+
+  async function uniqueModuleSlug(courseId: string, title: string, excludeId?: string): Promise<string> {
+    const taken = new Set(
+      (await storage.getCourseModules(courseId))
+        .filter((module) => module.id !== excludeId)
+        .map((module) => module.slug)
+        .filter((slug): slug is string => !!slug),
+    );
+    const base = slugify(title);
+    let slug = base;
+    let suffix = 2;
+    while (taken.has(slug)) slug = `${base}-${suffix++}`;
+    return slug;
+  }
+
+  async function uniqueLessonSlug(moduleId: string, title: string, excludeId?: string): Promise<string> {
+    const taken = new Set(
+      (await storage.getCourseLessons(moduleId))
+        .filter((lesson) => lesson.id !== excludeId)
+        .map((lesson) => lesson.slug)
+        .filter((slug): slug is string => !!slug),
+    );
+    const base = slugify(title);
+    let slug = base;
+    let suffix = 2;
+    while (taken.has(slug)) slug = `${base}-${suffix++}`;
+    return slug;
+  }
+
+  async function resolveCourseIdentifier(identifier: string) {
+    return await storage.getCourse(identifier) ?? await storage.getCourseBySlug(identifier);
   }
 
   const courseStatusSchema = z.enum(["draft", "published"]);
@@ -13537,7 +13587,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       const parsed = courseCreateSchema.safeParse(req.body);
       if (!parsed.success) return validationError(res, parsed.error);
       const { title, description, coverGradient } = parsed.data;
-      const slug = generateCourseSlug(title);
+      const slug = await uniqueCourseSlug(title);
       const course = await storage.createCourse({ title, description: description || null, slug, coverGradient: coverGradient || null, status: "draft", sortOrder: 0 });
       res.status(201).json(course);
     } catch (e) {
@@ -13562,7 +13612,11 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     try {
       const parsed = courseUpdateSchema.safeParse(req.body);
       if (!parsed.success) return validationError(res, parsed.error);
-      const course = await storage.updateCourse(req.params.id, parsed.data);
+      const updates = {
+        ...parsed.data,
+        ...(parsed.data.title ? { slug: await uniqueCourseSlug(parsed.data.title, req.params.id) } : {}),
+      };
+      const course = await storage.updateCourse(req.params.id, updates);
       if (!course) return res.status(404).json({ message: "Not found" });
       res.json(course);
     } catch (e) {
@@ -13625,7 +13679,13 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       const course = await storage.getCourse(req.params.courseId);
       if (!course) return res.status(404).json({ message: "Course not found" });
       const modules = await storage.getCourseModules(req.params.courseId);
-      const module = await storage.createCourseModule({ courseId: req.params.courseId, title: parsed.data, status: "draft", sortOrder: modules.length });
+      const module = await storage.createCourseModule({
+        courseId: req.params.courseId,
+        title: parsed.data,
+        slug: await uniqueModuleSlug(req.params.courseId, parsed.data),
+        status: "draft",
+        sortOrder: modules.length,
+      });
       res.status(201).json(module);
     } catch (e) {
       res.status(500).json({ message: "Failed to create module" });
@@ -13637,7 +13697,13 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     try {
       const parsed = moduleUpdateSchema.safeParse(req.body);
       if (!parsed.success) return validationError(res, parsed.error);
-      const module = await storage.updateCourseModule(req.params.id, parsed.data);
+      const existing = await storage.getCourseModule(req.params.id);
+      if (!existing) return res.status(404).json({ message: "Not found" });
+      const updates = {
+        ...parsed.data,
+        ...(parsed.data.title ? { slug: await uniqueModuleSlug(existing.courseId, parsed.data.title, existing.id) } : {}),
+      };
+      const module = await storage.updateCourseModule(req.params.id, updates);
       if (!module) return res.status(404).json({ message: "Not found" });
       res.json(module);
     } catch (e) {
@@ -13683,7 +13749,14 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         return res.status(400).json({ message: "Module does not belong to the supplied course" });
       }
       const lessons = await storage.getCourseLessons(req.params.moduleId);
-      const lesson = await storage.createCourseLesson({ courseId: module.courseId, moduleId: req.params.moduleId, title: parsed.data, status: "draft", sortOrder: lessons.length });
+      const lesson = await storage.createCourseLesson({
+        courseId: module.courseId,
+        moduleId: req.params.moduleId,
+        title: parsed.data,
+        slug: await uniqueLessonSlug(req.params.moduleId, parsed.data),
+        status: "draft",
+        sortOrder: lessons.length,
+      });
       res.status(201).json(lesson);
     } catch (e) {
       res.status(500).json({ message: "Failed to create lesson" });
@@ -13710,7 +13783,10 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     try {
       const parsed = lessonUpdateSchema.safeParse(req.body);
       if (!parsed.success) return validationError(res, parsed.error);
-      const updates = parsed.data;
+      const updates = {
+        ...parsed.data,
+        ...(parsed.data.title ? { slug: await uniqueLessonSlug((await storage.getCourseLesson(req.params.id))?.moduleId ?? "", parsed.data.title, req.params.id) } : {}),
+      };
       // Validate videoUrl — only allow http/https to prevent javascript: injection
       if (updates.videoUrl !== undefined && updates.videoUrl !== null && updates.videoUrl !== "") {
         try {
@@ -13995,7 +14071,9 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   app.get("/api/training/courses/:id", requireAdmin, async (req, res) => {
     try {
       const userId = req.session.userId as string;
-      const result = await storage.getCourseWithStructure(req.params.id, userId);
+      const course = await resolveCourseIdentifier(req.params.id);
+      if (!course) return res.status(404).json({ message: "Not found" });
+      const result = await storage.getCourseWithStructure(course.id, userId);
       if (!result) return res.status(404).json({ message: "Not found" });
       // Enforce published access for members
       if (result.course.status !== "published") return res.status(404).json({ message: "Not found" });
@@ -14015,10 +14093,22 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   // Admin-only (until member rollout): get lesson content + resources
   app.get("/api/training/lessons/:id", requireAdmin, async (req, res) => {
     try {
-      const lesson = await storage.getCourseLesson(req.params.id);
+      let lesson = await storage.getCourseLesson(req.params.id);
+      if (!lesson && typeof req.query.courseId === "string" && typeof req.query.moduleSlug === "string") {
+        const course = await resolveCourseIdentifier(req.query.courseId);
+        const module = course
+          ? await storage.getCourseModuleBySlug(course.id, req.query.moduleSlug)
+          : undefined;
+        if (course && module) {
+          lesson = await storage.getCourseLessonBySlug(course.id, module.id, req.params.id);
+        }
+      }
       if (!lesson || lesson.status !== "published") return res.status(404).json({ message: "Not found" });
-      if (typeof req.query.courseId === "string" && lesson.courseId !== req.query.courseId) {
-        return res.status(404).json({ message: "Lesson not found in this course" });
+      if (typeof req.query.courseId === "string") {
+        const course = await resolveCourseIdentifier(req.query.courseId);
+        if (!course || lesson.courseId !== course.id) {
+          return res.status(404).json({ message: "Lesson not found in this course" });
+        }
       }
       const course = await storage.getCourse(lesson.courseId);
       if (!course || course.status !== "published") return res.status(404).json({ message: "Not found" });

@@ -361,10 +361,13 @@ function ProtectedRoutes() {
       <Route path="/admin/courses">
         {() => <AdminRoute component={AdminCoursesPage} />}
       </Route>
+      <Route path="/training/:courseSlug/:moduleSlug/:lessonSlug">
+        {() => <AdminRoute component={TrainingLessonPage} />}
+      </Route>
       <Route path="/training/:courseId/lessons/:lessonId">
         {() => <AdminRoute component={TrainingLessonPage} />}
       </Route>
-      <Route path="/training/:courseId">
+      <Route path="/training/:courseSlug">
         {() => <AdminRoute component={TrainingCoursePage} />}
       </Route>
       <Route>{() => <AuthenticatedCatchAll />}</Route>

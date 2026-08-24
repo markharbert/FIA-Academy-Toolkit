@@ -3,11 +3,12 @@ import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { buildCourseModuleTree, flattenCourseModuleTree } from "@shared/course-structure";
+import { trainingLessonPath } from "@shared/training-url";
 
-type CourseLesson = { id: string; title: string; status: string };
-type CourseModule = { id: string; parentModuleId: string | null; title: string; sortOrder: number; lessons: CourseLesson[] };
+type CourseLesson = { id: string; title: string; slug: string | null; status: string };
+type CourseModule = { id: string; parentModuleId: string | null; title: string; slug: string | null; sortOrder: number; lessons: CourseLesson[] };
 type CourseStructure = {
-  course: { id: string; title: string; status: string };
+  course: { id: string; title: string; slug: string; status: string };
   modules: CourseModule[];
 };
 
@@ -17,13 +18,13 @@ type CourseStructure = {
  * needing to know the first lesson ID in advance.
  */
 export default function TrainingCoursePage() {
-  const { courseId } = useParams<{ courseId: string }>();
+  const { courseSlug } = useParams<{ courseSlug: string }>();
   const [, setLocation] = useLocation();
 
   const { data, isLoading, isError } = useQuery<CourseStructure>({
-    queryKey: ["/api/training/courses", courseId],
+    queryKey: ["/api/training/courses", courseSlug],
     queryFn: async () => {
-      const res = await fetch(`/api/training/courses/${courseId}`, {
+      const res = await fetch(`/api/training/courses/${courseSlug}`, {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Not found");
@@ -37,11 +38,11 @@ export default function TrainingCoursePage() {
     // Navigate to the first available published lesson
     for (const module of flattenCourseModuleTree(buildCourseModuleTree(data.modules))) {
       for (const lesson of module.lessons) {
-        setLocation(`/training/${courseId}/lessons/${lesson.id}`, { replace: true });
+        setLocation(trainingLessonPath(data.course, module, lesson), { replace: true });
         return;
       }
     }
-  }, [data, courseId, setLocation]);
+  }, [data, setLocation]);
 
   if (isLoading) {
     return (

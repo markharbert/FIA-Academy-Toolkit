@@ -8,9 +8,10 @@ import { startNotificationScheduler } from "./notificationScheduler";
 
 import { configureEmailSender } from "./email-sendgrid";
 import { startYouTubeAnalyticsScheduler } from "./youtubeAnalyticsScheduler";
-import { db } from "./db";
+import { db, pool } from "./db";
 import { sql, eq, and } from "drizzle-orm";
 import { teleprompterScripts, teleprompterRecordings } from "@shared/schema";
+import { slugify } from "@shared/slug";
 
 // Prevent stray async errors (e.g. TLS socket events fired after a promise
 // resolves) from crashing the entire process.
@@ -899,6 +900,56 @@ async function runStartupMigrations() {
         ADD COLUMN IF NOT EXISTS transcript_chapters JSONB
     `);
     console.log("[startup] course_lessons transcript columns migration complete");
+
+    // Each course, module, and lesson gets a stable, readable URL segment.
+    // The ordered backfill makes duplicate-title suffixes deterministic.
+    await db.execute(sql`ALTER TABLE course_modules ADD COLUMN IF NOT EXISTS slug TEXT`);
+    await db.execute(sql`ALTER TABLE course_lessons ADD COLUMN IF NOT EXISTS slug TEXT`);
+
+    const courseRows = (await pool.query(`SELECT id, title FROM courses ORDER BY created_at, id`)).rows;
+    const usedCourseSlugs = new Set<string>();
+    await pool.query(`UPDATE courses SET slug = 'legacy-' || id`);
+    for (const course of courseRows) {
+      const base = slugify(course.title);
+      let slug = base;
+      let suffix = 2;
+      while (usedCourseSlugs.has(slug)) slug = `${base}-${suffix++}`;
+      usedCourseSlugs.add(slug);
+      await pool.query(`UPDATE courses SET slug = $1 WHERE id = $2`, [slug, course.id]);
+    }
+
+    const moduleRows = (await pool.query(`
+      SELECT id, course_id, title FROM course_modules
+      ORDER BY course_id, sort_order, created_at, id
+    `)).rows;
+    const usedModuleSlugs = new Map<string, Set<string>>();
+    for (const module of moduleRows) {
+      const used = usedModuleSlugs.get(module.course_id) ?? new Set<string>();
+      const base = slugify(module.title);
+      let slug = base;
+      let suffix = 2;
+      while (used.has(slug)) slug = `${base}-${suffix++}`;
+      used.add(slug);
+      usedModuleSlugs.set(module.course_id, used);
+      await pool.query(`UPDATE course_modules SET slug = $1 WHERE id = $2`, [slug, module.id]);
+    }
+
+    const lessonRows = (await pool.query(`
+      SELECT id, module_id, title FROM course_lessons
+      ORDER BY module_id, sort_order, created_at, id
+    `)).rows;
+    const usedLessonSlugs = new Map<string, Set<string>>();
+    for (const lesson of lessonRows) {
+      const used = usedLessonSlugs.get(lesson.module_id) ?? new Set<string>();
+      const base = slugify(lesson.title);
+      let slug = base;
+      let suffix = 2;
+      while (used.has(slug)) slug = `${base}-${suffix++}`;
+      used.add(slug);
+      usedLessonSlugs.set(lesson.module_id, used);
+      await pool.query(`UPDATE course_lessons SET slug = $1 WHERE id = $2`, [slug, lesson.id]);
+    }
+    console.log("[startup] readable course URL slugs migration complete");
 
   } catch (err) {
     console.error("[startup] migration error:", err);

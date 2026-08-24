@@ -14,3 +14,4 @@
 - [Scroll capture coordination](scroll-capture-coordination.md) — page-scrolling capture tools must share one per-tab lock to avoid corrupting captures.
 - [CF Course Import](cf-course-import.md) — SSE structure fetch, cursor pagination, externalId idempotency, filterTree logic, bonus wrapping for loose root lessons.
 - [Vimeo lesson picker](vimeo-lesson-picker.md) — folder browsing needs private token scope and page-sized reads to remain responsive on large libraries.
+- [Readable training URLs](readable-training-urls.md) — learner links use course/module/lesson title slugs, with legacy ID links redirected to canonical paths.

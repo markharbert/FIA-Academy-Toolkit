@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { buildCourseModuleTree, flattenCourseModuleTree, type CourseModuleTree } from "@shared/course-structure";
 import { CourseIcon } from "@/lib/course-icons";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { trainingCoursePath, trainingLessonPath } from "@shared/training-url";
 
 /** Restrict resource/video URLs to http(s) only — prevents javascript: hrefs. */
 function safeHref(url: string | null | undefined): string {
@@ -40,6 +41,7 @@ type LessonDetail = {
   courseId: string;
   moduleId: string;
   title: string;
+  slug: string | null;
   videoUrl: string | null;
   transcriptText: string | null;
   transcriptCues: LessonTranscriptCue[] | null;
@@ -63,6 +65,7 @@ type LessonTranscriptCue = {
 type CourseLesson = {
   id: string;
   title: string;
+  slug: string | null;
   status: string;
   sortOrder: number;
   completed: boolean;
@@ -73,6 +76,7 @@ type CourseModule = {
   id: string;
   parentModuleId: string | null;
   title: string;
+  slug: string | null;
   sortOrder: number;
   lessons: CourseLesson[];
 };
@@ -81,6 +85,7 @@ type CourseStructure = {
   course: {
     id: string;
     title: string;
+    slug: string;
     status: string;
     icon?: string | null;
   };
@@ -130,7 +135,21 @@ function formatTimestamp(seconds: number): string {
 }
 
 export default function TrainingLessonPage() {
-  const { courseId, lessonId } = useParams<{ courseId: string; lessonId: string }>();
+  const {
+    courseSlug,
+    courseId: legacyCourseId,
+    moduleSlug,
+    lessonSlug,
+    lessonId: legacyLessonId,
+  } = useParams<{
+    courseSlug?: string;
+    courseId?: string;
+    moduleSlug?: string;
+    lessonSlug?: string;
+    lessonId?: string;
+  }>();
+  const courseIdentifier = courseSlug ?? legacyCourseId ?? "";
+  const lessonIdentifier = lessonSlug ?? legacyLessonId ?? "";
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const [transcriptOpen, setTranscriptOpen] = useState(false);
@@ -148,16 +167,18 @@ export default function TrainingLessonPage() {
 
   // Load course structure (for sidebar nav + prev/next)
   const { data: courseData, isError: isCourseError } = useQuery<CourseStructure>({
-    queryKey: ["/api/training/courses", courseId],
-    queryFn: () => apiFetch(`/api/training/courses/${courseId}`),
-    enabled: !!courseId,
+    queryKey: ["/api/training/courses", courseIdentifier],
+    queryFn: () => apiFetch(`/api/training/courses/${courseIdentifier}`),
+    enabled: !!courseIdentifier,
   });
 
   // Load lesson content
   const { data: lesson, isLoading, isError: isLessonError } = useQuery<LessonDetail>({
-    queryKey: ["/api/training/lessons", lessonId],
-    queryFn: () => apiFetch(`/api/training/lessons/${lessonId}?courseId=${encodeURIComponent(courseId)}`),
-    enabled: !!lessonId,
+    queryKey: ["/api/training/lessons", courseIdentifier, moduleSlug, lessonIdentifier],
+    queryFn: () => apiFetch(
+      `/api/training/lessons/${lessonIdentifier}?courseId=${encodeURIComponent(courseIdentifier)}${moduleSlug ? `&moduleSlug=${encodeURIComponent(moduleSlug)}` : ""}`,
+    ),
+    enabled: !!lessonIdentifier,
   });
 
   // Mark progress
@@ -169,10 +190,13 @@ export default function TrainingLessonPage() {
         body: JSON.stringify({ completed }),
       }),
     onSuccess: (_savedProgress, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/training/courses", courseId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/training/courses", courseIdentifier] });
       queryClient.invalidateQueries({ queryKey: ["/api/training/courses"] });
       if (variables.completed && nextLesson) {
-        setLocation(`/training/${courseId}/lessons/${nextLesson.id}`);
+        const nextModule = courseData?.modules.find((module) =>
+          module.lessons.some((candidate) => candidate.id === nextLesson.id),
+        );
+        if (courseData && nextModule) setLocation(trainingLessonPath(courseData.course, nextModule, nextLesson));
       }
     },
   });
@@ -191,11 +215,13 @@ export default function TrainingLessonPage() {
 
   // Flatten lessons in the nested outline order for prev/next navigation.
   const allLessons: CourseLesson[] = flattenCourseModuleTree(moduleTree).flatMap((module) => module.lessons);
-  const currentIndex = allLessons.findIndex((l) => l.id === lessonId);
+  const currentIndex = allLessons.findIndex((candidate) => candidate.id === lesson?.id || candidate.slug === lessonIdentifier);
   const prevLesson = currentIndex > 0 ? allLessons[currentIndex - 1] : null;
   const nextLesson = currentIndex < allLessons.length - 1 ? allLessons[currentIndex + 1] : null;
   const currentLesson = allLessons[currentIndex];
   const isCompleted = currentLesson?.completed ?? false;
+  const moduleForLesson = (candidate: CourseLesson | null | undefined) =>
+    courseData?.modules.find((module) => module.lessons.some((lesson) => lesson.id === candidate?.id));
 
   // Progress stats
   const completedCount = allLessons.filter((l) => l.completed).length;
@@ -261,7 +287,7 @@ export default function TrainingLessonPage() {
     setVideoCurrentTime(0);
     lastScrolledWordRef.current = null;
     setMobileNavOpen(false);
-  }, [lessonId]);
+  }, [lessonIdentifier]);
 
   useEffect(() => {
     const iframe = vimeoPlayerRef.current;
@@ -286,8 +312,18 @@ export default function TrainingLessonPage() {
 
   // Find current module for breadcrumb
   const currentModule = courseData?.modules.find((m) =>
-    m.lessons.some((l) => l.id === lessonId)
+    m.lessons.some((l) => l.id === lesson?.id || l.slug === lessonIdentifier)
   );
+
+  // Preserve old bookmarked ID links, but immediately replace them with the
+  // human-readable course/module/lesson URL once the structure is resolved.
+  useEffect(() => {
+    if (!courseData || !lesson || !currentModule) return;
+    const canonicalPath = trainingLessonPath(courseData.course, currentModule, lesson);
+    if (window.location.pathname !== canonicalPath) {
+      setLocation(canonicalPath, { replace: true });
+    }
+  }, [courseData, currentModule, lesson, setLocation]);
 
   const renderModuleNavigation = (
     module: CourseModuleTree<CourseModule>,
@@ -302,7 +338,9 @@ export default function TrainingLessonPage() {
     ];
     const moduleLessons = getModuleLessons(module);
     const isModuleComplete = moduleLessons.length > 0 && moduleLessons.every((lesson) => lesson.completed);
-    const isCurrentModule = moduleLessons.some((lesson) => lesson.id === lessonId);
+    const isCurrentModule = moduleLessons.some(
+      (lesson) => lesson.id === currentLesson?.id || lesson.slug === lessonIdentifier,
+    );
     const toggleModule = () => setExpandedCourseModules((current) => {
       const next = new Set(current);
       if (next.has(module.id)) next.delete(module.id);
@@ -373,11 +411,11 @@ export default function TrainingLessonPage() {
         </div>
 
         {isModuleExpanded && module.lessons.map((lesson) => {
-        const isActive = lesson.id === lessonId;
+        const isActive = lesson.id === currentLesson?.id || lesson.slug === lessonIdentifier;
         const lessonButton = (
           <button
             key={lesson.id}
-            onClick={() => setLocation(`/training/${courseId}/lessons/${lesson.id}`)}
+            onClick={() => courseData && setLocation(trainingLessonPath(courseData.course, module, lesson))}
             className={cn(
               "flex items-start gap-2 w-full px-2 py-1.5 rounded-md text-left transition-colors",
               collapsed && "justify-center px-1",
@@ -473,7 +511,7 @@ export default function TrainingLessonPage() {
         >
           <button
             className={cn("flex w-full items-start gap-2 pr-7 text-left group", courseNavCollapsed && "justify-center px-0")}
-            onClick={() => setLocation(`/training/${courseId}`)}
+            onClick={() => courseData && setLocation(trainingCoursePath(courseData.course))}
             title={courseNavCollapsed ? (courseData?.course.title ?? "Course") : undefined}
           >
             {!courseNavCollapsed && (
@@ -553,7 +591,7 @@ export default function TrainingLessonPage() {
             <button
               className="font-medium hover:underline"
               style={{ color: "#d97706" }}
-              onClick={() => setLocation(`/training/${courseId}`)}
+              onClick={() => courseData && setLocation(trainingCoursePath(courseData.course))}
             >
               {courseData?.course.title}
             </button>
@@ -805,8 +843,8 @@ export default function TrainingLessonPage() {
             {/* Mark complete button */}
             <div className="flex justify-center mb-6">
               <button
-                onClick={() => progressMutation.mutate({ id: lessonId, completed: !isCompleted })}
-                disabled={progressMutation.isPending}
+                onClick={() => lesson && progressMutation.mutate({ id: lesson.id, completed: !isCompleted })}
+                disabled={progressMutation.isPending || !lesson}
                 className="flex items-center gap-2 px-5 py-2 rounded-lg text-[13px] font-semibold transition-colors"
                 style={
                   isCompleted
@@ -829,7 +867,12 @@ export default function TrainingLessonPage() {
             >
               {prevLesson ? (
                 <button
-                  onClick={() => setLocation(`/training/${courseId}/lessons/${prevLesson.id}`)}
+                  onClick={() => {
+                    const previousModule = moduleForLesson(prevLesson);
+                    if (courseData && previousModule) {
+                      setLocation(trainingLessonPath(courseData.course, previousModule, prevLesson));
+                    }
+                  }}
                   className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-[13px] font-medium transition-colors flex-1 justify-start"
                   style={{ background: "#fff", border: "1px solid #e5e7eb", color: "#4b5563", boxShadow: "0 1px 2px rgba(0,0,0,0.04)" }}
                   onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#d1d5db"; e.currentTarget.style.color = "#111827"; }}
@@ -846,10 +889,13 @@ export default function TrainingLessonPage() {
                 <button
                   onClick={() => {
                     // Auto-mark current as complete when going next
-                    if (!isCompleted) {
-                      progressMutation.mutate({ id: lessonId, completed: true });
+                    if (!isCompleted && lesson) {
+                      progressMutation.mutate({ id: lesson.id, completed: true });
                     }
-                    setLocation(`/training/${courseId}/lessons/${nextLesson.id}`);
+                    const followingModule = moduleForLesson(nextLesson);
+                    if (courseData && followingModule) {
+                      setLocation(trainingLessonPath(courseData.course, followingModule, nextLesson));
+                    }
                   }}
                   className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-[13px] font-bold text-white transition-colors flex-1 justify-end"
                   style={{ background: "#da0010", boxShadow: "0 1px 2px rgba(0,0,0,0.08)" }}
