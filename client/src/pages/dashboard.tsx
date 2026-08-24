@@ -186,7 +186,7 @@ function DashboardNextEventWidget({ timezone }: { timezone: string }) {
 
   return (
     <div
-      className="w-full max-w-xl rounded-2xl border border-teal-300/30 bg-gradient-to-br from-slate-950/80 via-indigo-950/80 to-teal-950/70 p-4 shadow-2xl shadow-black/20 sm:p-5 xl:max-w-[430px]"
+      className="w-full max-w-xl rounded-2xl border border-teal-300/30 bg-gradient-to-br from-slate-950/80 via-indigo-950/80 to-teal-950/70 p-4 shadow-2xl shadow-black/20 sm:p-5 xl:w-[560px] xl:max-w-[560px]"
       data-testid="widget-dashboard-next-training"
     >
       <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-teal-200">
