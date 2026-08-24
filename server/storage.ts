@@ -74,6 +74,21 @@ export function normalizeEmail(email: string | null | undefined): string | null 
   return email.trim().toLowerCase();
 }
 
+export type CfReconciliationEnrollment = {
+  contactId: string;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  active: boolean;
+};
+
+export type CfReconciliationChanges = {
+  accountsCreated: number;
+  accountsReactivated: number;
+  accountsRevoked: number;
+  unchanged: number;
+};
+
 type CourseNavigationModule = Pick<
   CourseModule,
   "id" | "courseId" | "parentModuleId" | "title" | "slug" | "status" | "sortOrder"
@@ -184,8 +199,14 @@ export interface IStorage {
   } | undefined>;
 
   // ClickFunnels
-  getCfEnrolledUsers(): Promise<{ enrolledCount: number; revokedCount: number }>;
+  getCfEnrolledUsers(): Promise<{
+    enrolledCount: number;
+    revokedCount: number;
+    gracePeriodCount: number;
+    neverEnrolledCount: number;
+  }>;
   getCfUsers(filter?: string): Promise<Array<Pick<User, 'id' | 'email' | 'displayName' | 'firstName' | 'lastName' | 'cfEnrolled' | 'cfEnrolledAt' | 'cfRevokedAt' | 'cfContactId' | 'cfRevokedGraceUntil'>>>;
+  applyCfReconciliation(enrollments: CfReconciliationEnrollment[], gracePeriodHours: number): Promise<CfReconciliationChanges>;
 
   /** Returns non-admin accounts whose grace period has expired but isDisabled is still false. */
   getUsersWithExpiredGracePeriod(): Promise<Array<Pick<User, 'id' | 'email' | 'firstName' | 'lastName'>>>;
@@ -214,6 +235,7 @@ export interface IStorage {
   createCfReconciliationRun(data?: Partial<InsertCfReconciliationRun>): Promise<CfReconciliationRun>;
   updateCfReconciliationRun(id: string, data: Partial<InsertCfReconciliationRun>): Promise<CfReconciliationRun | undefined>;
   getLatestCfReconciliationRun(): Promise<CfReconciliationRun | undefined>;
+  getLatestSuccessfulCfReconciliationRun(): Promise<CfReconciliationRun | undefined>;
 
   // Admin: Audit Log
   createAuditLog(log: InsertAdminAuditLog): Promise<AdminAuditLog>;
@@ -1140,19 +1162,71 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ClickFunnels
-  async getCfEnrolledUsers(): Promise<{ enrolledCount: number; revokedCount: number }> {
-    const [enrolledRow] = await db.select({ count: count() }).from(users).where(eq(users.cfEnrolled, true));
-    const [revokedRow] = await db.select({ count: count() }).from(users).where(
-      and(eq(users.cfEnrolled, false), sql`${users.cfRevokedAt} IS NOT NULL`)
-    );
+  async getCfEnrolledUsers(): Promise<{
+    enrolledCount: number;
+    revokedCount: number;
+    gracePeriodCount: number;
+    neverEnrolledCount: number;
+  }> {
+    const now = new Date();
+    const memberAccount = sql`COALESCE(${users.isAdmin}, false) = false`;
+    const [[enrolledRow], [graceRow], [revokedRow], [neverEnrolledRow]] = await Promise.all([
+      db.select({ count: count() }).from(users).where(and(memberAccount, eq(users.cfEnrolled, true))),
+      db.select({ count: count() }).from(users).where(and(
+        memberAccount,
+        eq(users.cfEnrolled, false),
+        sql`${users.cfRevokedAt} IS NOT NULL`,
+        sql`${users.cfRevokedGraceUntil} > ${now}`,
+      )),
+      db.select({ count: count() }).from(users).where(and(
+        memberAccount,
+        eq(users.cfEnrolled, false),
+        sql`${users.cfRevokedAt} IS NOT NULL`,
+        sql`(${users.cfRevokedGraceUntil} IS NULL OR ${users.cfRevokedGraceUntil} <= ${now})`,
+      )),
+      db.select({ count: count() }).from(users).where(and(
+        memberAccount,
+        sql`${users.cfEnrolledAt} IS NULL`,
+        sql`${users.cfRevokedAt} IS NULL`,
+      )),
+    ]);
     return {
       enrolledCount: Number(enrolledRow?.count || 0),
       revokedCount: Number(revokedRow?.count || 0),
+      gracePeriodCount: Number(graceRow?.count || 0),
+      neverEnrolledCount: Number(neverEnrolledRow?.count || 0),
     };
   }
 
   async getCfUsers(filter?: string): Promise<Array<Pick<User, 'id' | 'email' | 'displayName' | 'firstName' | 'lastName' | 'cfEnrolled' | 'cfEnrolledAt' | 'cfRevokedAt' | 'cfContactId' | 'cfRevokedGraceUntil'>>> {
-    let query = db.select({
+    const now = new Date();
+    const memberAccount = sql`COALESCE(${users.isAdmin}, false) = false`;
+    let condition = memberAccount;
+    if (filter === 'enrolled') {
+      condition = and(condition, eq(users.cfEnrolled, true))!;
+    } else if (filter === 'grace') {
+      condition = and(
+        condition,
+        eq(users.cfEnrolled, false),
+        sql`${users.cfRevokedAt} IS NOT NULL`,
+        sql`${users.cfRevokedGraceUntil} > ${now}`,
+      )!;
+    } else if (filter === 'revoked') {
+      condition = and(
+        condition,
+        eq(users.cfEnrolled, false),
+        sql`${users.cfRevokedAt} IS NOT NULL`,
+        sql`(${users.cfRevokedGraceUntil} IS NULL OR ${users.cfRevokedGraceUntil} <= ${now})`,
+      )!;
+    } else if (filter === 'never') {
+      condition = and(
+        condition,
+        sql`${users.cfEnrolledAt} IS NULL`,
+        sql`${users.cfRevokedAt} IS NULL`,
+      )!;
+    }
+
+    return db.select({
       id: users.id,
       email: users.email,
       displayName: users.displayName,
@@ -1163,17 +1237,114 @@ export class DatabaseStorage implements IStorage {
       cfRevokedAt: users.cfRevokedAt,
       cfContactId: users.cfContactId,
       cfRevokedGraceUntil: users.cfRevokedGraceUntil,
-    }).from(users).$dynamic();
+    }).from(users).where(condition).orderBy(desc(users.cfEnrolledAt), desc(users.createdAt));
+  }
 
-    if (filter === 'enrolled') {
-      query = query.where(eq(users.cfEnrolled, true));
-    } else if (filter === 'revoked') {
-      query = query.where(and(eq(users.cfEnrolled, false), sql`${users.cfRevokedAt} IS NOT NULL`));
-    } else if (filter === 'never') {
-      query = query.where(sql`${users.cfEnrolledAt} IS NULL`);
-    }
+  async applyCfReconciliation(
+    enrollments: CfReconciliationEnrollment[],
+    gracePeriodHours: number,
+  ): Promise<CfReconciliationChanges> {
+    return db.transaction(async (tx) => {
+      const localUsers = await tx.select().from(users);
+      const activeByEmail = new Map<string, CfReconciliationEnrollment>();
+      const activeByContactId = new Map<string, CfReconciliationEnrollment>();
 
-    return query.orderBy(desc(users.cfEnrolledAt));
+      for (const enrollment of enrollments) {
+        if (!enrollment.active) continue;
+        const email = normalizeEmail(enrollment.email);
+        if (!email) continue;
+        activeByEmail.set(email, enrollment);
+        activeByContactId.set(enrollment.contactId, enrollment);
+      }
+
+      const localByEmail = new Map(
+        localUsers
+          .map((user) => [normalizeEmail(user.email), user] as const)
+          .filter((entry): entry is readonly [string, User] => Boolean(entry[0])),
+      );
+      const now = new Date();
+      const graceUntil = new Date(now.getTime() + gracePeriodHours * 60 * 60 * 1000);
+      const changes: CfReconciliationChanges = {
+        accountsCreated: 0,
+        accountsReactivated: 0,
+        accountsRevoked: 0,
+        unchanged: 0,
+      };
+
+      // Active ClickFunnels enrollments are the only records that can create a
+      // Toolkit account. This ensures dormant historical enrollments do not add
+      // people to the local directory unnecessarily.
+      for (const enrollment of activeByEmail.values()) {
+        const email = normalizeEmail(enrollment.email)!;
+        const existing = localByEmail.get(email);
+        if (!existing) {
+          const firstName = enrollment.firstName || "";
+          const lastName = enrollment.lastName || "";
+          await tx.insert(users).values({
+            email,
+            displayName: [firstName, lastName].filter(Boolean).join(" ") || email.split("@")[0],
+            firstName,
+            lastName,
+            cfEnrolled: true,
+            cfContactId: enrollment.contactId,
+            cfEnrolledAt: now,
+            cfRevokedAt: null,
+            cfRevokedGraceUntil: null,
+            cfGraceExpirySentAt: null,
+            isDisabled: false,
+          });
+          changes.accountsCreated++;
+          continue;
+        }
+
+        // Administrators are never changed by a membership sync. Their account
+        // access is intentionally independent of ClickFunnels membership.
+        if (existing.isAdmin) {
+          changes.unchanged++;
+          continue;
+        }
+
+        const needsAccessRestore = !existing.cfEnrolled || existing.isDisabled || !!existing.cfRevokedAt;
+        const needsUpdate = needsAccessRestore || existing.cfContactId !== enrollment.contactId;
+        if (!needsUpdate) {
+          changes.unchanged++;
+          continue;
+        }
+
+        await tx.update(users).set({
+          cfEnrolled: true,
+          cfContactId: enrollment.contactId,
+          cfEnrolledAt: existing.cfEnrolledAt ?? now,
+          cfRevokedAt: null,
+          cfRevokedGraceUntil: null,
+          cfGraceExpirySentAt: null,
+          isDisabled: false,
+        }).where(eq(users.id, existing.id));
+        if (needsAccessRestore) changes.accountsReactivated++;
+      }
+
+      // A local member is revoked only if this full scan confirms that a
+      // previously-active member has no current active enrollment. Because this
+      // work runs inside the same transaction, a failed update cannot leave a
+      // partially reconciled directory behind.
+      for (const localUser of localUsers) {
+        if (localUser.isAdmin || localUser.cfEnrolled !== true) continue;
+        const activeEnrollment =
+          (localUser.cfContactId ? activeByContactId.get(localUser.cfContactId) : undefined) ||
+          (normalizeEmail(localUser.email) ? activeByEmail.get(normalizeEmail(localUser.email)!) : undefined);
+        if (activeEnrollment) continue;
+
+        await tx.update(users).set({
+          cfEnrolled: false,
+          cfRevokedAt: now,
+          cfRevokedGraceUntil: graceUntil,
+          cfGraceExpirySentAt: null,
+        }).where(eq(users.id, localUser.id));
+        changes.accountsRevoked++;
+      }
+
+      return changes;
+    });
   }
 
   async createCfWebhookActivity(data: InsertCfWebhookActivity): Promise<CfWebhookActivity> {
@@ -1233,6 +1404,15 @@ export class DatabaseStorage implements IStorage {
 
   async getLatestCfReconciliationRun(): Promise<CfReconciliationRun | undefined> {
     const [row] = await db.select().from(cfReconciliationRuns).orderBy(desc(cfReconciliationRuns.startedAt)).limit(1);
+    return row;
+  }
+
+  async getLatestSuccessfulCfReconciliationRun(): Promise<CfReconciliationRun | undefined> {
+    const [row] = await db.select()
+      .from(cfReconciliationRuns)
+      .where(eq(cfReconciliationRuns.status, "completed"))
+      .orderBy(desc(cfReconciliationRuns.completedAt), desc(cfReconciliationRuns.startedAt))
+      .limit(1);
     return row;
   }
 

@@ -16,6 +16,7 @@ import { CourseImportCard } from "@/components/cf-course-import";
 
 interface CfStatus {
   allConfigured: boolean;
+  reconciliationConfigured: boolean;
   configured: {
     apiToken: boolean;
     workspaceDomain: boolean;
@@ -24,15 +25,40 @@ interface CfStatus {
   };
   enrolledCount: number;
   revokedCount: number;
+  gracePeriodCount: number;
+  neverEnrolledCount: number;
   workspaceDomain: string | null;
   courseId: string | null;
+  latestReconciliation: CfReconciliationRun | null;
+  latestSuccessfulReconciliation: CfReconciliationRun | null;
 }
 
 interface CfUser {
   id: string;
-  email: string;
+  email: string | null;
   displayName: string | null;
-  cfEnrolled: boolean;
+  firstName: string | null;
+  lastName: string | null;
+  cfEnrolled: boolean | null;
+  cfEnrolledAt: string | null;
+  cfRevokedAt: string | null;
+  cfContactId: string | null;
+  cfRevokedGraceUntil: string | null;
+}
+
+interface CfReconciliationRun {
+  id: string;
+  status: "running" | "completed" | "failed";
+  totalFetched: number;
+  activeFetched: number;
+  inactiveFetched: number;
+  accountsCreated: number;
+  accountsReactivated: number;
+  accountsRevoked: number;
+  unchanged: number;
+  startedAt: string;
+  completedAt: string | null;
+  error: string | null;
 }
 
 interface CfWebhookActivity {
@@ -59,47 +85,239 @@ interface CfWebhookActivityResponse {
   failedCount: number;
 }
 
-// ─── ImportAllMembersButton ───────────────────────────────────────────────────
+const formatDateTime = (value: string | null | undefined) =>
+  value
+    ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value))
+    : "Never";
 
-function ImportAllMembersButton() {
+type MemberFilter = "all" | "enrolled" | "grace" | "revoked" | "never";
+
+function getMemberState(member: CfUser): Exclude<MemberFilter, "all"> {
+  if (member.cfEnrolled) return "enrolled";
+  if (member.cfRevokedAt && member.cfRevokedGraceUntil && new Date(member.cfRevokedGraceUntil) > new Date()) return "grace";
+  if (member.cfRevokedAt) return "revoked";
+  return "never";
+}
+
+function memberStateLabel(state: Exclude<MemberFilter, "all">) {
+  return {
+    enrolled: "Active",
+    grace: "Grace period",
+    revoked: "Revoked",
+    never: "Never enrolled",
+  }[state];
+}
+
+function memberStateClass(state: Exclude<MemberFilter, "all">) {
+  return {
+    enrolled: "border-emerald-300 text-emerald-700 dark:border-emerald-800 dark:text-emerald-300",
+    grace: "border-amber-300 text-amber-700 dark:border-amber-800 dark:text-amber-300",
+    revoked: "border-rose-300 text-rose-700 dark:border-rose-800 dark:text-rose-300",
+    never: "border-slate-300 text-slate-700 dark:border-slate-700 dark:text-slate-300",
+  }[state];
+}
+
+function MembershipOverviewTab() {
   const { toast } = useToast();
-  const [running, setRunning] = useState(false);
-  const [result, setResult] = useState<{ message: string; created: number; contactIdUpdated: number; skipped: number; inactive: number; errors: number } | null>(null);
+  const { data: status, isLoading, isFetching, refetch } = useQuery<CfStatus>({
+    queryKey: ["/api/admin/cf/status"],
+  });
+  const reconcile = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/admin/cf/reconcile");
+      return response.json() as Promise<{ message: string }>;
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/cf/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/cf/users?filter=all"] });
+      toast({ title: "Membership reconciled", description: result.message });
+    },
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/cf/status"] });
+      toast({
+        title: "Reconciliation could not finish",
+        description: "No membership changes were applied. Check that ClickFunnels is available, then try again.",
+        variant: "destructive",
+      });
+    },
+  });
 
-  const handleImport = async () => {
-    setRunning(true);
-    setResult(null);
-    try {
-      const res = await fetch("/api/admin/cf/import-all-members", { method: "POST", credentials: "include" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Import failed");
-      setResult(data);
-      toast({ title: "Import complete", description: data.message });
-    } catch (err: any) {
-      toast({ title: "Import failed", description: err.message, variant: "destructive" });
-    } finally {
-      setRunning(false);
-    }
-  };
+  const latest = status?.latestReconciliation;
+  const latestSuccessful = status?.latestSuccessfulReconciliation;
+  const metrics = [
+    { label: "Active", value: status?.enrolledCount ?? 0, detail: "Current course access", color: "from-emerald-500 to-teal-400", icon: <UserCheck className="h-4 w-4 text-emerald-500" /> },
+    { label: "In grace period", value: status?.gracePeriodCount ?? 0, detail: "Access still active temporarily", color: "from-amber-500 to-orange-400", icon: <Clock className="h-4 w-4 text-amber-500" /> },
+    { label: "Revoked", value: status?.revokedCount ?? 0, detail: "No current course access", color: "from-rose-500 to-red-400", icon: <UserX className="h-4 w-4 text-rose-500" /> },
+    { label: "Never enrolled", value: status?.neverEnrolledCount ?? 0, detail: "Local accounts without CF history", color: "from-slate-500 to-slate-400", icon: <Users className="h-4 w-4 text-slate-500" /> },
+  ];
 
   return (
-    <div className="space-y-2">
-      <Button variant="outline" size="sm" onClick={handleImport} disabled={running} data-testid="button-import-all-members">
-        {running ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> : <Users className="h-3.5 w-3.5 mr-2" />}
-        {running ? "Importing… (this may take a minute)" : "Import All Members from ClickFunnels"}
-      </Button>
-      {result && (
-        <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs space-y-1">
-          <p className="font-medium">{result.message}</p>
-          <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-muted-foreground">
-            {result.created > 0 && <span className="text-green-700 dark:text-green-400">✓ {result.created} new accounts created</span>}
-            {result.contactIdUpdated > 0 && <span className="text-blue-700 dark:text-blue-400">✓ {result.contactIdUpdated} contact IDs updated</span>}
-            {result.skipped > 0 && <span>{result.skipped} already up-to-date</span>}
-            {result.inactive > 0 && <span>{result.inactive} inactive/revoked skipped</span>}
-            {result.errors > 0 && <span className="text-destructive">{result.errors} errors</span>}
-          </div>
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold">Academy Membership</h2>
+          <p className="mt-1 text-sm text-muted-foreground">ClickFunnels is the source of truth for Academy access. Webhooks keep it current; reconciliation safely catches anything missed.</p>
         </div>
-      )}
+        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+          <RotateCw className={`mr-2 h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+          Refresh
+        </Button>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {metrics.map((metric) => (
+          <Card key={metric.label} className="overflow-hidden">
+            <div className={`h-1 bg-gradient-to-r ${metric.color}`} />
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 pt-4">
+              <CardTitle className="text-sm font-medium text-muted-foreground">{metric.label}</CardTitle>
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted/60">{metric.icon}</div>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /> : <p className="text-2xl font-bold">{metric.value}</p>}
+              <p className="mt-1 text-xs text-muted-foreground">{metric.detail}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card className="overflow-hidden">
+        <div className="h-1 bg-gradient-to-r from-indigo-500 to-violet-400" />
+        <CardHeader className="pt-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <RotateCw className="h-4 w-4 text-indigo-500" />
+                Full Membership Reconciliation
+              </CardTitle>
+              <CardDescription className="mt-1">
+                Scans the entire configured ClickFunnels course before changing any account. If the scan fails, no member access is changed.
+              </CardDescription>
+            </div>
+            <Button
+              onClick={() => reconcile.mutate()}
+              disabled={reconcile.isPending || !status?.reconciliationConfigured}
+              data-testid="button-reconcile-cf-membership"
+            >
+              {reconcile.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCw className="mr-2 h-4 w-4" />}
+              {reconcile.isPending ? "Reconciling…" : "Reconcile now"}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {!status?.reconciliationConfigured ? (
+            <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+              Add the ClickFunnels API token, workspace domain, and course ID before running reconciliation.
+            </p>
+          ) : latest ? (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className={latest.status === "completed" ? "border-emerald-300 text-emerald-700 dark:border-emerald-800 dark:text-emerald-300" : latest.status === "failed" ? "border-rose-300 text-rose-700 dark:border-rose-800 dark:text-rose-300" : "border-amber-300 text-amber-700"}>
+                  {latest.status === "completed" ? "Last run completed" : latest.status === "failed" ? "Last run failed" : "Reconciliation in progress"}
+                </Badge>
+                <span className="text-sm text-muted-foreground">{latest.completedAt ? `Finished ${formatDateTime(latest.completedAt)}` : `Started ${formatDateTime(latest.startedAt)}`}</span>
+              </div>
+              {latest.status === "completed" ? (
+                <div className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-md bg-muted/50 px-3 py-2"><span className="text-muted-foreground">Scanned</span><p className="font-semibold">{latest.totalFetched} ClickFunnels records</p></div>
+                  <div className="rounded-md bg-muted/50 px-3 py-2"><span className="text-muted-foreground">Created</span><p className="font-semibold">{latest.accountsCreated} local accounts</p></div>
+                  <div className="rounded-md bg-muted/50 px-3 py-2"><span className="text-muted-foreground">Restored</span><p className="font-semibold">{latest.accountsReactivated} members</p></div>
+                  <div className="rounded-md bg-muted/50 px-3 py-2"><span className="text-muted-foreground">Grace period</span><p className="font-semibold">{latest.accountsRevoked} members</p></div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800 dark:border-rose-950 dark:bg-rose-950/30 dark:text-rose-200">
+                    {latest.error || "The last scan did not complete. No membership changes were applied."}
+                  </p>
+                  {latestSuccessful && (
+                    <p className="text-sm text-muted-foreground">Last successful reconciliation: {formatDateTime(latestSuccessful.completedAt || latestSuccessful.startedAt)}.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No full reconciliation has been run yet. Webhooks can still be syncing memberships in real time.</p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function MembersTab() {
+  const [filter, setFilter] = useState<MemberFilter>("all");
+  const [search, setSearch] = useState("");
+  const { data, isLoading } = useQuery<{ users: CfUser[] }>({
+    queryKey: ["/api/admin/cf/users?filter=all"],
+  });
+  const members = (data?.users ?? []).filter((member) => {
+    const state = getMemberState(member);
+    const needle = search.trim().toLowerCase();
+    const matchesSearch = !needle || [member.displayName, member.firstName, member.lastName, member.email].some((value) => value?.toLowerCase().includes(needle));
+    return matchesSearch && (filter === "all" || state === filter);
+  });
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-xl font-semibold">ClickFunnels Members</h2>
+        <p className="mt-1 text-sm text-muted-foreground">A local membership directory with ClickFunnels access states. General account settings remain in Admin Users.</p>
+      </div>
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <CardTitle className="text-base">Member directory</CardTitle>
+              <CardDescription>{members.length} matching local member{members.length === 1 ? "" : "s"}</CardDescription>
+            </div>
+            <div className="relative w-full lg:w-72">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name or email" className="w-full rounded-md border bg-background py-2 pl-9 pr-3 text-sm" data-testid="input-cf-member-search" />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            {([
+              ["all", "All"],
+              ["enrolled", "Active"],
+              ["grace", "Grace period"],
+              ["revoked", "Revoked"],
+              ["never", "Never enrolled"],
+            ] as Array<[MemberFilter, string]>).map(([value, label]) => (
+              <Button key={value} size="sm" variant={filter === value ? "default" : "outline"} onClick={() => setFilter(value)} data-testid={`button-cf-member-filter-${value}`}>
+                {label}
+              </Button>
+            ))}
+          </div>
+          {isLoading ? (
+            <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+          ) : members.length ? (
+            <div className="overflow-x-auto rounded-md border">
+              <table className="w-full min-w-[680px] text-sm">
+                <thead className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
+                  <tr><th className="px-4 py-3 font-medium">Member</th><th className="px-4 py-3 font-medium">Access</th><th className="px-4 py-3 font-medium">Membership activity</th><th className="px-4 py-3 font-medium">Grace period</th></tr>
+                </thead>
+                <tbody className="divide-y">
+                  {members.map((member) => {
+                    const state = getMemberState(member);
+                    const name = member.displayName || [member.firstName, member.lastName].filter(Boolean).join(" ") || member.email || "Unnamed account";
+                    return (
+                      <tr key={member.id}>
+                        <td className="px-4 py-3"><p className="font-medium">{name}</p><p className="mt-0.5 text-xs text-muted-foreground">{member.email || "No email address"}</p></td>
+                        <td className="px-4 py-3"><Badge variant="outline" className={memberStateClass(state)}>{memberStateLabel(state)}</Badge></td>
+                        <td className="px-4 py-3 text-muted-foreground">{state === "enrolled" ? `Active since ${formatDateTime(member.cfEnrolledAt)}` : member.cfRevokedAt ? `Revoked ${formatDateTime(member.cfRevokedAt)}` : "No ClickFunnels enrollment recorded"}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{state === "grace" ? `Until ${formatDateTime(member.cfRevokedGraceUntil)}` : "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="rounded-md border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">No members match this search and access state.</div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -415,12 +633,6 @@ function CfIntegrationSection() {
     queryKey: ["/api/admin/cf/status"],
   });
 
-  const [memberFilter, setMemberFilter] = useState<"enrolled" | "revoked" | "never">("enrolled");
-  const { data: cfUsersData, isLoading: cfUsersLoading } = useQuery<{ users: CfUser[] }>({
-    queryKey: [`/api/admin/cf/users?filter=${memberFilter}`],
-  });
-  const cfUsers = cfUsersData?.users ?? [];
-
   const handleCopy = (text: string, label: string) => {
     navigator.clipboard.writeText(text).then(() => {
       toast({ title: `${label} copied!` });
@@ -592,24 +804,12 @@ function CfIntegrationSection() {
 
       </div>
 
-      <div className="grid grid-cols-1 gap-4">
-        {/* Bulk Member Sync */}
-        <Card className="overflow-hidden">
-          <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-400" />
-          <CardHeader className="pt-4 pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Users className="h-4 w-4 text-emerald-500" />
-              Bulk Member Sync
-            </CardTitle>
-            <CardDescription>
-              Pull every active CF enrollee into the Users tab at once — including members who haven't clicked the login link yet. Safe to run anytime; existing accounts are not overwritten.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ImportAllMembersButton />
-          </CardContent>
-        </Card>
-      </div>
+      <Card className="border-dashed">
+        <CardContent className="flex items-start gap-3 py-4 text-sm text-muted-foreground">
+          <Users className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+          <p><span className="font-medium text-foreground">Membership reconciliation is now managed from the Overview tab.</span> It handles initial account creation, restored access, and revocations from one complete ClickFunnels scan.</p>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -619,12 +819,20 @@ function CfIntegrationSection() {
 export default function ClickFunnelsAdminPage() {
   return (
     <div className="container mx-auto py-8 px-4 max-w-5xl space-y-6">
-      <Tabs defaultValue="integration">
-        <TabsList>
+      <Tabs defaultValue="overview">
+        <TabsList className="h-auto flex-wrap">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="members">Members</TabsTrigger>
           <TabsTrigger value="integration">Integration</TabsTrigger>
           <TabsTrigger value="webhook-activity">Webhook Activity</TabsTrigger>
           <TabsTrigger value="course-import">Course Import</TabsTrigger>
         </TabsList>
+        <TabsContent value="overview" className="mt-4">
+          <MembershipOverviewTab />
+        </TabsContent>
+        <TabsContent value="members" className="mt-4">
+          <MembersTab />
+        </TabsContent>
         <TabsContent value="integration" className="mt-4 space-y-6">
           <CfIntegrationSection />
           <GracePeriodCard />

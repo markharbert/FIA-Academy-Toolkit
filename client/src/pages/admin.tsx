@@ -294,6 +294,8 @@ interface CfStatus {
   courseId: string;
   enrolledCount: number;
   revokedCount: number;
+  gracePeriodCount: number;
+  neverEnrolledCount: number;
 }
 
 interface CfUser {
@@ -2819,7 +2821,6 @@ export default function AdminPage() {
   const [roleFilter, setRoleFilter] = useState("all");
   const [providerFilter, setProviderFilter] = useState("all");
   const [consentFilter, setConsentFilter] = useState("all");
-  const [membershipFilter, setMembershipFilter] = useState("all");
   const [loginFilter, setLoginFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
   
@@ -3061,7 +3062,6 @@ export default function AdminPage() {
       if (roleFilter !== "all") params.set("role", roleFilter);
       if (providerFilter !== "all") params.set("provider", providerFilter);
       if (consentFilter !== "all") params.set("consent", consentFilter);
-      if (membershipFilter !== "all") params.set("membership", membershipFilter);
       if (loginFilter !== "all") params.set("login", loginFilter);
       
       const res = await fetch(`/api/admin/users?${params}`, { credentials: "include" });
@@ -3075,7 +3075,7 @@ export default function AdminPage() {
     } finally {
       setUsersLoading(false);
     }
-  }, [currentPage, pageSize, searchQuery, roleFilter, providerFilter, consentFilter, membershipFilter, loginFilter, sortBy]);
+  }, [currentPage, pageSize, searchQuery, roleFilter, providerFilter, consentFilter, loginFilter, sortBy]);
 
   useEffect(() => {
     if (user?.isAdmin) {
@@ -3180,35 +3180,6 @@ export default function AdminPage() {
         description: "Failed to update user role",
         variant: "destructive",
       });
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleToggleCfAccess = async (userId: string, grant: boolean) => {
-    try {
-      setActionLoading(`cf-${userId}`);
-      const res = await fetch(`/api/admin/users/${userId}/cf-access`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ grant }),
-        credentials: "include",
-      });
-      if (res.ok) {
-        toast({
-          title: grant ? "CF Access Granted" : "CF Access Revoked",
-          description: grant
-            ? "User now has ClickFunnels enrollment access."
-            : "ClickFunnels access has been revoked.",
-        });
-        fetchUsers();
-        if (selectedUserId === userId) fetchUserDetails(userId);
-      } else {
-        const error = await res.json();
-        toast({ title: "Error", description: error.message, variant: "destructive" });
-      }
-    } catch {
-      toast({ title: "Error", description: "Failed to update CF access", variant: "destructive" });
     } finally {
       setActionLoading(null);
     }
@@ -3469,13 +3440,13 @@ export default function AdminPage() {
 
           {/* Integration health strip */}
           <div className="grid gap-4 md:grid-cols-2">
-            <Card data-testid="health-clickfunnels" className="overflow-hidden">
+            <Card data-testid="academy-membership-summary" className="overflow-hidden">
               <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-400" />
               <CardHeader className="pb-3 pt-4">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Webhook className="h-4 w-4 text-emerald-500" />
-                    ClickFunnels
+                    Academy Membership
                   </CardTitle>
                   {cfStatusLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -3490,23 +3461,23 @@ export default function AdminPage() {
                   )}
                 </div>
               </CardHeader>
-              <CardContent className="space-y-1 text-sm">
+              <CardContent className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Enrolled members</span>
+                  <span className="text-muted-foreground">Active members</span>
                   <span className="font-medium">{cfStatus?.enrolledCount ?? "—"}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Revoked / cancelled</span>
-                  <span className="font-medium">{cfStatus?.revokedCount ?? "—"}</span>
+                  <span className="text-muted-foreground">In grace period</span>
+                  <span className="font-medium">{cfStatus?.gracePeriodCount ?? "—"}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Secrets configured</span>
-                  <span className="font-medium">
-                    {cfStatus
-                      ? `${Object.values(cfStatus.configured).filter(Boolean).length}/4`
-                      : "—"}
-                  </span>
+                  <span className="text-muted-foreground">Revoked</span>
+                  <span className="font-medium">{cfStatus?.revokedCount ?? "—"}</span>
                 </div>
+                <Button variant="outline" size="sm" className="mt-2 w-full" onClick={() => setLocation("/admin/clickfunnels")} data-testid="button-open-academy-membership">
+                  Manage ClickFunnels membership
+                  <ChevronRight className="ml-1 h-3.5 w-3.5" />
+                </Button>
               </CardContent>
             </Card>
 
@@ -3697,7 +3668,7 @@ export default function AdminPage() {
                 <Users className="h-4 w-4 text-sky-500" />
                 User Management
               </CardTitle>
-              <CardDescription>All enrolled CF members plus any manually registered users. Includes members who haven't logged in yet.</CardDescription>
+              <CardDescription>Manage Toolkit accounts, roles, and sign-in access. Academy membership is managed from ClickFunnels.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-wrap gap-3">
@@ -3722,17 +3693,6 @@ export default function AdminPage() {
                     <SelectItem value="all">All Roles</SelectItem>
                     <SelectItem value="admin">Admin</SelectItem>
                     <SelectItem value="user">User</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={membershipFilter} onValueChange={(v) => { setMembershipFilter(v); setCurrentPage(1); }}>
-                  <SelectTrigger className="w-[150px]" data-testid="select-membership-filter">
-                    <SelectValue placeholder="Membership" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Memberships</SelectItem>
-                    <SelectItem value="enrolled">Enrolled</SelectItem>
-                    <SelectItem value="revoked">Revoked</SelectItem>
-                    <SelectItem value="never">Never enrolled</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={loginFilter} onValueChange={(v) => { setLoginFilter(v); setCurrentPage(1); }}>
@@ -3770,7 +3730,6 @@ export default function AdminPage() {
                         <TableRow>
                           <TableHead>User</TableHead>
                           <TableHead>Role</TableHead>
-                          <TableHead>Membership</TableHead>
                           <TableHead className="text-center">KW Credits</TableHead>
                           <TableHead className="text-center">Projects</TableHead>
                           <TableHead className="text-center">DMO (30d)</TableHead>
@@ -3781,7 +3740,7 @@ export default function AdminPage() {
                       <TableBody>
                         {users.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                            <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                               No users found
                             </TableCell>
                           </TableRow>
@@ -3802,31 +3761,6 @@ export default function AdminPage() {
                                 ) : (
                                   <Badge variant="outline" className="bg-sky-50 text-sky-700 border-sky-300 dark:bg-sky-950 dark:text-sky-300 dark:border-sky-700">
                                     User
-                                  </Badge>
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                {u.cfEnrolled ? (
-                                  <Badge variant="outline" className="text-green-600 border-green-300 dark:text-green-400 gap-1" title={u.cfEnrolledAt ? `Enrolled ${format(new Date(u.cfEnrolledAt), "MMM d, yyyy")}` : undefined}>
-                                    <UserCheck className="h-3 w-3" />
-                                    Enrolled
-                                  </Badge>
-                                ) : u.cfRevokedAt ? (
-                                  u.cfRevokedGraceUntil && new Date(u.cfRevokedGraceUntil) > new Date() ? (
-                                    <Badge variant="outline" className="text-amber-600 border-amber-300 dark:text-amber-400 gap-1" title={`Revoked ${format(new Date(u.cfRevokedAt), "MMM d, yyyy")} — grace period until ${format(new Date(u.cfRevokedGraceUntil), "MMM d, yyyy h:mm a")}`}>
-                                      <UserX className="h-3 w-3" />
-                                      Grace Period
-                                    </Badge>
-                                  ) : (
-                                    <Badge variant="outline" className="text-red-600 border-red-300 dark:text-red-400 gap-1" title={`Revoked ${format(new Date(u.cfRevokedAt), "MMM d, yyyy")}`}>
-                                      <UserX className="h-3 w-3" />
-                                      Revoked
-                                    </Badge>
-                                  )
-                                ) : (
-                                  <Badge variant="outline" className="text-muted-foreground gap-1">
-                                    <UserMinus className="h-3 w-3" />
-                                    Never
                                   </Badge>
                                 )}
                               </TableCell>
@@ -3859,47 +3793,6 @@ export default function AdminPage() {
                               </TableCell>
                               <TableCell>
                                 <div className="flex items-center justify-end gap-1">
-                                  {u.cfEnrolled ? (
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      title="Revoke ClickFunnels access"
-                                      onClick={() => setConfirmDialog({
-                                        open: true,
-                                        title: "Revoke CF Access",
-                                        description: `Remove ClickFunnels access for ${u.email}?`,
-                                        action: () => handleToggleCfAccess(u.id, false),
-                                      })}
-                                      disabled={actionLoading === `cf-${u.id}`}
-                                      data-testid={`button-revoke-cf-${u.id}`}
-                                    >
-                                      {actionLoading === `cf-${u.id}` ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                      ) : (
-                                        <ShieldOff className="h-4 w-4 text-red-500" />
-                                      )}
-                                    </Button>
-                                  ) : (
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      title="Grant ClickFunnels access"
-                                      onClick={() => setConfirmDialog({
-                                        open: true,
-                                        title: "Grant CF Access",
-                                        description: `Grant ClickFunnels enrollment access to ${u.email}?`,
-                                        action: () => handleToggleCfAccess(u.id, true),
-                                      })}
-                                      disabled={actionLoading === `cf-${u.id}`}
-                                      data-testid={`button-grant-cf-${u.id}`}
-                                    >
-                                      {actionLoading === `cf-${u.id}` ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                      ) : (
-                                        <Shield className="h-4 w-4 text-green-600" />
-                                      )}
-                                    </Button>
-                                  )}
                                   <Button
                                     variant="ghost"
                                     size="icon"
@@ -4520,11 +4413,6 @@ export default function AdminPage() {
               .slice(0, 2)
               .map((s) => s[0]?.toUpperCase())
               .join("") || "?";
-            const membershipBadge = u.cfEnrolled
-              ? { label: "Enrolled", className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" }
-              : u.cfRevokedAt
-              ? { label: "Revoked", className: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30" }
-              : { label: "Never enrolled", className: "bg-muted text-muted-foreground border-muted-foreground/30" };
             return (
             <div className="mt-6 space-y-5">
               {/* HEADER CARD */}
@@ -4552,9 +4440,6 @@ export default function AdminPage() {
                       </div>
                     )}
                     <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                      <Badge variant="outline" className={cn("gap-1", membershipBadge.className)}>
-                        <UserCheck className="h-3 w-3" /> {membershipBadge.label}
-                      </Badge>
                       <Badge variant="outline" className="text-xs">
                         Joined {format(new Date(u.createdAt), "MMM yyyy")}
                       </Badge>
@@ -4617,35 +4502,17 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* MEMBERSHIP CARD */}
-              <div className="rounded-lg border p-4 space-y-2.5">
+              <div className="rounded-lg border border-dashed p-4">
                 <div className="flex items-center gap-2">
                   <UserCheck className="h-4 w-4 text-emerald-500" />
-                  <h3 className="font-semibold text-sm">ClickFunnels Membership</h3>
-                </div>
-                <div className="space-y-1.5 text-sm">
-                  <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">Status</span>
-                    <Badge variant="outline" className={cn(membershipBadge.className)}>{membershipBadge.label}</Badge>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-sm">Academy membership</h3>
+                    <p className="mt-0.5 text-sm text-muted-foreground">Review membership status and reconcile ClickFunnels from the dedicated membership workspace.</p>
                   </div>
-                  {u.cfEnrolledAt && (
-                    <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">Enrolled</span>
-                      <span>{format(new Date(u.cfEnrolledAt), "MMM d, yyyy h:mm a")}</span>
-                    </div>
-                  )}
-                  {u.cfRevokedAt && (
-                    <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">Revoked</span>
-                      <span>{format(new Date(u.cfRevokedAt), "MMM d, yyyy h:mm a")}</span>
-                    </div>
-                  )}
-                  {u.cfContactId && (
-                    <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">CF Contact ID</span>
-                      <span className="font-mono text-xs">{u.cfContactId}</span>
-                    </div>
-                  )}
+                  <Button variant="outline" size="sm" onClick={() => setLocation("/admin/clickfunnels")}>
+                    Open membership
+                    <ChevronRight className="ml-1 h-3.5 w-3.5" />
+                  </Button>
                 </div>
               </div>
 
@@ -4883,41 +4750,6 @@ export default function AdminPage() {
                       Disable Account
                     </Button>
                   )}
-                  
-                  {userDetails.user.cfEnrolled ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setConfirmDialog({
-                        open: true,
-                        title: "Revoke CF Access",
-                        description: "This will revoke the user's ClickFunnels enrollment access. They will still be able to log in but won't be counted as enrolled.",
-                        action: () => handleToggleCfAccess(userDetails.user.id, false),
-                      })}
-                      disabled={actionLoading?.startsWith("cf")}
-                      data-testid="button-revoke-cf-access"
-                    >
-                      <ShieldOff className="mr-2 h-4 w-4" />
-                      Revoke CF Access
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setConfirmDialog({
-                        open: true,
-                        title: "Grant CF Access",
-                        description: "Manually grant this user ClickFunnels enrollment access.",
-                        action: () => handleToggleCfAccess(userDetails.user.id, true),
-                      })}
-                      disabled={actionLoading?.startsWith("cf")}
-                      data-testid="button-grant-cf-access"
-                    >
-                      <Shield className="mr-2 h-4 w-4" />
-                      Grant CF Access
-                    </Button>
-                  )}
-
                   <Button
                     variant="outline"
                     size="sm"

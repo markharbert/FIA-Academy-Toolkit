@@ -1750,17 +1750,26 @@ export async function registerRoutes(
       const workspaceDomain = process.env.CF_WORKSPACE_DOMAIN || "";
       const courseId = process.env.CF_COURSE_ID || "";
       const allConfigured = Object.values(configured).every(Boolean);
+      const reconciliationConfigured = configured.apiToken && configured.workspaceDomain && configured.courseId;
 
-      // Get enrollment stats
-      const enrolledResult = await storage.getCfEnrolledUsers();
+      const [enrolledResult, latestReconciliation, latestSuccessfulReconciliation] = await Promise.all([
+        storage.getCfEnrolledUsers(),
+        storage.getLatestCfReconciliationRun(),
+        storage.getLatestSuccessfulCfReconciliationRun(),
+      ]);
 
       res.json({
         configured,
         allConfigured,
+        reconciliationConfigured,
         workspaceDomain,
         courseId,
         enrolledCount: enrolledResult.enrolledCount,
         revokedCount: enrolledResult.revokedCount,
+        gracePeriodCount: enrolledResult.gracePeriodCount,
+        neverEnrolledCount: enrolledResult.neverEnrolledCount,
+        latestReconciliation: latestReconciliation ?? null,
+        latestSuccessfulReconciliation: latestSuccessfulReconciliation ?? null,
       });
     } catch (err) {
       console.error("[CF Admin] Status error:", err);
@@ -1785,8 +1794,12 @@ export async function registerRoutes(
   // Admin: list users with CF enrollment info
   app.get("/api/admin/cf/users", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const { filter } = req.query;
-      const users = await storage.getCfUsers(filter as string);
+      const allowedFilters = new Set(["all", "enrolled", "grace", "revoked", "never"]);
+      const filter = String(req.query.filter || "all");
+      if (!allowedFilters.has(filter)) {
+        return res.status(400).json({ message: "Invalid member filter" });
+      }
+      const users = await storage.getCfUsers(filter);
       res.json({ users });
     } catch (err) {
       console.error("[CF Admin] Users error:", err);
@@ -1794,7 +1807,67 @@ export async function registerRoutes(
     }
   });
 
-  // Admin: immediately push fresh tokens to all enrolled members with a CF Contact ID
+  // Admin: reconcile the local membership directory against a complete
+  // ClickFunnels enrollment scan. The scan completes before any membership
+  // update begins, and the storage layer applies changes in one transaction.
+  app.post("/api/admin/cf/reconcile", requireAdmin, async (_req: Request, res: Response) => {
+    const latestRun = await storage.getLatestCfReconciliationRun();
+    if (latestRun?.status === "running") {
+      return res.status(409).json({
+        message: "A ClickFunnels reconciliation is already running. Please wait for it to finish.",
+      });
+    }
+
+    const run = await storage.createCfReconciliationRun({ status: "running" });
+    let membershipChangesApplied = false;
+    try {
+      const { getAllCfEnrollments } = await import("./clickfunnels");
+      const enrollments = await getAllCfEnrollments();
+      const activeFetched = enrollments.filter((enrollment) => enrollment.active).length;
+      const inactiveFetched = enrollments.length - activeFetched;
+      const gracePeriodHours = await storage.getCfGracePeriodHours();
+
+      // getAllCfEnrollments only resolves after following every page. If its
+      // request or pagination fails, execution jumps to the catch block before
+      // applyCfReconciliation can make any membership change.
+      const changes = await storage.applyCfReconciliation(enrollments, gracePeriodHours);
+      membershipChangesApplied = true;
+      const completedAt = new Date();
+      const completedRun = await storage.updateCfReconciliationRun(run.id, {
+        status: "completed",
+        totalFetched: enrollments.length,
+        activeFetched,
+        inactiveFetched,
+        accountsCreated: changes.accountsCreated,
+        accountsReactivated: changes.accountsReactivated,
+        accountsRevoked: changes.accountsRevoked,
+        unchanged: changes.unchanged,
+        completedAt,
+        error: null,
+      });
+      const summary = await storage.getCfEnrolledUsers();
+
+      res.json({
+        run: completedRun,
+        summary,
+        message: `Reconciliation complete. ${changes.accountsCreated} accounts created, ${changes.accountsReactivated} restored, and ${changes.accountsRevoked} moved into the ${gracePeriodHours}-hour grace period.`,
+      });
+    } catch (err: any) {
+      const error = String(err?.message || "ClickFunnels reconciliation failed").slice(0, 1000);
+      console.error(`[CF Reconciliation] ${membershipChangesApplied ? "Membership changes were applied, but reporting failed" : "Failed before membership changes could complete"}:`, error);
+      await storage.updateCfReconciliationRun(run.id, {
+        status: membershipChangesApplied ? "completed" : "failed",
+        completedAt: new Date(),
+        error,
+      }).catch((updateErr) => console.error("[CF Reconciliation] Failed to record run error:", updateErr));
+      res.status(502).json({
+        message: membershipChangesApplied
+          ? "Membership changes were applied, but the reconciliation result could not be fully reported. Refresh the page to review the current directory."
+          : "Reconciliation could not be completed. No membership changes were applied.",
+      });
+    }
+  });
+
   // Admin: import ALL CF-enrolled members from the CF API, creating accounts for unknowns
   app.post("/api/admin/cf/import-all-members", requireAdmin, async (req: Request, res: Response) => {
     try {
