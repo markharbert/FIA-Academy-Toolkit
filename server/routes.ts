@@ -1901,6 +1901,7 @@ export async function registerRoutes(
       const health = await storage.getMemberHealth();
       const memberContactIds = new Set(health.map((member) => member.cfContactId).filter((id): id is string => !!id));
       const snapshot = await getCfCommercialSnapshot(memberContactIds);
+      const memberByContactId = new Map(health.filter((member) => member.cfContactId).map((member) => [member.cfContactId!, { name: member.displayName, email: member.email }]));
       // This ledger is exclusively for the current FIA-only reporting view.
       // Replace any earlier broad rows rather than preserving stale records.
       await db.execute(sql`DELETE FROM cf_commercial_orders`);
@@ -1933,7 +1934,12 @@ export async function registerRoutes(
         cohortMap.set(key, cohort);
       }
       const { orders, ...summary } = snapshot;
-      res.json({ ...summary, cohorts: Array.from(cohortMap.values()).sort((a, b) => b.month.localeCompare(a.month)) });
+      const payments = orders.map((order) => ({
+        ...order,
+        memberName: memberByContactId.get(order.contactId || "")?.name || null,
+        memberEmail: memberByContactId.get(order.contactId || "")?.email || null,
+      }));
+      res.json({ ...summary, orders: payments, cohorts: Array.from(cohortMap.values()).sort((a, b) => b.month.localeCompare(a.month)) });
     } catch (err: any) {
       console.error("[CF Admin] Commercial sync error:", err?.message || err);
       res.status(502).json({ message: err?.message || "ClickFunnels commercial sync failed" });
