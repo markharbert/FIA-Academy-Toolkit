@@ -1067,6 +1067,7 @@ const EMAIL_TEMPLATES = [
   { key: "weeklyDmoSummary", label: "Weekly DMO summary", group: "DMO" },
   { key: "reputationDropAlert", label: "Reputation drop alert", group: "Email Health" },
   { key: "weeklyInboxReport", label: "Weekly inbox report", group: "Email Health" },
+  { key: "inboxReportReady", label: "Inbox Analyzer report ready", group: "Email Health" },
   { key: "feedbackSubmittedFeature", label: "Feature request received", group: "Feedback" },
   { key: "feedbackSubmittedBug", label: "Bug report received (submitter)", group: "Feedback" },
   { key: "newBugAdminAlert", label: "Bug report alert (admin)", group: "Feedback" },
