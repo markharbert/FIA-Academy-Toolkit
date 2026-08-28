@@ -94,6 +94,13 @@ interface ImportError {
   message: string;
 }
 
+type ImportDestination = {
+  type: "new" | "existing" | "training-library";
+  title: string;
+  existingCourseId: string;
+  promote: boolean;
+};
+
 // ─── Tree helpers ─────────────────────────────────────────────────────────────
 
 function getAllNodeIds(nodes: CfTreeNode[]): string[] {
@@ -472,12 +479,14 @@ export function CourseImportCard() {
   const [structure, setStructure] = useState<CfCourseStructure | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [destination, setDestination] = useState({
-    type: "new" as "new" | "existing" | "training-library",
+  const [destination, setDestination] = useState<ImportDestination>({
+    type: "training-library",
     title: "",
     existingCourseId: "",
     promote: false,
   });
+  const [confirmedDestination, setConfirmedDestination] =
+    useState<ImportDestination | null>(null);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [importErrors, setImportErrors] = useState<ImportError[]>([]);
   const [customCourseId, setCustomCourseId] = useState("");
@@ -616,6 +625,25 @@ export function CourseImportCard() {
 
   const runImport = useCallback(
     async (tree: CfTreeNode[]) => {
+      const target = confirmedDestination;
+      if (!target) {
+        toast({
+          title: "Choose an import destination",
+          description: "Review and confirm where this content should go before importing.",
+          variant: "destructive",
+        });
+        setStep("destination");
+        return;
+      }
+      if (target.type === "existing" && !target.existingCourseId) {
+        toast({
+          title: "Choose an existing course",
+          description: "Select the course that should receive this content.",
+          variant: "destructive",
+        });
+        setStep("destination");
+        return;
+      }
       setStep("importing");
       setImportErrors([]);
       try {
@@ -628,12 +656,12 @@ export function CourseImportCard() {
             cfCourseId: structure?.cfCourseId ?? "",
             filteredTree: tree,
             destination: {
-              type: destination.type,
-              title: destination.title,
+              type: target.type,
+              title: target.title,
               existingCourseId:
-                destination.existingCourseId || undefined,
+                target.existingCourseId || undefined,
             },
-            promote: destination.promote,
+            promote: target.promote,
           }),
         });
         const data = await res.json();
@@ -657,7 +685,7 @@ export function CourseImportCard() {
         setStep("preview");
       }
     },
-    [structure, destination, toast],
+    [structure, confirmedDestination, toast],
   );
 
   // ── Reset ─────────────────────────────────────────────────────────────────
@@ -670,8 +698,9 @@ export function CourseImportCard() {
     setExpanded(new Set());
     setImportResult(null);
     setImportErrors([]);
+    setConfirmedDestination(null);
     setDestination({
-      type: "new",
+      type: "training-library",
       title: "",
       existingCourseId: "",
       promote: false,
@@ -1056,7 +1085,10 @@ export function CourseImportCard() {
               </Button>
               <Button
                 size="sm"
-                onClick={() => setStep("preview")}
+                onClick={() => {
+                  setConfirmedDestination({ ...destination });
+                  setStep("preview");
+                }}
                 disabled={
                   (destination.type === "new" &&
                     !destination.title.trim()) ||
@@ -1134,7 +1166,10 @@ export function CourseImportCard() {
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => setStep("destination")}
+                onClick={() => {
+                  setConfirmedDestination(null);
+                  setStep("destination");
+                }}
                 className="gap-1.5 text-muted-foreground"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
