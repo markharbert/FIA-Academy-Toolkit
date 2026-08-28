@@ -6859,6 +6859,59 @@ export async function runMigrations(): Promise<void> {
     console.error("[migration] course external_id migration failed:", err?.message);
   }
 
+  // The Training Library schema was introduced after the original database was
+  // provisioned. Ensure both standalone replay tables exist before applying
+  // import-specific columns and indexes below.
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS training_replays (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        title TEXT NOT NULL,
+        slug VARCHAR(200) NOT NULL UNIQUE,
+        description TEXT,
+        video_url TEXT,
+        thumbnail_url TEXT,
+        content TEXT,
+        transcript_text TEXT,
+        transcript_language TEXT,
+        transcript_source TEXT,
+        transcript_updated_at TIMESTAMP,
+        transcript_cues JSONB,
+        transcript_chapters JSONB,
+        duration_minutes INTEGER,
+        category TEXT,
+        tags JSONB DEFAULT '[]'::jsonb,
+        status VARCHAR(20) NOT NULL DEFAULT 'draft',
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        external_id TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS training_replay_resources (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        replay_id VARCHAR NOT NULL REFERENCES training_replays(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        url TEXT NOT NULL,
+        subtitle TEXT,
+        kind VARCHAR(20) NOT NULL DEFAULT 'link',
+        sort_order INTEGER NOT NULL DEFAULT 0
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_training_replays_status_order
+      ON training_replays(status, sort_order)
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_training_replay_resources_replay_order
+      ON training_replay_resources(replay_id, sort_order)
+    `);
+    console.log("[migration] training library tables ensured");
+  } catch (err: any) {
+    console.error("[migration] training library table migration failed:", err?.message);
+  }
+
   // Training-library replay imports use the source lesson ID as an idempotency
   // key. Keep the lookup indexed as the archive grows.
   try {
