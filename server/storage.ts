@@ -60,6 +60,9 @@ import {
   type Course, type InsertCourse, type CourseModule, type InsertCourseModule,
   type CourseLesson, type InsertCourseLesson, type CourseResource, type InsertCourseResource,
   type CourseProgress,
+  trainingReplays, trainingReplayResources,
+  type TrainingReplay, type InsertTrainingReplay,
+  type TrainingReplayResource, type InsertTrainingReplayResource,
 } from "@shared/schema";
 import type { SwipeListResponse } from "./swipe-api";
 import { safeTimezone, todayKeyInTz, addDaysToKey } from "@shared/datetime";
@@ -819,6 +822,22 @@ export interface IStorage {
   } | undefined>;
   upsertCourseProgress(userId: string, courseId: string, lessonId: string, completed: boolean): Promise<CourseProgress>;
   getUserCourseProgress(userId: string, courseId: string): Promise<CourseProgress[]>;
+
+  // Training Library replays (standalone from courses)
+  getTrainingReplays(): Promise<TrainingReplay[]>;
+  getTrainingReplay(id: string): Promise<TrainingReplay | undefined>;
+  getTrainingReplayBySlug(slug: string): Promise<TrainingReplay | undefined>;
+  createTrainingReplay(replay: InsertTrainingReplay): Promise<TrainingReplay>;
+  updateTrainingReplay(id: string, updates: Partial<TrainingReplay>): Promise<TrainingReplay | undefined>;
+  deleteTrainingReplay(id: string): Promise<boolean>;
+  reorderTrainingReplays(orderedIds: string[]): Promise<void>;
+  getTrainingReplayResources(replayId: string): Promise<TrainingReplayResource[]>;
+  createTrainingReplayResource(resource: InsertTrainingReplayResource): Promise<TrainingReplayResource>;
+  updateTrainingReplayResource(id: string, updates: Partial<TrainingReplayResource>): Promise<TrainingReplayResource | undefined>;
+  deleteTrainingReplayResource(id: string): Promise<boolean>;
+  getPublishedTrainingReplays(): Promise<TrainingReplay[]>;
+  getPublishedTrainingReplayBySlug(slug: string): Promise<TrainingReplay | undefined>;
+  searchPublishedTrainingReplays(filters: { q?: string; category?: string; tag?: string }): Promise<TrainingReplay[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -6416,6 +6435,96 @@ export class DatabaseStorage implements IStorage {
 
   async getUserCourseProgress(userId: string, courseId: string): Promise<CourseProgress[]> {
     return db.select().from(courseProgress).where(and(eq(courseProgress.userId, userId), eq(courseProgress.courseId, courseId)));
+  }
+
+  // ── Training Library replays ───────────────────────────────────────────────
+
+  async getTrainingReplays(): Promise<TrainingReplay[]> {
+    return db.select().from(trainingReplays).orderBy(trainingReplays.sortOrder, trainingReplays.createdAt);
+  }
+
+  async getTrainingReplay(id: string): Promise<TrainingReplay | undefined> {
+    const [row] = await db.select().from(trainingReplays).where(eq(trainingReplays.id, id));
+    return row || undefined;
+  }
+
+  async getTrainingReplayBySlug(slug: string): Promise<TrainingReplay | undefined> {
+    const [row] = await db.select().from(trainingReplays).where(eq(trainingReplays.slug, slug));
+    return row || undefined;
+  }
+
+  async createTrainingReplay(replay: InsertTrainingReplay): Promise<TrainingReplay> {
+    const [row] = await db.insert(trainingReplays).values(replay).returning();
+    return row;
+  }
+
+  async updateTrainingReplay(id: string, updates: Partial<TrainingReplay>): Promise<TrainingReplay | undefined> {
+    const [row] = await db.update(trainingReplays).set({ ...updates, updatedAt: new Date() }).where(eq(trainingReplays.id, id)).returning();
+    return row || undefined;
+  }
+
+  async deleteTrainingReplay(id: string): Promise<boolean> {
+    const [row] = await db.delete(trainingReplays).where(eq(trainingReplays.id, id)).returning();
+    return !!row;
+  }
+
+  async reorderTrainingReplays(orderedIds: string[]): Promise<void> {
+    await db.transaction(async (tx) => {
+      for (let i = 0; i < orderedIds.length; i++) {
+        await tx.update(trainingReplays).set({ sortOrder: i, updatedAt: new Date() }).where(eq(trainingReplays.id, orderedIds[i]));
+      }
+    });
+  }
+
+  async getTrainingReplayResources(replayId: string): Promise<TrainingReplayResource[]> {
+    return db.select().from(trainingReplayResources).where(eq(trainingReplayResources.replayId, replayId)).orderBy(trainingReplayResources.sortOrder);
+  }
+
+  async createTrainingReplayResource(resource: InsertTrainingReplayResource): Promise<TrainingReplayResource> {
+    const [row] = await db.insert(trainingReplayResources).values(resource).returning();
+    return row;
+  }
+
+  async updateTrainingReplayResource(id: string, updates: Partial<TrainingReplayResource>): Promise<TrainingReplayResource | undefined> {
+    const [row] = await db.update(trainingReplayResources).set(updates).where(eq(trainingReplayResources.id, id)).returning();
+    return row || undefined;
+  }
+
+  async deleteTrainingReplayResource(id: string): Promise<boolean> {
+    const [row] = await db.delete(trainingReplayResources).where(eq(trainingReplayResources.id, id)).returning();
+    return !!row;
+  }
+
+  async getPublishedTrainingReplays(): Promise<TrainingReplay[]> {
+    return db.select().from(trainingReplays)
+      .where(eq(trainingReplays.status, "published"))
+      .orderBy(trainingReplays.sortOrder, trainingReplays.createdAt);
+  }
+
+  async getPublishedTrainingReplayBySlug(slug: string): Promise<TrainingReplay | undefined> {
+    const [row] = await db.select().from(trainingReplays)
+      .where(and(eq(trainingReplays.slug, slug), eq(trainingReplays.status, "published")));
+    return row || undefined;
+  }
+
+  async searchPublishedTrainingReplays(filters: { q?: string; category?: string; tag?: string }): Promise<TrainingReplay[]> {
+    // The initial library is intentionally bounded (~100 replays), so searching
+    // the published set in memory permits transcript and HTML-content matching
+    // without an unbounded full-text database query.
+    const q = filters.q?.toLowerCase();
+    return (await this.getPublishedTrainingReplays()).filter((replay) => {
+      if (filters.category && replay.category !== filters.category) return false;
+      if (filters.tag && !(replay.tags || []).includes(filters.tag)) return false;
+      if (!q) return true;
+      const chapterText = Array.isArray(replay.transcriptChapters)
+        ? replay.transcriptChapters.map((chapter) => chapter.title).join(" ")
+        : "";
+      const searchable = [
+        replay.title, replay.description, replay.category, replay.tags?.join(" "),
+        replay.content?.replace(/<[^>]*>/g, " "), chapterText, replay.transcriptText,
+      ].filter(Boolean).join(" ").toLowerCase();
+      return searchable.includes(q);
+    });
   }
 }
 

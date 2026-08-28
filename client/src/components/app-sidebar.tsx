@@ -399,6 +399,17 @@ export function AppSidebar() {
                   })}
                   <SidebarMenuItem>
                     <SidebarMenuButton
+                      isActive={location.startsWith("/training/library")}
+                      tooltip="Training Library"
+                      onClick={() => setLocation("/training/library")}
+                      data-testid="nav-training-library"
+                    >
+                      <BookMarked className={location.startsWith("/training/library") ? undefined : "text-violet-400"} />
+                      <span>Training Library</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
                       isActive={location === "/training/schedule"}
                       tooltip="Training Schedule"
                       onClick={() => setLocation("/training/schedule")}
@@ -407,6 +418,29 @@ export function AppSidebar() {
                     >
                       <CalendarDays className="text-fuchsia-400" />
                       <span className="truncate">Training Schedule</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+            <SidebarSeparator />
+          </>
+        )}
+        {!isCollaborator && !user?.isAdmin && (
+          <>
+            <SidebarGroup>
+              <SidebarGroupLabel>Training</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={location.startsWith("/training/library")}
+                      tooltip="Training Library"
+                      onClick={() => setLocation("/training/library")}
+                      data-testid="nav-training-library"
+                    >
+                      <BookMarked className={location.startsWith("/training/library") ? undefined : "text-violet-400"} />
+                      <span>Training Library</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 </SidebarMenu>
@@ -535,6 +569,17 @@ export function AppSidebar() {
               <SidebarGroupLabel>Admin</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={location.startsWith("/admin/training-library")}
+                      tooltip="Training Library"
+                      onClick={() => setLocation("/admin/training-library")}
+                      data-testid="nav-admin-training-library"
+                    >
+                      <BookMarked className={location.startsWith("/admin/training-library") ? undefined : "text-violet-400"} />
+                      <span>Training Library</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                   <SidebarMenuItem>
                     <SidebarMenuButton
                       isActive={location === "/admin"}

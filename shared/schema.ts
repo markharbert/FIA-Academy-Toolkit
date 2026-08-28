@@ -2286,6 +2286,51 @@ export type CourseResource = typeof courseResources.$inferSelect;
 export type InsertCourseResource = typeof courseResources.$inferInsert;
 export const insertCourseResourceSchema = createInsertSchema(courseResources).omit({ id: true });
 
+// ── Training Library replays ─────────────────────────────────────────────────
+// These are deliberately independent from courses: a replay can be curated and
+// published without belonging to the course/module/lesson hierarchy.
+export const trainingReplays = pgTable("training_replays", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  slug: varchar("slug", { length: 200 }).notNull().unique(),
+  description: text("description"),
+  videoUrl: text("video_url"),
+  thumbnailUrl: text("thumbnail_url"),
+  content: text("content"),
+  transcriptText: text("transcript_text"),
+  transcriptLanguage: text("transcript_language"),
+  transcriptSource: text("transcript_source"),
+  transcriptUpdatedAt: timestamp("transcript_updated_at"),
+  transcriptCues: jsonb("transcript_cues").$type<LessonTranscriptCue[]>(),
+  transcriptChapters: jsonb("transcript_chapters").$type<LessonChapter[]>(),
+  durationMinutes: integer("duration_minutes"),
+  category: text("category"),
+  tags: jsonb("tags").$type<string[]>(),
+  status: varchar("status", { length: 20 }).notNull().default("draft"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  externalId: text("external_id"),
+  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (t) => ({
+  statusOrderIdx: index("idx_training_replays_status_order").on(t.status, t.sortOrder),
+}));
+export type TrainingReplay = typeof trainingReplays.$inferSelect;
+export type InsertTrainingReplay = typeof trainingReplays.$inferInsert;
+export const insertTrainingReplaySchema = createInsertSchema(trainingReplays).omit({ id: true, createdAt: true, updatedAt: true });
+
+export const trainingReplayResources = pgTable("training_replay_resources", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  replayId: varchar("replay_id").notNull().references(() => trainingReplays.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  url: text("url").notNull(),
+  subtitle: text("subtitle"),
+  kind: varchar("kind", { length: 20 }).notNull().default("link"),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+export type TrainingReplayResource = typeof trainingReplayResources.$inferSelect;
+export type InsertTrainingReplayResource = typeof trainingReplayResources.$inferInsert;
+export const insertTrainingReplayResourceSchema = createInsertSchema(trainingReplayResources).omit({ id: true });
+
 export const courseProgress = pgTable("course_progress", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),

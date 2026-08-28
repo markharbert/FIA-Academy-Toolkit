@@ -14157,6 +14157,341 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }
   });
 
+  // ── Training Library (standalone replays) ───────────────────────────────────
+  const replayStatusSchema = z.enum(["draft", "published"]);
+  const replayTitleSchema = z.string().trim().min(1, "Title is required").max(500);
+  const replayUrlSchema = z.string().trim().url("Must be a valid URL").max(4_000)
+    .refine((value) => {
+      try {
+        return ["http:", "https:"].includes(new URL(value).protocol);
+      } catch {
+        return false;
+      }
+    }, "URL must use http or https");
+  const replayTagsSchema = z.array(z.string().trim().min(1).max(100)).max(30)
+    .transform((tags) => [...new Set(tags.map((tag) => tag.trim()))]);
+  const replayCreateSchema = z.object({
+    title: replayTitleSchema,
+    description: z.string().trim().max(10_000).nullable().optional(),
+    videoUrl: replayUrlSchema.nullable().optional(),
+    thumbnailUrl: replayUrlSchema.nullable().optional(),
+    content: z.string().max(1_000_000).nullable().optional(),
+    durationMinutes: z.number().int().min(0).max(100_000).nullable().optional(),
+    category: z.string().trim().max(200).nullable().optional(),
+    tags: replayTagsSchema.optional(),
+    status: replayStatusSchema.optional(),
+    externalId: z.string().trim().max(500).nullable().optional(),
+  }).strict();
+  const replayUpdateSchema = replayCreateSchema.partial().omit({ title: true }).extend({
+    title: replayTitleSchema.optional(),
+  }).strict().refine((updates) => Object.keys(updates).length > 0, "At least one update is required");
+  const replayResourceSchema = z.object({
+    name: z.string().trim().min(1, "Resource name is required").max(500),
+    url: replayUrlSchema,
+    subtitle: z.string().trim().max(500).nullable().optional(),
+    kind: z.enum(["link", "pdf"]).optional(),
+  }).strict();
+  const replayResourceUpdateSchema = replayResourceSchema.partial().strict()
+    .refine((updates) => Object.keys(updates).length > 0, "At least one update is required");
+
+  async function uniqueReplaySlug(title: string, excludeId?: string): Promise<string> {
+    const taken = new Set((await storage.getTrainingReplays())
+      .filter((replay) => replay.id !== excludeId)
+      .map((replay) => replay.slug));
+    const base = slugify(title) || "replay";
+    let slug = base;
+    let suffix = 2;
+    while (taken.has(slug)) slug = `${base}-${suffix++}`;
+    return slug;
+  }
+  function replayValidationError(res: Response, error: z.ZodError) {
+    return res.status(400).json({ message: error.issues[0]?.message || "Invalid replay data" });
+  }
+
+  app.get("/api/admin/training-replays", requireAdmin, async (req, res) => {
+    const parsed = z.object({ status: replayStatusSchema.optional() }).safeParse(req.query);
+    if (!parsed.success) return replayValidationError(res, parsed.error);
+    try {
+      const replays = await storage.getTrainingReplays();
+      res.json(parsed.data.status ? replays.filter((replay) => replay.status === parsed.data.status) : replays);
+    } catch (error) {
+      console.error("[training-replays] list error:", error);
+      res.status(500).json({ message: "Failed to load replays" });
+    }
+  });
+
+  app.post("/api/admin/training-replays", requireAdmin, async (req, res) => {
+    try {
+      const parsed = replayCreateSchema.safeParse(req.body);
+      if (!parsed.success) return replayValidationError(res, parsed.error);
+      const replays = await storage.getTrainingReplays();
+      const data = parsed.data;
+      const replay = await storage.createTrainingReplay({
+        ...data,
+        slug: await uniqueReplaySlug(data.title),
+        description: data.description || null,
+        videoUrl: data.videoUrl || null,
+        thumbnailUrl: data.thumbnailUrl || null,
+        content: data.content || null,
+        category: data.category || null,
+        externalId: data.externalId || null,
+        tags: data.tags ?? [],
+        status: data.status ?? "draft",
+        sortOrder: replays.length,
+      });
+      res.status(201).json(replay);
+    } catch (error) {
+      console.error("[training-replays] create error:", error);
+      res.status(500).json({ message: "Failed to create replay" });
+    }
+  });
+
+  app.get("/api/admin/training-replays/:id", requireAdmin, async (req, res) => {
+    try {
+      const replay = await storage.getTrainingReplay(req.params.id);
+      if (!replay) return res.status(404).json({ message: "Not found" });
+      res.json({ ...replay, resources: await storage.getTrainingReplayResources(replay.id) });
+    } catch {
+      res.status(500).json({ message: "Failed to load replay" });
+    }
+  });
+
+  app.put("/api/admin/training-replays/reorder", requireAdmin, async (req, res) => {
+    const parsed = z.object({ orderedIds: z.array(z.string().uuid()).max(500) }).strict().safeParse(req.body);
+    if (!parsed.success) return replayValidationError(res, parsed.error);
+    try {
+      const replays = await storage.getTrainingReplays();
+      if (!hasExactIds(replays.map((replay) => replay.id), parsed.data.orderedIds)) {
+        return res.status(400).json({
+          message: "orderedIds must include every replay exactly once; reorder from the unfiltered catalog.",
+          orderedIds: replays.map((replay) => replay.id),
+        });
+      }
+      await storage.reorderTrainingReplays(parsed.data.orderedIds);
+      res.json({ ok: true });
+    } catch {
+      res.status(500).json({ message: "Failed to reorder replays" });
+    }
+  });
+
+  app.put("/api/admin/training-replays/:id", requireAdmin, async (req, res) => {
+    try {
+      const parsed = replayUpdateSchema.safeParse(req.body);
+      if (!parsed.success) return replayValidationError(res, parsed.error);
+      const data = parsed.data;
+      const replay = await storage.updateTrainingReplay(req.params.id, {
+        ...data,
+      });
+      if (!replay) return res.status(404).json({ message: "Not found" });
+      res.json(replay);
+    } catch (error) {
+      console.error("[training-replays] update error:", error);
+      res.status(500).json({ message: "Failed to update replay" });
+    }
+  });
+
+  app.delete("/api/admin/training-replays/:id", requireAdmin, async (req, res) => {
+    try {
+      if (!await storage.deleteTrainingReplay(req.params.id)) return res.status(404).json({ message: "Not found" });
+      res.json({ ok: true });
+    } catch {
+      res.status(500).json({ message: "Failed to delete replay" });
+    }
+  });
+
+  app.post("/api/admin/training-replays/:replayId/resources", requireAdmin, async (req, res) => {
+    const parsed = replayResourceSchema.safeParse(req.body);
+    if (!parsed.success) return replayValidationError(res, parsed.error);
+    try {
+      if (!await storage.getTrainingReplay(req.params.replayId)) return res.status(404).json({ message: "Replay not found" });
+      const existing = await storage.getTrainingReplayResources(req.params.replayId);
+      res.status(201).json(await storage.createTrainingReplayResource({
+        replayId: req.params.replayId, ...parsed.data, subtitle: parsed.data.subtitle || null,
+        kind: parsed.data.kind ?? "link", sortOrder: existing.length,
+      }));
+    } catch {
+      res.status(500).json({ message: "Failed to add resource" });
+    }
+  });
+  app.get("/api/admin/training-replays/:replayId/resources", requireAdmin, async (req, res) => {
+    try {
+      if (!await storage.getTrainingReplay(req.params.replayId)) return res.status(404).json({ message: "Replay not found" });
+      res.json(await storage.getTrainingReplayResources(req.params.replayId));
+    } catch {
+      res.status(500).json({ message: "Failed to load resources" });
+    }
+  });
+  app.put("/api/admin/training-replay-resources/:id", requireAdmin, async (req, res) => {
+    const parsed = replayResourceUpdateSchema.safeParse(req.body);
+    if (!parsed.success) return replayValidationError(res, parsed.error);
+    try {
+      const resource = await storage.updateTrainingReplayResource(req.params.id, parsed.data);
+      if (!resource) return res.status(404).json({ message: "Not found" });
+      res.json(resource);
+    } catch {
+      res.status(500).json({ message: "Failed to update resource" });
+    }
+  });
+  app.delete("/api/admin/training-replay-resources/:id", requireAdmin, async (req, res) => {
+    try {
+      if (!await storage.deleteTrainingReplayResource(req.params.id)) return res.status(404).json({ message: "Not found" });
+      res.json({ ok: true });
+    } catch {
+      res.status(500).json({ message: "Failed to delete resource" });
+    }
+  });
+  // Nested aliases keep resource mutations naturally scoped to the replay in
+  // editor clients while the storage layer remains resource-id based.
+  app.put("/api/admin/training-replays/:replayId/resources/:id", requireAdmin, async (req, res) => {
+    const parsed = replayResourceUpdateSchema.safeParse(req.body);
+    if (!parsed.success) return replayValidationError(res, parsed.error);
+    try {
+      const resource = await storage.updateTrainingReplayResource(req.params.id, parsed.data);
+      if (!resource || resource.replayId !== req.params.replayId) return res.status(404).json({ message: "Not found" });
+      res.json(resource);
+    } catch { res.status(500).json({ message: "Failed to update resource" }); }
+  });
+  app.delete("/api/admin/training-replays/:replayId/resources/:id", requireAdmin, async (req, res) => {
+    try {
+      const resources = await storage.getTrainingReplayResources(req.params.replayId);
+      if (!resources.some((resource) => resource.id === req.params.id)) return res.status(404).json({ message: "Not found" });
+      await storage.deleteTrainingReplayResource(req.params.id);
+      res.json({ ok: true });
+    } catch { res.status(500).json({ message: "Failed to delete resource" }); }
+  });
+
+  app.get("/api/admin/training-replays/:id/vimeo-transcript-tracks", requireAdmin, async (req, res) => {
+    try {
+      const replay = await storage.getTrainingReplay(req.params.id);
+      const videoId = replay?.videoUrl ? extractVimeoVideoId(replay.videoUrl) : null;
+      if (!replay || !videoId) return res.status(400).json({ message: "Add a Vimeo video to this replay first." });
+      res.json({ tracks: await listVimeoTextTracks(videoId) });
+    } catch (error) {
+      console.error("[replay Vimeo tracks]", error);
+      res.status(502).json({ message: "Vimeo could not provide transcript tracks." });
+    }
+  });
+  app.post("/api/admin/training-replays/:id/vimeo-transcript", requireAdmin, async (req, res) => {
+    const trackId = typeof req.body?.trackId === "string" ? req.body.trackId : "";
+    if (!/^\d+$/.test(trackId)) return res.status(400).json({ message: "Choose a transcript language." });
+    try {
+      const replay = await storage.getTrainingReplay(req.params.id);
+      const videoId = replay?.videoUrl ? extractVimeoVideoId(replay.videoUrl) : null;
+      if (!replay || !videoId) return res.status(400).json({ message: "Add a Vimeo video to this replay first." });
+      const transcript = await fetchVimeoTranscript(videoId, trackId);
+      res.json(await storage.updateTrainingReplay(replay.id, {
+        transcriptText: transcript.text, transcriptLanguage: transcript.language || null,
+        transcriptSource: `Vimeo${transcript.name ? ` · ${transcript.name}` : ""}`,
+        transcriptUpdatedAt: new Date(), transcriptCues: transcript.cues, transcriptChapters: null,
+      }));
+    } catch (error) {
+      console.error("[replay Vimeo import]", error);
+      res.status(502).json({ message: error instanceof Error ? error.message : "Vimeo transcript import failed." });
+    }
+  });
+  app.delete("/api/admin/training-replays/:id/transcript", requireAdmin, async (req, res) => {
+    try {
+      if (!await storage.getTrainingReplay(req.params.id)) return res.status(404).json({ message: "Not found" });
+      res.json(await storage.updateTrainingReplay(req.params.id, {
+        transcriptText: null, transcriptLanguage: null, transcriptSource: null, transcriptUpdatedAt: null,
+        transcriptCues: null, transcriptChapters: null,
+      }));
+    } catch { res.status(500).json({ message: "Failed to remove transcript." }); }
+  });
+  app.get("/api/admin/training-replays/:id/transcript/download", requireAdmin, async (req, res) => {
+    const replay = await storage.getTrainingReplay(req.params.id);
+    if (!replay?.transcriptText) return res.status(404).json({ message: "No transcript has been saved for this replay." });
+    const filename = `${replay.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "replay"}-transcript.txt`;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(`${replay.title}\n\nTranscript\n${replay.transcriptText}\n`);
+  });
+  app.post("/api/admin/training-replays/:id/transcript-chapters", requireAdmin, async (req, res) => {
+    try {
+      const replay = await storage.getTrainingReplay(req.params.id);
+      if (!replay?.transcriptText) return res.status(400).json({ message: "Import a Vimeo transcript before creating chapters." });
+      const videoId = replay.videoUrl ? extractVimeoVideoId(replay.videoUrl) : null;
+      if (!videoId) return res.status(400).json({ message: "Chapters are currently available for Vimeo replays only." });
+      let cues = Array.isArray(replay.transcriptCues) ? replay.transcriptCues : [];
+      if (cues.length < 2) {
+        const tracks = await listVimeoTextTracks(videoId);
+        const track = tracks.find((item) => item.language === replay.transcriptLanguage) ?? tracks[0];
+        if (!track) return res.status(400).json({ message: "Vimeo has no caption track available." });
+        cues = (await fetchVimeoTranscript(videoId, track.id)).cues;
+      }
+      res.json(await storage.updateTrainingReplay(replay.id, { transcriptCues: cues, transcriptChapters: await generateLessonChapters(cues) }));
+    } catch (error) {
+      console.error("[replay Vimeo chapters]", error);
+      res.status(502).json({ message: error instanceof Error ? error.message : "Could not create transcript chapters." });
+    }
+  });
+
+  function transcriptMatchSnippets(replay: { transcriptText: string | null; transcriptCues: { startSeconds: number; text: string }[] | null }, query?: string) {
+    if (!query || !replay.transcriptText) return [];
+    const normalized = query.toLowerCase();
+    const text = replay.transcriptText;
+    const offset = text.toLowerCase().indexOf(normalized);
+    if (offset < 0) return [];
+    const cues = Array.isArray(replay.transcriptCues) ? replay.transcriptCues : [];
+    // Captions are the authoritative timestamp anchors. Match a cue first, then
+    // use the closest preceding cue when the text was normalized into paragraphs.
+    const cueIndex = cues.findIndex((cue) => cue.text.toLowerCase().includes(normalized));
+    let cue = cueIndex >= 0 ? cues[cueIndex] : undefined;
+    if (!cue) {
+      let nearestOffset = -1;
+      for (const candidate of cues) {
+        const candidateOffset = text.toLowerCase().indexOf(candidate.text.toLowerCase());
+        if (candidateOffset >= 0 && candidateOffset <= offset && candidateOffset >= nearestOffset) {
+          nearestOffset = candidateOffset;
+          cue = candidate;
+        }
+      }
+    }
+    return [{
+      startSeconds: cue?.startSeconds ?? 0,
+      text: text.slice(Math.max(0, offset - 100), Math.min(text.length, offset + query.length + 160)).replace(/\s+/g, " ").trim(),
+    }];
+  }
+  app.get(["/api/training/library", "/api/training/replays"], requireAuth, async (req, res) => {
+    const parsed = z.object({
+      q: z.string().trim().max(200).optional(),
+      category: z.string().trim().max(200).optional(),
+      tag: z.string().trim().max(100).optional(),
+      tags: z.string().trim().max(1_000).optional(),
+    }).safeParse(req.query);
+    if (!parsed.success) return replayValidationError(res, parsed.error);
+    try {
+      const all = await storage.getPublishedTrainingReplays();
+      const selectedTags = (parsed.data.tags ? parsed.data.tags.split(",") : parsed.data.tag ? [parsed.data.tag] : [])
+        .map((tag) => tag.trim()).filter(Boolean);
+      if (selectedTags.length > 30 || selectedTags.some((tag) => tag.length > 100)) {
+        return res.status(400).json({ message: "Choose no more than 30 valid tags" });
+      }
+      const replays = (await storage.searchPublishedTrainingReplays({
+        q: parsed.data.q,
+        category: parsed.data.category,
+      })).filter((replay) => selectedTags.every((tag) => (replay.tags || []).includes(tag)));
+      const categories = [...new Set(all.map((replay) => replay.category).filter((item): item is string => !!item))].sort();
+      const tags = [...new Set(all.flatMap((replay) => replay.tags || []))].sort();
+      const items = replays.map((replay) => ({
+          ...replay,
+          transcriptMatches: transcriptMatchSnippets(replay, parsed.data.q),
+        }));
+      res.json({
+        items,
+        replays: items,
+        facets: { categories, tags },
+      });
+    } catch { res.status(500).json({ message: "Failed to load replays" }); }
+  });
+  app.get(["/api/training/library/:slug", "/api/training/replays/:slug"], requireAuth, async (req, res) => {
+    try {
+      const replay = await storage.getPublishedTrainingReplayBySlug(req.params.slug);
+      if (!replay) return res.status(404).json({ message: "Not found" });
+      res.json({ ...replay, resources: await storage.getTrainingReplayResources(replay.id) });
+    } catch { res.status(500).json({ message: "Failed to load replay" }); }
+  });
+
   // ─── Training Schedule (admin-only until public rollout) ─────────────────────
   app.get("/api/training/schedule/settings", requireAdmin, async (_req, res) => {
     res.json({

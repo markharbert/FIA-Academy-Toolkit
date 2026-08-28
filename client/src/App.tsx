@@ -108,6 +108,10 @@ const AdminLessonEditorPage      = lazyPage(() => import("@/pages/admin-lesson-e
 const TrainingCoursePage         = lazyPage(() => import("@/pages/training-course"));
 const TrainingLessonPage         = lazyPage(() => import("@/pages/training-lesson"));
 const TrainingSchedulePage       = lazyPage(() => import("@/pages/training-schedule"));
+const AdminTrainingLibraryPage   = lazyPage(() => import("@/pages/admin-training-library"));
+const AdminTrainingReplayEditorPage = lazyPage(() => import("@/pages/admin-training-replay-editor"));
+const TrainingLibraryPage        = lazyPage(() => import("@/pages/training-library"));
+const TrainingReplayPage         = lazyPage(() => import("@/pages/training-replay"));
 const PrivacyPolicyPage          = lazyPage(() => import("@/pages/privacy-policy"));
 const NotFound                   = lazyPage(() => import("@/pages/not-found"));
 
@@ -356,6 +360,12 @@ function ProtectedRoutes() {
       <Route path="/admin/courses/:id/lessons/:lessonId">
         {() => <AdminRoute component={AdminLessonEditorPage} />}
       </Route>
+      <Route path="/admin/training-library/:replayId">
+        {() => <AdminRoute component={AdminTrainingReplayEditorPage} />}
+      </Route>
+      <Route path="/admin/training-library">
+        {() => <AdminRoute component={AdminTrainingLibraryPage} />}
+      </Route>
       <Route path="/admin/courses/:id/outline">
         {() => <AdminRoute component={AdminCourseOutlinePage} />}
       </Route>
@@ -364,6 +374,12 @@ function ProtectedRoutes() {
       </Route>
       <Route path="/training/schedule">
         {() => <AdminRoute component={TrainingSchedulePage} />}
+      </Route>
+      <Route path="/training/library/:slug">
+        {() => <ProtectedRoute component={TrainingReplayPage} />}
+      </Route>
+      <Route path="/training/library">
+        {() => <ProtectedRoute component={TrainingLibraryPage} />}
       </Route>
       <Route path="/training/:courseSlug/:moduleSlug/:lessonSlug">
         {() => <AdminRoute component={TrainingLessonPage} />}
