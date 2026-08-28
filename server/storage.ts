@@ -67,6 +67,7 @@ import {
 import type { SwipeListResponse } from "./swipe-api";
 import { safeTimezone, todayKeyInTz, addDaysToKey } from "@shared/datetime";
 import { collectCourseModuleSubtreeIds } from "@shared/course-structure";
+import { slugify } from "@shared/slug";
 import crypto from "crypto";
 import { db, pool } from "./db";
 import { eq, and, lt, lte, gte, isNull, desc, gt, sql, or, ilike, count, asc, inArray } from "drizzle-orm";
@@ -97,6 +98,20 @@ type CourseNavigationModule = Pick<
   CourseModule,
   "id" | "courseId" | "parentModuleId" | "title" | "slug" | "status" | "sortOrder"
 >;
+
+export type TrainingReplayImportRow = {
+  externalId: string;
+  title: string;
+  videoUrl: string | null;
+};
+
+export type TrainingReplayImportResult = {
+  created: number;
+  updated: number;
+  videosImported: number;
+  videosSkipped: number;
+  videosUnavailable: number;
+};
 
 type CourseNavigationLesson = Pick<
   CourseLesson,
@@ -831,6 +846,7 @@ export interface IStorage {
   updateTrainingReplay(id: string, updates: Partial<TrainingReplay>): Promise<TrainingReplay | undefined>;
   deleteTrainingReplay(id: string): Promise<boolean>;
   reorderTrainingReplays(orderedIds: string[]): Promise<void>;
+  importTrainingReplays(rows: TrainingReplayImportRow[]): Promise<TrainingReplayImportResult>;
   getTrainingReplayResources(replayId: string): Promise<TrainingReplayResource[]>;
   createTrainingReplayResource(resource: InsertTrainingReplayResource): Promise<TrainingReplayResource>;
   updateTrainingReplayResource(id: string, updates: Partial<TrainingReplayResource>): Promise<TrainingReplayResource | undefined>;
@@ -6476,6 +6492,121 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
+  async importTrainingReplays(rows: TrainingReplayImportRow[]): Promise<TrainingReplayImportResult> {
+    if (rows.length === 0) {
+      return { created: 0, updated: 0, videosImported: 0, videosSkipped: 0, videosUnavailable: 0 };
+    }
+
+    return db.transaction(async (tx) => {
+      const externalIds = rows.map((row) => row.externalId);
+      const existing = await tx
+        .select()
+        .from(trainingReplays)
+        .where(inArray(trainingReplays.externalId, externalIds));
+      const existingByExternalId = new Map(existing.map((replay) => [replay.externalId!, replay]));
+      const allReplays = await tx
+        .select({
+          id: trainingReplays.id,
+          slug: trainingReplays.slug,
+          externalId: trainingReplays.externalId,
+          sortOrder: trainingReplays.sortOrder,
+        })
+        .from(trainingReplays)
+        .orderBy(trainingReplays.sortOrder, trainingReplays.createdAt);
+      const importedIds = new Set(existing.map((replay) => replay.id));
+      const insertionIndex = allReplays.findIndex((replay) => importedIds.has(replay.id));
+      const baseIndex = insertionIndex >= 0
+        ? insertionIndex
+        : allReplays.length;
+      const takenSlugs = new Set(
+        allReplays
+          .filter((replay) => !importedIds.has(replay.id))
+          .map((replay) => replay.slug),
+      );
+      const imported: TrainingReplay[] = [];
+      let created = 0;
+      let updated = 0;
+      let videosImported = 0;
+      let videosSkipped = 0;
+      let videosUnavailable = 0;
+
+      for (const row of rows) {
+        const current = existingByExternalId.get(row.externalId);
+        let slug = current?.slug ?? slugify(row.title);
+        if (!current || current.title !== row.title) {
+          const baseSlug = slugify(row.title);
+          slug = baseSlug;
+          let suffix = 2;
+          while (takenSlugs.has(slug)) slug = `${baseSlug}-${suffix++}`;
+        }
+        takenSlugs.add(slug);
+
+        if (current) {
+          const videoUrl = current.videoUrl || row.videoUrl || null;
+          await tx.update(trainingReplays).set({
+            title: row.title,
+            slug,
+            videoUrl,
+            sortOrder: baseIndex + imported.length,
+            updatedAt: new Date(),
+          }).where(eq(trainingReplays.id, current.id));
+          const updatedReplay = {
+            ...current,
+            title: row.title,
+            slug,
+            videoUrl,
+            sortOrder: baseIndex + imported.length,
+          };
+          imported.push(updatedReplay);
+          updated++;
+          if (row.videoUrl && current.videoUrl) videosSkipped++;
+          else if (row.videoUrl) videosImported++;
+          else videosUnavailable++;
+        } else {
+          const [createdReplay] = await tx.insert(trainingReplays).values({
+            title: row.title,
+            slug,
+            description: null,
+            videoUrl: row.videoUrl || null,
+            thumbnailUrl: null,
+            content: null,
+            durationMinutes: null,
+            category: null,
+            tags: [],
+            status: "draft",
+            sortOrder: baseIndex + imported.length,
+            externalId: row.externalId,
+          }).returning();
+          imported.push(createdReplay);
+          created++;
+          if (row.videoUrl) videosImported++;
+          else videosUnavailable++;
+        }
+      }
+
+      // Re-number the whole catalog so imported rows are contiguous in source
+      // order without changing the relative order of unrelated replays.
+      const importedById = new Map(imported.map((replay) => [replay.id, replay]));
+      const remaining = allReplays.filter((replay) => !importedIds.has(replay.id));
+      const before = remaining.slice(0, baseIndex);
+      const after = remaining.slice(baseIndex);
+      const orderedIds = [
+        ...before.map((replay) => replay.id),
+        ...imported.map((replay) => replay.id),
+        ...after.map((replay) => replay.id),
+      ];
+      for (let index = 0; index < orderedIds.length; index++) {
+        const replayId = orderedIds[index];
+        if (importedById.has(replayId)) continue;
+        await tx.update(trainingReplays)
+          .set({ sortOrder: index, updatedAt: new Date() })
+          .where(eq(trainingReplays.id, replayId));
+      }
+
+      return { created, updated, videosImported, videosSkipped, videosUnavailable };
+    });
+  }
+
   async getTrainingReplayResources(replayId: string): Promise<TrainingReplayResource[]> {
     return db.select().from(trainingReplayResources).where(eq(trainingReplayResources.replayId, replayId)).orderBy(trainingReplayResources.sortOrder);
   }
@@ -6726,6 +6857,16 @@ export async function runMigrations(): Promise<void> {
     console.log("[migration] course external_id columns ensured");
   } catch (err: any) {
     console.error("[migration] course external_id migration failed:", err?.message);
+  }
+
+  // Training-library replay imports use the source lesson ID as an idempotency
+  // key. Keep the lookup indexed as the archive grows.
+  try {
+    await pool.query(`ALTER TABLE training_replays ADD COLUMN IF NOT EXISTS external_id TEXT`);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS training_replays_external_id_unique ON training_replays(external_id) WHERE external_id IS NOT NULL`);
+    console.log("[migration] training replay external_id uniqueness ensured");
+  } catch (err: any) {
+    console.error("[migration] training replay external_id migration failed:", err?.message);
   }
 
   for (const migration of migrations) {

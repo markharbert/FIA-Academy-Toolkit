@@ -2069,6 +2069,94 @@ export async function registerRoutes(
     videosUnavailable: number;
   };
 
+  type TrainingReplayImportRow = {
+    externalId: string;
+    title: string;
+    videoUrl: string | null;
+  };
+
+  /**
+   * Training-library imports use the same selected CF tree as course imports,
+   * but only lesson leaves become standalone replays. Walking depth-first keeps
+   * the source order, including lessons mixed with nested sections.
+   */
+  function collectTrainingReplayRows(nodes: unknown[]): {
+    rows: TrainingReplayImportRow[];
+    errors: Array<{ row: number; message: string }>;
+  } {
+    const rows: TrainingReplayImportRow[] = [];
+    const errors: Array<{ row: number; message: string }> = [];
+    const seenIds = new Set<string>();
+    let lessonNumber = 0;
+
+    const visit = (value: unknown) => {
+      if (!value || typeof value !== "object") {
+        errors.push({ row: lessonNumber || 1, message: "Each tree item must be an object." });
+        return;
+      }
+      const node = value as Record<string, unknown>;
+      const type = node.type;
+      const cfId = typeof node.cfId === "string" ? node.cfId.trim() : "";
+      if (type !== "module" && type !== "lesson") {
+        errors.push({ row: lessonNumber || 1, message: "Item type must be module or lesson." });
+        return;
+      }
+      if (!cfId) {
+        errors.push({ row: lessonNumber || 1, message: "Item is missing its ClickFunnels ID." });
+        return;
+      }
+      if (seenIds.has(cfId)) {
+        errors.push({
+          row: type === "lesson" ? lessonNumber || 1 : lessonNumber || 1,
+          message: `Duplicate ClickFunnels ID "${cfId}".`,
+        });
+        return;
+      }
+      seenIds.add(cfId);
+
+      if (type === "module") {
+        if (!Array.isArray(node.children)) {
+          errors.push({ row: lessonNumber || 1, message: `Section "${cfId}" has no valid children list.` });
+          return;
+        }
+        node.children.forEach(visit);
+        return;
+      }
+
+      lessonNumber++;
+      const title = typeof node.title === "string" ? node.title.trim() : "";
+      if (!title) {
+        errors.push({ row: lessonNumber, message: "Replay title is required." });
+        return;
+      }
+      if (title.length > 500) {
+        errors.push({ row: lessonNumber, message: "Replay title must be 500 characters or fewer." });
+        return;
+      }
+
+      let videoUrl: string | null = null;
+      if (node.videoUrl !== undefined && node.videoUrl !== null && node.videoUrl !== "") {
+        if (typeof node.videoUrl !== "string") {
+          errors.push({ row: lessonNumber, message: "Video URL must be a Vimeo URL." });
+          return;
+        }
+        videoUrl = extractVimeoUrl(node.videoUrl);
+        if (!videoUrl) {
+          errors.push({ row: lessonNumber, message: "Video URL must be a valid Vimeo URL." });
+          return;
+        }
+      }
+
+      rows.push({ externalId: `cf-lesson-${cfId}`, title, videoUrl });
+    };
+
+    nodes.forEach(visit);
+    if (rows.length > 500) {
+      errors.push({ row: 0, message: "Select no more than 500 lessons per import." });
+    }
+    return { rows, errors };
+  }
+
   /** Recursively import a module node and its children into the DB (idempotent via externalId). */
   async function importModuleNode(
     node: CfTreeNode,
@@ -2215,20 +2303,58 @@ export async function registerRoutes(
   /**
    * Execute the import.
    * Body: { cfCourseTitle, filteredTree, destination, promote }
-   * Response: { created, updated, wrappedLessons, courseId, courseName }
+   * Response: course result or { destination:"training-library", replayCount, ... }
    */
   app.post("/api/admin/cf/import/execute", requireAdmin, async (req: Request, res: Response) => {
     const adminUser = (req as any).adminUser;
     try {
-      const { cfCourseTitle, filteredTree, destination, promote } = req.body as {
+       const { cfCourseId, cfCourseTitle, filteredTree, destination, promote } = req.body as {
+         cfCourseId: string;
         cfCourseTitle: string;
         filteredTree: CfTreeNode[];
-        destination: { type: "new" | "existing"; title?: string; existingCourseId?: string };
+         destination: { type: "new" | "existing" | "training-library"; title?: string; existingCourseId?: string };
         promote: boolean;
       };
 
       if (!Array.isArray(filteredTree)) return res.status(400).json({ message: "filteredTree is required" });
       if (!destination?.type) return res.status(400).json({ message: "destination.type is required" });
+      if (!["new", "existing", "training-library"].includes(destination.type)) {
+        return res.status(400).json({ message: "Unsupported import destination." });
+      }
+
+      if (destination.type === "training-library") {
+        const { rows, errors } = collectTrainingReplayRows(filteredTree);
+        if (errors.length > 0) {
+          return res.status(400).json({
+            message: "The selected lessons could not be imported. Fix the reported rows and try again.",
+            errors,
+          });
+        }
+        if (rows.length === 0) {
+          return res.status(400).json({ message: "Select at least one lesson to import into the training library." });
+        }
+
+        // The storage method validates and writes the complete batch in one
+        // transaction. A failed row therefore cannot leave a partial archive.
+        const importResult = await storage.importTrainingReplays(rows);
+        await storage.createAuditLog({
+          adminUserId: adminUser.id,
+          action: "cf_training_replay_import",
+          metadataJson: {
+            sourceCourseId: typeof cfCourseId === "string" ? cfCourseId : null,
+            replayCount: rows.length,
+            ...importResult,
+          } as any,
+          ip: req.ip || null,
+          userAgent: req.get("user-agent") || null,
+        });
+        return res.json({
+          destination: "training-library",
+          ...importResult,
+          replayCount: rows.length,
+          message: `Imported ${rows.length} replay${rows.length === 1 ? "" : "s"} as drafts.`,
+        });
+      }
 
       // Apply promotion: lift single root module's children up one level
       let importRoots: CfTreeNode[] = filteredTree;
@@ -2303,7 +2429,7 @@ export async function registerRoutes(
         userAgent: req.get("user-agent") || null,
       });
 
-      res.json({ ...importResult, courseId: targetCourseId, courseName });
+       res.json({ destination: "course", ...importResult, courseId: targetCourseId, courseName });
     } catch (err: any) {
       console.error("[CF Import] execute:", err?.message);
       res.status(500).json({ message: err?.message ?? "Import failed" });

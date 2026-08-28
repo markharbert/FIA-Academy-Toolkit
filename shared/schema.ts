@@ -2313,6 +2313,7 @@ export const trainingReplays = pgTable("training_replays", {
   updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (t) => ({
   statusOrderIdx: index("idx_training_replays_status_order").on(t.status, t.sortOrder),
+  externalIdUnique: unique("training_replays_external_id_unique").on(t.externalId),
 }));
 export type TrainingReplay = typeof trainingReplays.$inferSelect;
 export type InsertTrainingReplay = typeof trainingReplays.$inferInsert;

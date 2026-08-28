@@ -77,14 +77,21 @@ interface FinalTreeNode extends CfTreeNode {
 }
 
 interface ImportResult {
+  destination: "course" | "training-library";
   created: number;
   updated: number;
   wrappedLessons: number;
-  courseId: string;
-  courseName: string;
+  courseId?: string;
+  courseName?: string;
+  replayCount?: number;
   videosImported: number;
   videosSkipped: number;
   videosUnavailable: number;
+}
+
+interface ImportError {
+  row: number;
+  message: string;
 }
 
 // ─── Tree helpers ─────────────────────────────────────────────────────────────
@@ -466,12 +473,13 @@ export function CourseImportCard() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [destination, setDestination] = useState({
-    type: "new" as "new" | "existing",
+    type: "new" as "new" | "existing" | "training-library",
     title: "",
     existingCourseId: "",
     promote: false,
   });
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [importErrors, setImportErrors] = useState<ImportError[]>([]);
   const [customCourseId, setCustomCourseId] = useState("");
 
   // Fetch existing courses for the "add to existing" picker
@@ -609,6 +617,7 @@ export function CourseImportCard() {
   const runImport = useCallback(
     async (tree: CfTreeNode[]) => {
       setStep("importing");
+      setImportErrors([]);
       try {
         const res = await fetch("/api/admin/cf/import/execute", {
           method: "POST",
@@ -616,6 +625,7 @@ export function CourseImportCard() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             cfCourseTitle: structure?.cfCourseTitle ?? "",
+            cfCourseId: structure?.cfCourseId ?? "",
             filteredTree: tree,
             destination: {
               type: destination.type,
@@ -627,7 +637,15 @@ export function CourseImportCard() {
           }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.message ?? "Import failed");
+        if (!res.ok) {
+          const details = Array.isArray(data.errors)
+            ? data.errors
+              .map((error: ImportError) => `${error.row > 0 ? `Row ${error.row}: ` : ""}${error.message}`)
+              .join(" ")
+            : "";
+          setImportErrors(Array.isArray(data.errors) ? data.errors : []);
+          throw new Error([data.message ?? "Import failed", details].filter(Boolean).join(" "));
+        }
         setImportResult(data);
         setStep("done");
       } catch (err: any) {
@@ -651,6 +669,7 @@ export function CourseImportCard() {
     setSelectedIds(new Set());
     setExpanded(new Set());
     setImportResult(null);
+    setImportErrors([]);
     setDestination({
       type: "new",
       title: "",
@@ -689,11 +708,11 @@ export function CourseImportCard() {
       <CardHeader className="pt-4 pb-3">
         <CardTitle className="text-base flex items-center gap-2">
           <BookOpen className="h-4 w-4 text-violet-500" />
-          Course Import
+          ClickFunnels Import
         </CardTitle>
         <CardDescription>
-          Browse your ClickFunnels courses and selectively import sections and
-          lessons into the academy.
+          Browse your ClickFunnels course and selectively import sections and
+          lessons into either a course or the standalone training library.
         </CardDescription>
       </CardHeader>
 
@@ -914,8 +933,28 @@ export function CourseImportCard() {
           <div className="space-y-4">
             <p className="text-sm font-semibold">Where should the content go?</p>
 
-            {/* New vs Existing */}
+            {/* Training library or course destination */}
             <div className="space-y-2.5">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="radio"
+                  name="destType"
+                  value="training-library"
+                  checked={destination.type === "training-library"}
+                  onChange={() =>
+                    setDestination((p) => ({ ...p, type: "training-library", promote: false }))
+                  }
+                  className="mt-0.5 accent-violet-600"
+                />
+                <div className="flex-1 space-y-1">
+                  <span className="text-sm font-medium">Import into training library</span>
+                  <p className="text-xs text-muted-foreground">
+                    Each selected lesson becomes a standalone draft replay, in the
+                    same order as the ClickFunnels course.
+                  </p>
+                </div>
+              </label>
+
               <label className="flex items-start gap-3 cursor-pointer">
                 <input
                   type="radio"
@@ -983,7 +1022,7 @@ export function CourseImportCard() {
             </div>
 
             {/* Promote toggle (only when selection is a single root module) */}
-            {canPromote && (
+            {canPromote && destination.type !== "training-library" && (
               <div className="flex items-start gap-2.5 p-2.5 rounded-md border bg-muted/30">
                 <Checkbox
                   id="promote-toggle"
@@ -1036,22 +1075,50 @@ export function CourseImportCard() {
         {/* preview */}
         {step === "preview" && (
           <div className="space-y-3">
+            {importErrors.length > 0 && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+                <p className="font-semibold">Import was not applied</p>
+                <p className="mt-1">
+                  Fix these source rows and try again. No replay records were changed.
+                </p>
+                <ul className="mt-2 list-disc space-y-1 pl-4">
+                  {importErrors.map((error, index) => (
+                    <li key={`${error.row}-${index}`}>
+                      {error.row > 0 ? `Row ${error.row}: ` : ""}{error.message}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div>
               <p className="text-sm font-semibold">Ready to import</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                <span className="font-medium text-foreground">
-                  {finalCounts.modules}
-                </span>{" "}
-                module{finalCounts.modules !== 1 ? "s" : ""} ·{" "}
-                <span className="font-medium text-foreground">
-                  {finalCounts.lessons}
-                </span>{" "}
-                lesson{finalCounts.lessons !== 1 ? "s" : ""} ·{" "}
+                 {destination.type === "training-library" ? (
+                   <>
+                     <span className="font-medium text-foreground">
+                       {finalCounts.lessons}
+                     </span>{" "}
+                     replay{finalCounts.lessons !== 1 ? "s" : ""} ·{" "}
+                   </>
+                 ) : (
+                   <>
+                     <span className="font-medium text-foreground">
+                       {finalCounts.modules}
+                     </span>{" "}
+                     module{finalCounts.modules !== 1 ? "s" : ""} ·{" "}
+                     <span className="font-medium text-foreground">
+                       {finalCounts.lessons}
+                     </span>{" "}
+                     lesson{finalCounts.lessons !== 1 ? "s" : ""} ·{" "}
+                   </>
+                 )}
                 <span className="font-medium text-foreground">
                   {selectedVideoCounts.found}
                 </span>{" "}
                 Vimeo video{selectedVideoCounts.found !== 1 ? "s" : ""} ready
-                {destination.type === "new"
+                 {destination.type === "training-library"
+                   ? " → training library (drafts)"
+                   : destination.type === "new"
                   ? ` → new course "${destination.title}"`
                   : " → existing course"}
               </p>
@@ -1133,10 +1200,20 @@ export function CourseImportCard() {
                     </>
                   )}
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  Course:{" "}
-                  <span className="font-medium">{importResult.courseName}</span>
-                </p>
+                 <p className="text-xs text-muted-foreground">
+                   {importResult.destination === "training-library" ? (
+                     <>
+                       Destination:{" "}
+                       <span className="font-medium">Training library</span>
+                       {" · Imported as drafts for review"}
+                     </>
+                   ) : (
+                     <>
+                       Course:{" "}
+                       <span className="font-medium">{importResult.courseName}</span>
+                     </>
+                   )}
+                 </p>
                 <p className="text-xs text-muted-foreground">
                   Vimeo videos:{" "}
                   <span className="font-medium">{importResult.videosImported}</span> imported
@@ -1165,14 +1242,17 @@ export function CourseImportCard() {
                 <RotateCcw className="h-3.5 w-3.5" />
                 Import Another
               </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                asChild
-              >
-                <a href={`/admin/courses`} className="gap-1.5 flex items-center">
+               <Button size="sm" variant="secondary" asChild>
+                 <a
+                   href={importResult.destination === "training-library"
+                     ? "/admin/training-library"
+                     : "/admin/courses"}
+                   className="gap-1.5 flex items-center"
+                 >
                   <ExternalLink className="h-3.5 w-3.5" />
-                  Open in Courses
+                   {importResult.destination === "training-library"
+                     ? "Open Training Library"
+                     : "Open in Courses"}
                 </a>
               </Button>
             </div>
