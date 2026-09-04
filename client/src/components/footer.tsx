@@ -1,5 +1,3 @@
-import logoUrl from "@assets/image_1788559097620.png";
-
 export function Footer() {
   const year = new Date().getFullYear();
   return (
@@ -8,15 +6,9 @@ export function Footer() {
       data-testid="site-footer"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <img
-            src={logoUrl}
-            alt="Academy Toolkit"
-            className="h-8 w-auto"
-            data-testid="img-footer-logo"
-          />
+        <div>
           <span className="text-xs text-white tabular-nums">
-            © {year} Academy Toolkit
+            © {year} Fearless Influencer Academy
           </span>
         </div>
         <nav className="flex items-center gap-5 text-sm">
