@@ -3,10 +3,14 @@ import jwt from "jsonwebtoken";
 import { storage } from "./storage";
 import { sendAccessRestoredEmail, isEmailConfigured } from "./email";
 
-// Strip any accidental protocol prefix and trailing slash
-const CF_WORKSPACE_DOMAIN = (process.env.CF_WORKSPACE_DOMAIN || "")
+// Strip any accidental protocol prefix and trailing slash.
+const normalizeCfDomain = (value: string) => value
   .replace(/^https?:\/\//, "")
   .replace(/\/$/, "");
+const CF_WORKSPACE_DOMAIN = normalizeCfDomain(process.env.CF_WORKSPACE_DOMAIN || "");
+const CF_SSO_DOMAIN = normalizeCfDomain(
+  process.env.CF_SSO_DOMAIN || process.env.CF_WORKSPACE_DOMAIN || "",
+);
 const CF_COURSE_ID = process.env.CF_COURSE_ID || "";
 const CF_API_TOKEN = process.env.CF_API_TOKEN || "";
 const CF_WEBHOOK_SECRET = process.env.CF_WEBHOOK_SECRET || "";
@@ -102,9 +106,9 @@ export function verifyCfWebhookSignature(
 // Generate a signed JWT magic link so a user can jump from our app into CF
 export function generateCfSsoUrl(email: string, redirectTo?: string): string {
   const secret = CF_SSO_JWT_SECRET;
-  const domain = CF_WORKSPACE_DOMAIN;
+  const domain = CF_SSO_DOMAIN;
   if (!secret || !domain) {
-    throw new Error("CF_WORKSPACE_DOMAIN and CF_SSO_JWT_SECRET must be set");
+    throw new Error("CF_SSO_DOMAIN and CF_SSO_JWT_SECRET must be set");
   }
 
   const defaultRedirect = `https://${domain}/courses`;
@@ -128,7 +132,6 @@ export function generateCfSsoUrl(email: string, redirectTo?: string): string {
 
   const token = jwt.sign(payload, secret, {
     algorithm: "HS256",
-    noTimestamp: true,
   });
 
   return (
@@ -547,4 +550,4 @@ export async function getAllCfEnrollments(): Promise<CfEnrollmentRecord[]> {
 // all account types).
 const CF_WORKSPACE_ID = process.env.CF_WORKSPACE_ID || "";
 
-export { CF_WORKSPACE_DOMAIN, CF_COURSE_ID, CF_API_TOKEN, CF_WORKSPACE_ID };
+export { CF_WORKSPACE_DOMAIN, CF_SSO_DOMAIN, CF_COURSE_ID, CF_API_TOKEN, CF_WORKSPACE_ID };

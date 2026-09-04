@@ -45,6 +45,7 @@ import {
   checkCfEnrollmentByEmail,
   getCfCommercialSnapshot,
   CF_WORKSPACE_DOMAIN,
+  CF_SSO_DOMAIN,
   CF_API_TOKEN,
   CF_COURSE_ID,
   type CfContactInfo,
@@ -1464,7 +1465,7 @@ export async function registerRoutes(
   // Generate a CF SSO magic link for the currently logged-in user
   app.get("/api/clickfunnels/sso-url", requireAuth, async (req: Request, res: Response) => {
     try {
-      if (!CF_WORKSPACE_DOMAIN) {
+      if (!CF_SSO_DOMAIN) {
         return res.status(503).json({ message: "ClickFunnels not configured" });
       }
       const user = await storage.getUser(req.session.userId!);
@@ -1484,7 +1485,7 @@ export async function registerRoutes(
   // ClickFunnels remains responsible for deciding which courses the contact can access.
   app.get("/api/clickfunnels/access-courses", requireAuth, async (req: Request, res: Response) => {
     try {
-      if (!CF_WORKSPACE_DOMAIN) {
+      if (!CF_SSO_DOMAIN) {
         return res.status(503).send("ClickFunnels is not configured.");
       }
       const user = await storage.getUser(req.session.userId!);
