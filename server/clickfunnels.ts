@@ -115,7 +115,7 @@ export function generateCfSsoUrl(email: string, redirectTo?: string): string {
     throw new Error("CF_SSO_DOMAIN and CF_SSO_JWT_SECRET must be set");
   }
 
-  const defaultRedirect = `https://${domain}/courses`;
+  const defaultRedirect = `https://${domain}/customer-center`;
   let safeRedirect = defaultRedirect;
   if (redirectTo) {
     const requestedRedirect = new URL(redirectTo);
