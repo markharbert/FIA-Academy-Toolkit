@@ -5,6 +5,7 @@ import { sendAccessRestoredEmail, isEmailConfigured } from "./email";
 
 // Strip any accidental protocol prefix and trailing slash.
 const normalizeCfDomain = (value: string) => value
+  .trim()
   .replace(/^https?:\/\//, "")
   .replace(/\/$/, "");
 const CF_WORKSPACE_DOMAIN = normalizeCfDomain(process.env.CF_WORKSPACE_DOMAIN || "");
@@ -14,7 +15,10 @@ const CF_SSO_DOMAIN = normalizeCfDomain(
 const CF_COURSE_ID = process.env.CF_COURSE_ID || "";
 const CF_API_TOKEN = process.env.CF_API_TOKEN || "";
 const CF_WEBHOOK_SECRET = process.env.CF_WEBHOOK_SECRET || "";
-const CF_SSO_JWT_SECRET = process.env.CF_SSO_JWT_SECRET || "";
+// Secrets copied from the ClickFunnels settings UI can include an invisible
+// trailing newline. HMAC signing is byte-exact, so normalize surrounding
+// whitespace before creating Customer Center SSO tokens.
+const CF_SSO_JWT_SECRET = (process.env.CF_SSO_JWT_SECRET || "").trim();
 
 export interface CfCommercialSnapshot {
   syncedAt: Date;
