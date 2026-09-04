@@ -321,9 +321,7 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader
-        className={`flex items-center justify-start border-b ${
-          state === "collapsed" ? "min-h-24 overflow-visible" : ""
-        }`}
+        className="flex items-center justify-start border-b"
         style={{ borderColor: "hsl(230 60% 16%)", background: "linear-gradient(180deg, hsl(230 75% 14%) 0%, hsl(230 75% 10%) 100%)" }}
       >
         <SidebarMenu>
@@ -334,7 +332,7 @@ export function AppSidebar() {
               data-testid="link-logo"
               className={
                 state === "collapsed"
-                  ? "flex min-h-20 items-center justify-center overflow-visible"
+                  ? "flex items-center justify-center overflow-visible"
                   : "flex items-center justify-start overflow-visible"
               }
             >
@@ -342,7 +340,7 @@ export function AppSidebar() {
                 <img
                   src="/lion-logo.png"
                   alt="Fearless Influencer Academy"
-                  className="h-20 w-20 object-contain"
+                  className="h-10 w-10 object-contain"
                   data-testid="img-logo-collapsed"
                 />
               ) : (
