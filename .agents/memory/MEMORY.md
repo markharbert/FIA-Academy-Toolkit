@@ -21,5 +21,6 @@
 - [Email asset runtime paths](email-asset-runtime-paths.md) — server helpers must support ESM development without `__dirname` and compiled production output.
 - [ClickFunnels webhook activity](cf-webhook-activity.md) — store verified inbound event outcomes for 90 days; never retain raw payloads or secrets.
 - [ClickFunnels membership authority](clickfunnels-membership-authority.md) — ClickFunnels controls access immediately; retain local profiles and revocation history.
+- [ClickFunnels course login handoff](clickfunnels-course-login-handoff.md) — this site is the login hub; authenticated members enter the CF customer course area through SSO.
 - [Member engagement analytics](member-engagement-analytics.md) — measure unique member adoption separately from access, without retaining private feature content.
 - [Member health and commercial reporting](member-health-commercial-reporting.md) — health is explainable; commercial sync is manual, read-only, and stores minimal metadata.
