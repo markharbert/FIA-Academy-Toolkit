@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import DOMPurify from "dompurify";
+import logoImage from "@assets/image_1788559097620.png";
 
 const SNIPPET_ALLOWED_TAGS = [
   "p","br","strong","em","b","i","u","s","del","ins","mark",
@@ -241,7 +242,7 @@ export default function SwipeSharePage() {
         className="px-4 py-3 flex items-center gap-3 shadow-md"
         style={{ background: "hsl(228,45%,14%)" }}
       >
-        {/* Lion logo — links to affiliate URL */}
+        {/* Academy logo — links to affiliate URL */}
         <a
           href={item.fiaAffiliateLink || "https://www.fearlessinfluencer.com"}
           target="_blank"
@@ -250,9 +251,9 @@ export default function SwipeSharePage() {
           title="Fearless Influencer Academy"
         >
           <img
-            src="/lion-logo.png"
+            src={logoImage}
             alt="Fearless Influencer Academy"
-            className="h-9 w-9 object-contain"
+            className="h-9 w-auto max-w-[180px] object-contain"
           />
         </a>
 

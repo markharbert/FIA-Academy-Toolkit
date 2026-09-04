@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Loader2, Users, AlertCircle, CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
+import logoImage from "@assets/image_1788559097620.png";
 
 interface InviteInfo {
   ownerName: string;

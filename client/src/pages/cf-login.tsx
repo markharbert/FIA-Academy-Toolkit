@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
+import logoImage from "@assets/image_1788559097620.png";
 import { apiRequest } from "@/lib/queryClient";
 
 type Stage = "verifying" | "success" | "error";

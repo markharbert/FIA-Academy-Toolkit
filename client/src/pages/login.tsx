@@ -6,7 +6,7 @@ import { loginSchema, type LoginInput } from "@shared/schema";
 import { useAuth } from "@/lib/auth";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Loader2, AlertTriangle, Info } from "lucide-react";
-import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
+import logoImage from "@assets/image_1788559097620.png";
 
 const SUPPORT_EMAIL = "support@markharbert.com";
 

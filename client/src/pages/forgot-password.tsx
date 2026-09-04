@@ -8,7 +8,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
-import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
+import logoImage from "@assets/image_1788559097620.png";
 
 const forgotPasswordSchema = z.object({
   email: z.string().email("Please enter a valid email address"),

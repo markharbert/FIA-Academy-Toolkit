@@ -1,6 +1,6 @@
 import { useLocation } from "wouter";
 import { Home, SearchX } from "lucide-react";
-import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
+import logoImage from "@assets/image_1788559097620.png";
 
 export default function NotFound() {
   const [, navigate] = useLocation();

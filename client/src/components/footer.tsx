@@ -1,4 +1,4 @@
-import logoUrl from "@assets/academy_toolkit_logo_1776551500119.png";
+import logoUrl from "@assets/image_1788559097620.png";
 
 export function Footer() {
   const year = new Date().getFullYear();

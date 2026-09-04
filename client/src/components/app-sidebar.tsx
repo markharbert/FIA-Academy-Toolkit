@@ -40,8 +40,7 @@ import {
   Circle,
   LayoutList,
 } from "lucide-react";
-import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
-import lionLogo from "@assets/FI_Lion_Logo_(2)_1777779197459.png";
+import logoImage from "@assets/image_1788559097620.png";
 import cfLogo from "@/assets/cf-logo.png";
 import { CourseIcon } from "@/lib/course-icons";
 import { trainingCoursePath, trainingLessonPath } from "@shared/training-url";
@@ -339,7 +338,7 @@ export function AppSidebar() {
             >
               {state === "collapsed" ? (
                 <img
-                  src={lionLogo}
+                  src={logoImage}
                   alt="Academy Toolkit"
                   className="h-10 w-auto object-contain"
                   data-testid="img-logo-collapsed"

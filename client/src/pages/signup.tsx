@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { Loader2, Mail } from "lucide-react";
 import { SiGoogle } from "react-icons/si";
-import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
+import logoImage from "@assets/image_1788559097620.png";
 
 const signupFormSchema = z.object({
   firstName: z.string().optional(),
