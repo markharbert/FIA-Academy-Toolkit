@@ -340,7 +340,7 @@ export function AppSidebar() {
                 <img
                   src="/lion-logo.png"
                   alt="Fearless Influencer Academy"
-                  className="h-10 w-10 object-contain"
+                  className="h-12 w-12 object-contain"
                   data-testid="img-logo-collapsed"
                 />
               ) : (
