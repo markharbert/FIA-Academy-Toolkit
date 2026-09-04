@@ -338,9 +338,9 @@ export function AppSidebar() {
             >
               {state === "collapsed" ? (
                 <img
-                  src={logoImage}
-                  alt="Academy Toolkit"
-                  className="h-10 w-auto object-contain"
+                  src="/lion-logo.png"
+                  alt="Fearless Influencer Academy"
+                  className="h-10 w-10 object-contain"
                   data-testid="img-logo-collapsed"
                 />
               ) : (
