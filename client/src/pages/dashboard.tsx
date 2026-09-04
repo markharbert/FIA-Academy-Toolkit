@@ -876,9 +876,11 @@ export default function DashboardPage() {
               Your private marketing command center.
             </p>
             </div>
-            <DashboardHeaderErrorBoundary>
-              <DashboardNextEventWidget timezone={user?.timezone || "America/New_York"} />
-            </DashboardHeaderErrorBoundary>
+            {user?.isAdmin && (
+              <DashboardHeaderErrorBoundary>
+                <DashboardNextEventWidget timezone={user.timezone || "America/New_York"} />
+              </DashboardHeaderErrorBoundary>
+            )}
           </div>
         </div>
       </div>
