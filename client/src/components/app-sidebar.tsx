@@ -304,18 +304,6 @@ export function AppSidebar() {
     setLocation("/");
   };
 
-  const handleGoToClickFunnels = async () => {
-    try {
-      const res = await fetch("/api/clickfunnels/sso-url", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed");
-      const data = await res.json();
-      window.open(data.url, "_blank", "noopener,noreferrer");
-    } catch {
-      const domain = window.location.hostname;
-      window.open(`https://${domain}`, "_blank", "noopener,noreferrer");
-    }
-  };
-
   if (!user) return null;
 
   return (

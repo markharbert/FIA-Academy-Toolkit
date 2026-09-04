@@ -10,6 +10,7 @@ const CF_WORKSPACE_DOMAIN = (process.env.CF_WORKSPACE_DOMAIN || "")
 const CF_COURSE_ID = process.env.CF_COURSE_ID || "";
 const CF_API_TOKEN = process.env.CF_API_TOKEN || "";
 const CF_WEBHOOK_SECRET = process.env.CF_WEBHOOK_SECRET || "";
+const CF_SSO_JWT_SECRET = process.env.CF_SSO_JWT_SECRET || "";
 
 export interface CfCommercialSnapshot {
   syncedAt: Date;
@@ -100,10 +101,20 @@ export function verifyCfWebhookSignature(
 
 // Generate a signed JWT magic link so a user can jump from our app into CF
 export function generateCfSsoUrl(email: string, redirectTo?: string): string {
-  const secret = CF_WEBHOOK_SECRET;
+  const secret = CF_SSO_JWT_SECRET;
   const domain = CF_WORKSPACE_DOMAIN;
   if (!secret || !domain) {
-    throw new Error("CF_WORKSPACE_DOMAIN and CF_WEBHOOK_SECRET must be set");
+    throw new Error("CF_WORKSPACE_DOMAIN and CF_SSO_JWT_SECRET must be set");
+  }
+
+  const defaultRedirect = `https://${domain}/courses`;
+  let safeRedirect = defaultRedirect;
+  if (redirectTo) {
+    const requestedRedirect = new URL(redirectTo);
+    if (requestedRedirect.protocol !== "https:" || requestedRedirect.hostname !== domain) {
+      throw new Error("ClickFunnels SSO redirect must use the configured workspace domain");
+    }
+    safeRedirect = requestedRedirect.toString();
   }
 
   const now = Math.floor(Date.now() / 1000);
@@ -112,7 +123,7 @@ export function generateCfSsoUrl(email: string, redirectTo?: string): string {
     nbf: now,
     exp: now + 3600,
     iat: now,
-    redirect_to: redirectTo || `https://${domain}/courses`,
+    redirect_to: safeRedirect,
   };
 
   const token = jwt.sign(payload, secret, {

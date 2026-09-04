@@ -1471,18 +1471,30 @@ export async function registerRoutes(
       if (!user?.email) {
         return res.status(400).json({ message: "No email on account" });
       }
-      // Only active CF members (or admins) may mint SSO URLs.
-      // A revoked or never-enrolled non-admin should not receive a signed CF token.
-      if (!user.isAdmin && user.cfEnrolled !== true) {
-        console.warn(`[CF SSO] Denied SSO URL for non-enrolled user ${user.id}`);
-        return res.status(403).json({ message: "Active ClickFunnels membership required" });
-      }
       const redirectTo = (req.query.redirect as string) || undefined;
       const url = generateCfSsoUrl(user.email, redirectTo);
       res.json({ url });
     } catch (err) {
       console.error("[CF SSO] Error:", err);
       res.status(500).json({ message: "Failed to generate SSO link" });
+    }
+  });
+
+  // One-click handoff from the Toolkit into the ClickFunnels customer course area.
+  // ClickFunnels remains responsible for deciding which courses the contact can access.
+  app.get("/api/clickfunnels/access-courses", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!CF_WORKSPACE_DOMAIN) {
+        return res.status(503).send("ClickFunnels is not configured.");
+      }
+      const user = await storage.getUser(req.session.userId!);
+      if (!user?.email) {
+        return res.status(400).send("No email is associated with this account.");
+      }
+      res.redirect(302, generateCfSsoUrl(user.email));
+    } catch (err) {
+      console.error("[CF SSO] Course access redirect error:", err);
+      res.status(500).send("Course login is temporarily unavailable.");
     }
   });
 

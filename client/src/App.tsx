@@ -442,14 +442,14 @@ function AppLayout() {
             <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4 bg-[hsl(230,45%,14%)] border-[hsl(230,45%,19%)]">
               <SidebarTrigger className="-ml-1 text-white hover:bg-white/10 hover:text-white" data-testid="button-sidebar-toggle" />
               <a
-                href="https://www.fearlessmarketinglab.com/courses/fearless-influencer-academy"
+                href="/api/clickfunnels/access-courses"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="ml-auto inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-white/90 hover:text-white hover:bg-white/10 transition-colors"
-                data-testid="link-back-to-members-area"
+                data-testid="link-access-my-courses"
               >
                 <ExternalLink className="h-4 w-4" />
-                <span>Back to Members Area</span>
+                <span>Access My Courses</span>
               </a>
             </header>
             <ImpersonationBanner />
