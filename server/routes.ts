@@ -14590,7 +14590,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       text: text.slice(Math.max(0, offset - 100), Math.min(text.length, offset + query.length + 160)).replace(/\s+/g, " ").trim(),
     }];
   }
-  app.get(["/api/training/library", "/api/training/replays"], requireAuth, async (req, res) => {
+  app.get(["/api/training/library", "/api/training/replays"], requireAdmin, async (req, res) => {
     const parsed = z.object({
       q: z.string().trim().max(200).optional(),
       category: z.string().trim().max(200).optional(),
@@ -14622,7 +14622,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       });
     } catch { res.status(500).json({ message: "Failed to load replays" }); }
   });
-  app.get(["/api/training/library/:slug", "/api/training/replays/:slug"], requireAuth, async (req, res) => {
+  app.get(["/api/training/library/:slug", "/api/training/replays/:slug"], requireAdmin, async (req, res) => {
     try {
       const replay = await storage.getPublishedTrainingReplayBySlug(req.params.slug);
       if (!replay) return res.status(404).json({ message: "Not found" });
@@ -14640,9 +14640,8 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     });
   });
 
-  // The dashboard can show the next session to any authenticated member
-  // without exposing the admin-only schedule or its full event list.
-  app.get("/api/training/schedule/upcoming", requireAuth, async (_req, res) => {
+  // Training schedule data is admin-only until the public rollout.
+  app.get("/api/training/schedule/upcoming", requireAdmin, async (_req, res) => {
     res.set("Cache-Control", "no-store, no-cache, must-revalidate");
     try {
       const startDate = new Date();

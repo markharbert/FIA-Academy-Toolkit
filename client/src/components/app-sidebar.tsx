@@ -413,30 +413,6 @@ export function AppSidebar() {
             <SidebarSeparator />
           </>
         )}
-        {!isCollaborator && !user?.isAdmin && (
-          <>
-            <SidebarGroup>
-              <SidebarGroupLabel>Training</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      isActive={location.startsWith("/training/library")}
-                      tooltip="Training Library"
-                      onClick={() => setLocation("/training/library")}
-                      data-testid="nav-training-library"
-                    >
-                      <BookMarked className={location.startsWith("/training/library") ? undefined : "text-violet-400"} />
-                      <span>Training Library</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-            <SidebarSeparator />
-          </>
-        )}
-
         <SidebarGroup>
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>

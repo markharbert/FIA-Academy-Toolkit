@@ -376,10 +376,10 @@ function ProtectedRoutes() {
         {() => <AdminRoute component={TrainingSchedulePage} />}
       </Route>
       <Route path="/training/library/:slug">
-        {() => <ProtectedRoute component={TrainingReplayPage} />}
+        {() => <AdminRoute component={TrainingReplayPage} />}
       </Route>
       <Route path="/training/library">
-        {() => <ProtectedRoute component={TrainingLibraryPage} />}
+        {() => <AdminRoute component={TrainingLibraryPage} />}
       </Route>
       <Route path="/training/:courseSlug/:moduleSlug/:lessonSlug">
         {() => <AdminRoute component={TrainingLessonPage} />}
