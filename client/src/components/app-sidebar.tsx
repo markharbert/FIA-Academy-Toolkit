@@ -21,6 +21,14 @@ import {
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   LayoutDashboard,
   PlayCircle,
   Mail,
@@ -257,7 +265,7 @@ function isGroupActive(item: NavItem, location: string): boolean {
 export function AppSidebar() {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
-  const { state } = useSidebar();
+  const { state, isMobile } = useSidebar();
   const isCollaborator = !!user?.isCollaborator;
   const navItems = isCollaborator
     ? allNavItems.filter((item) => item.collaboratorVisible)
@@ -390,37 +398,6 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarSeparator />
-        <SidebarGroup>
-          <SidebarGroupLabel>HELP &amp; SUPPORT</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  isActive={location.startsWith("/help")}
-                  tooltip="Help Docs"
-                  onClick={() => setLocation("/help")}
-                  data-testid="nav-help"
-                >
-                  <BookOpen className={location.startsWith("/help") ? undefined : "text-slate-400"} />
-                  <span>Help Docs</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  isActive={location.startsWith("/feedback")}
-                  tooltip="Report a Bug / Request a Feature"
-                  onClick={() => setLocation("/feedback")}
-                  data-testid="nav-feedback"
-                >
-                  <MessageSquarePlus className={location.startsWith("/feedback") ? undefined : "text-slate-400"} />
-                  <span>Bug / Feature Requests</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
         {user.isAdmin && (
           <>
             <SidebarSeparator />
@@ -490,36 +467,101 @@ export function AppSidebar() {
             </SidebarMenuItem>
           )}
           <SidebarMenuItem>
-            <SidebarMenuButton
-              onClick={() => setLocation("/account")}
-              tooltip="Account Settings"
-              data-testid="link-account"
-            >
-              <Avatar className="h-5 w-5">
-                {user.gravatarUrl && (
-                  <AvatarImage
-                    src={user.gravatarUrl}
-                    alt={user.displayName || user.email || "User"}
-                  />
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label="Open account menu"
+                className={cn(
+                  "group/account-menu flex h-12 w-full items-center gap-2 overflow-hidden rounded-lg border border-white/5 bg-white/[0.03] p-2 text-left outline-none transition-colors hover:bg-white/[0.08] focus-visible:ring-2 focus-visible:ring-sidebar-ring data-[state=open]:border-white/10 data-[state=open]:bg-white/[0.1]",
+                  state === "collapsed" && "h-8 w-8 justify-center p-0",
                 )}
-                <AvatarFallback>
-                  <User className="h-3 w-3" />
-                </AvatarFallback>
-              </Avatar>
-              <span className="truncate">
-                {user.displayName || user.email?.split("@")[0] || "Account"}
-              </span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              onClick={handleLogout}
-              tooltip="Log out"
-              data-testid="button-logout"
-            >
-              <LogOut className="text-slate-400" />
-              <span>Log out</span>
-            </SidebarMenuButton>
+                data-testid="button-account-menu"
+              >
+                <Avatar className={cn("h-8 w-8 shrink-0 rounded-lg", state === "collapsed" && "h-7 w-7")}>
+                  {user.gravatarUrl && (
+                    <AvatarImage
+                      src={user.gravatarUrl}
+                      alt={user.displayName || user.email || "User"}
+                    />
+                  )}
+                  <AvatarFallback className="rounded-lg bg-violet-500/20 text-violet-200">
+                    <User className="h-4 w-4" />
+                  </AvatarFallback>
+                </Avatar>
+                {state !== "collapsed" && (
+                  <>
+                  <div className="grid min-w-0 flex-1 text-left leading-tight">
+                    <span className="truncate text-sm font-semibold text-white">
+                      {user.displayName || user.email?.split("@")[0] || "Account"}
+                    </span>
+                    <span className="truncate text-[11px] text-white/45">
+                      {user.email}
+                    </span>
+                  </div>
+                  <ChevronRight className="ml-auto h-4 w-4 text-white/40 transition-transform group-data-[state=open]/account-menu:rotate-90" />
+                  </>
+                )}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                side={isMobile ? "top" : "right"}
+                align="end"
+                sideOffset={8}
+                className="w-64 rounded-xl border-white/10 bg-[hsl(230,55%,12%)] p-2 text-white shadow-2xl"
+              >
+                <DropdownMenuLabel className="flex items-center gap-3 px-2 py-2 font-normal">
+                  <Avatar className="h-9 w-9 rounded-lg">
+                    {user.gravatarUrl && (
+                      <AvatarImage
+                        src={user.gravatarUrl}
+                        alt={user.displayName || user.email || "User"}
+                      />
+                    )}
+                    <AvatarFallback className="rounded-lg bg-violet-500/20 text-violet-200">
+                      <User className="h-4 w-4" />
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="grid min-w-0 flex-1 leading-tight">
+                    <span className="truncate text-sm font-semibold">
+                      {user.displayName || user.email?.split("@")[0] || "Account"}
+                    </span>
+                    <span className="truncate text-xs text-white/50">{user.email}</span>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator className="bg-white/10" />
+                <DropdownMenuItem
+                  onSelect={() => setLocation("/account")}
+                  className="cursor-pointer rounded-lg px-3 py-2.5 text-white/75 focus:bg-white/10 focus:text-white"
+                  data-testid="link-account"
+                >
+                  <User className="text-sky-300" />
+                  <span>Account Settings</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => setLocation("/help")}
+                  className="cursor-pointer rounded-lg px-3 py-2.5 text-white/75 focus:bg-white/10 focus:text-white"
+                  data-testid="nav-help"
+                >
+                  <BookOpen className="text-emerald-300" />
+                  <span>Help Docs</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => setLocation("/feedback")}
+                  className="cursor-pointer rounded-lg px-3 py-2.5 text-white/75 focus:bg-white/10 focus:text-white"
+                  data-testid="nav-feedback"
+                >
+                  <MessageSquarePlus className="text-amber-300" />
+                  <span>Bug / Feature Requests</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="bg-white/10" />
+                <DropdownMenuItem
+                  onSelect={handleLogout}
+                  className="cursor-pointer rounded-lg px-3 py-2.5 text-red-300 focus:bg-red-500/15 focus:text-red-200"
+                  data-testid="button-logout"
+                >
+                  <LogOut />
+                  <span>Log Out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
