@@ -38,7 +38,7 @@ export function TrainingTopNav() {
     staleTime: 60_000,
   });
 
-  if (!user) return null;
+  if (!user || !user.isAdmin || user.isCollaborator) return null;
 
   const dashboardActive = location === "/dashboard";
   const vaultActive = isActivePath(location, "/training/library");
