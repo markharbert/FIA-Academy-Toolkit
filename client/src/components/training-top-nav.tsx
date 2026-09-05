@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { BookMarked, CalendarDays } from "lucide-react";
+import { BookMarked, CalendarDays, LayoutDashboard } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { CourseIcon } from "@/lib/course-icons";
 import { trainingCoursePath, trainingLessonPath } from "@shared/training-url";
@@ -38,8 +38,9 @@ export function TrainingTopNav() {
     staleTime: 60_000,
   });
 
-  if (!user?.isAdmin || user.isCollaborator) return null;
+  if (!user) return null;
 
+  const dashboardActive = location === "/dashboard";
   const vaultActive = isActivePath(location, "/training/library");
   const scheduleActive = location === "/training/schedule";
   const courseActive = (course: PublishedCourse) =>
@@ -66,53 +67,69 @@ export function TrainingTopNav() {
         className="flex min-w-0 items-center justify-center gap-1 overflow-x-auto py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         role="list"
       >
-        {trainingCourses.map((course) => {
-          const active = courseActive(course);
-          return (
+        <button
+          type="button"
+          role="listitem"
+          className={itemClass(dashboardActive)}
+          onClick={() => setLocation("/dashboard")}
+          aria-current={dashboardActive ? "page" : undefined}
+          data-testid="nav-top-dashboard"
+        >
+          <LayoutDashboard className={dashboardActive ? "text-sky-200" : "text-sky-300"} />
+          <span>Dashboard</span>
+        </button>
+
+        {user.isAdmin && !user.isCollaborator && (
+          <>
+            {trainingCourses.map((course) => {
+              const active = courseActive(course);
+              return (
+                <button
+                  key={course.id}
+                  type="button"
+                  role="listitem"
+                  className={itemClass(active)}
+                  onClick={() =>
+                    setLocation(
+                      course.firstLesson
+                        ? trainingLessonPath(course, course.firstLesson.module, course.firstLesson)
+                        : trainingCoursePath(course),
+                    )
+                  }
+                  aria-current={active ? "page" : undefined}
+                  data-testid={`top-nav-course-${course.slug}`}
+                >
+                  <CourseIcon icon={course.icon} className={active ? "text-violet-200" : "text-violet-300"} />
+                  <span className="max-w-36 truncate">{course.title}</span>
+                </button>
+              );
+            })}
+
             <button
-              key={course.id}
               type="button"
               role="listitem"
-              className={itemClass(active)}
-              onClick={() =>
-                setLocation(
-                  course.firstLesson
-                    ? trainingLessonPath(course, course.firstLesson.module, course.firstLesson)
-                    : trainingCoursePath(course),
-                )
-              }
-              aria-current={active ? "page" : undefined}
-              data-testid={`top-nav-course-${course.slug}`}
+              className={itemClass(vaultActive)}
+              onClick={() => setLocation("/training/library")}
+              aria-current={vaultActive ? "page" : undefined}
+              data-testid="nav-training-library"
             >
-              <CourseIcon icon={course.icon} className={active ? "text-violet-200" : "text-violet-300"} />
-              <span className="max-w-36 truncate">{course.title}</span>
+              <BookMarked className="h-4 w-4 text-violet-300" />
+              <span>Vault</span>
             </button>
-          );
-        })}
 
-        <button
-          type="button"
-          role="listitem"
-          className={itemClass(vaultActive)}
-          onClick={() => setLocation("/training/library")}
-          aria-current={vaultActive ? "page" : undefined}
-          data-testid="nav-training-library"
-        >
-          <BookMarked className="h-4 w-4 text-violet-300" />
-          <span>Vault</span>
-        </button>
-
-        <button
-          type="button"
-          role="listitem"
-          className={itemClass(scheduleActive)}
-          onClick={() => setLocation("/training/schedule")}
-          aria-current={scheduleActive ? "page" : undefined}
-          data-testid="nav-training-schedule"
-        >
-          <CalendarDays className="h-4 w-4 text-fuchsia-300" />
-          <span>Schedule</span>
-        </button>
+            <button
+              type="button"
+              role="listitem"
+              className={itemClass(scheduleActive)}
+              onClick={() => setLocation("/training/schedule")}
+              aria-current={scheduleActive ? "page" : undefined}
+              data-testid="nav-training-schedule"
+            >
+              <CalendarDays className="h-4 w-4 text-fuchsia-300" />
+              <span>Schedule</span>
+            </button>
+          </>
+        )}
       </div>
     </nav>
   );
