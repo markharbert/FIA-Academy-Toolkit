@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { BookMarked, CalendarDays, GraduationCap } from "lucide-react";
+import { BookMarked, CalendarDays } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { CourseIcon } from "@/lib/course-icons";
 import { trainingCoursePath, trainingLessonPath } from "@shared/training-url";
@@ -59,16 +59,11 @@ export function TrainingTopNav() {
   return (
     <nav
       aria-label="Training navigation"
-      className="flex min-w-0 items-center gap-2"
+      className="flex w-full min-w-0 items-center justify-center gap-2 sm:w-auto"
       data-testid="training-top-nav"
     >
-      <div className="hidden shrink-0 items-center gap-2 border-r border-white/10 pr-3 text-xs font-semibold uppercase tracking-[0.16em] text-violet-200/80 md:flex">
-        <GraduationCap className="h-4 w-4 text-violet-300" />
-        <span>Training</span>
-      </div>
-
       <div
-        className="flex min-w-0 items-center gap-1 overflow-x-auto py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex min-w-0 items-center justify-center gap-1 overflow-x-auto py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         role="list"
       >
         {trainingCourses.map((course) => {

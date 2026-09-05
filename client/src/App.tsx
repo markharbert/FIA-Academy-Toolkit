@@ -442,7 +442,7 @@ function AppLayout() {
           <SidebarInset>
             <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b bg-[hsl(230,45%,14%)] px-3 sm:px-4 border-[hsl(230,45%,19%)]">
               <SidebarTrigger className="-ml-1 text-white hover:bg-white/10 hover:text-white" data-testid="button-sidebar-toggle" />
-              <div className="order-3 min-w-0 basis-full sm:order-none sm:flex-1 sm:basis-auto">
+              <div className="order-3 min-w-0 basis-full sm:order-none sm:flex sm:flex-1 sm:basis-auto sm:justify-center">
                 <TrainingTopNav />
               </div>
               <a
