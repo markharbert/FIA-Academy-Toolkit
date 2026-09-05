@@ -1,6 +1,5 @@
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
-import { useQuery } from "@tanstack/react-query";
 import { Collapsible, CollapsibleContent } from "@radix-ui/react-collapsible";
 import { cn } from "@/lib/utils";
 import {
@@ -36,14 +35,10 @@ import {
   ChevronRight,
   CalendarDays,
   BookMarked,
-  CheckCircle2,
-  Circle,
   LayoutList,
 } from "lucide-react";
 import logoImage from "@assets/image_1788559097620.png";
 import cfLogo from "@/assets/cf-logo.png";
-import { CourseIcon } from "@/lib/course-icons";
-import { trainingCoursePath, trainingLessonPath } from "@shared/training-url";
 
 type NavChild = {
   title: string;
@@ -259,21 +254,6 @@ function isGroupActive(item: NavItem, location: string): boolean {
   return false;
 }
 
-type PublishedCourse = {
-  id: string;
-  title: string;
-  slug: string;
-  status: string;
-  icon?: string | null;
-  progress?: { completed: number; total: number };
-  firstLesson?: {
-    id: string;
-    title: string;
-    slug: string | null;
-    module: { title: string; slug: string | null };
-  } | null;
-};
-
 export function AppSidebar() {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
@@ -282,22 +262,6 @@ export function AppSidebar() {
   const navItems = isCollaborator
     ? allNavItems.filter((item) => item.collaboratorVisible)
     : allNavItems.filter((item) => !item.adminOnly || user?.isAdmin);
-
-  // Training: extract active course slug (legacy ID links still resolve too).
-  const trainingMatch = location.match(/^\/training\/([^/]+)/);
-  const activeCourseId = trainingMatch?.[1] ?? null;
-
-  // Fetch published courses for Training section (admins only — route requires admin)
-  const { data: trainingCourses = [] } = useQuery<PublishedCourse[]>({
-    queryKey: ["/api/training/courses"],
-    queryFn: async () => {
-      const res = await fetch("/api/training/courses", { credentials: "include" });
-      if (!res.ok) return [];
-      return res.json();
-    },
-    enabled: !!user && !isCollaborator && !!user.isAdmin,
-    staleTime: 60_000,
-  });
 
   const handleLogout = async () => {
     await logout();
@@ -345,74 +309,6 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        {/* Training section — shows published courses above Navigation */}
-        {!isCollaborator && user?.isAdmin && (
-          <>
-            <SidebarGroup>
-              <SidebarGroupLabel>Training</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {trainingCourses.map((course) => {
-                    const isCourseActive = course.id === activeCourseId || course.slug === activeCourseId;
-                    return (
-                      <SidebarMenuItem key={course.id}>
-                        <SidebarMenuButton
-                          isActive={isCourseActive}
-                          tooltip={course.title}
-                          onClick={() => setLocation(
-                            course.firstLesson
-                              ? trainingLessonPath(course, course.firstLesson.module, course.firstLesson)
-                              : trainingCoursePath(course),
-                          )}
-                          className={isCourseActive ? "!bg-violet-500/15" : ""}
-                        >
-                          <CourseIcon icon={course.icon} className={isCourseActive ? undefined : "text-violet-400"} />
-                          <span className="truncate">{course.title}</span>
-                          {course.progress && course.progress.total > 0 && (
-                            course.progress.completed === course.progress.total ? (
-                              <CheckCircle2 className="ml-auto h-4 w-4 shrink-0 text-emerald-400" aria-label="Course complete" />
-                            ) : (
-                              <span
-                                className="ml-auto shrink-0 text-[10px] font-medium tabular-nums text-sidebar-foreground/60"
-                                aria-label={`${course.progress.completed} of ${course.progress.total} lessons complete`}
-                              >
-                                {course.progress.completed}/{course.progress.total}
-                              </span>
-                            )
-                          )}
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    );
-                  })}
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      isActive={location.startsWith("/training/library")}
-                      tooltip="Training Library"
-                      onClick={() => setLocation("/training/library")}
-                      data-testid="nav-training-library"
-                    >
-                      <BookMarked className={location.startsWith("/training/library") ? undefined : "text-violet-400"} />
-                      <span>Training Library</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      isActive={location === "/training/schedule"}
-                      tooltip="Training Schedule"
-                      onClick={() => setLocation("/training/schedule")}
-                      className={location === "/training/schedule" ? "!bg-fuchsia-500/15" : ""}
-                      data-testid="nav-training-schedule"
-                    >
-                      <CalendarDays className="text-fuchsia-400" />
-                      <span className="truncate">Training Schedule</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-            <SidebarSeparator />
-          </>
-        )}
         <SidebarGroup>
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -535,12 +431,12 @@ export function AppSidebar() {
                   <SidebarMenuItem>
                     <SidebarMenuButton
                       isActive={location.startsWith("/admin/training-library")}
-                      tooltip="Training Library"
+                      tooltip="Vault Manager"
                       onClick={() => setLocation("/admin/training-library")}
                       data-testid="nav-admin-training-library"
                     >
                       <BookMarked className={location.startsWith("/admin/training-library") ? undefined : "text-violet-400"} />
-                      <span>Training Library</span>
+                      <span>Vault Manager</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>

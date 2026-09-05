@@ -10,6 +10,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { Footer } from "@/components/footer";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
+import { TrainingTopNav } from "@/components/training-top-nav";
 import { Loader2, ExternalLink } from "lucide-react";
 
 // Public pages — kept eager so the login screen renders instantly
@@ -439,17 +440,20 @@ function AppLayout() {
         <div className="flex h-screen w-full">
           <AppSidebar />
           <SidebarInset>
-            <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4 bg-[hsl(230,45%,14%)] border-[hsl(230,45%,19%)]">
+            <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b bg-[hsl(230,45%,14%)] px-3 sm:px-4 border-[hsl(230,45%,19%)]">
               <SidebarTrigger className="-ml-1 text-white hover:bg-white/10 hover:text-white" data-testid="button-sidebar-toggle" />
+              <div className="order-3 min-w-0 basis-full sm:order-none sm:flex-1 sm:basis-auto">
+                <TrainingTopNav />
+              </div>
               <a
                 href="/api/clickfunnels/access-courses"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="ml-auto inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-white/90 hover:text-white hover:bg-white/10 transition-colors"
+                className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium text-white/90 transition-colors hover:bg-white/10 hover:text-white sm:px-3"
                 data-testid="link-access-my-courses"
               >
                 <ExternalLink className="h-4 w-4" />
-                <span>Access My Courses</span>
+                <span className="hidden sm:inline">Access My Courses</span>
               </a>
             </header>
             <ImpersonationBanner />
