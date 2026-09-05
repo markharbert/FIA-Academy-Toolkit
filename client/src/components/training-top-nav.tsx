@@ -101,7 +101,11 @@ export function TrainingTopNav() {
                 >
                   <CourseIcon icon={course.icon} className={active ? "text-violet-200" : "text-violet-300"} />
                   <span className="max-w-36 truncate">
-                    {course.slug === "core-framework" ? "Core" : course.title}
+                    {course.slug === "new-start-here" || course.slug === "launch"
+                      ? "Launch"
+                      : course.slug === "core-framework"
+                        ? "Core"
+                        : course.title}
                   </span>
                 </button>
               );
