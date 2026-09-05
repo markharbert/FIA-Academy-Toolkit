@@ -100,7 +100,9 @@ export function TrainingTopNav() {
                   data-testid={`top-nav-course-${course.slug}`}
                 >
                   <CourseIcon icon={course.icon} className={active ? "text-violet-200" : "text-violet-300"} />
-                  <span className="max-w-36 truncate">{course.title}</span>
+                  <span className="max-w-36 truncate">
+                    {course.slug === "core-framework" ? "Core" : course.title}
+                  </span>
                 </button>
               );
             })}
