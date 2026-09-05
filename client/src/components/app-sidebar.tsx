@@ -392,7 +392,7 @@ export function AppSidebar() {
 
         <SidebarSeparator />
         <SidebarGroup>
-          <SidebarGroupLabel>Help &amp; Support</SidebarGroupLabel>
+          <SidebarGroupLabel>HELP &amp; SUPPORT</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
@@ -425,7 +425,7 @@ export function AppSidebar() {
           <>
             <SidebarSeparator />
             <SidebarGroup>
-              <SidebarGroupLabel>Admin</SidebarGroupLabel>
+              <SidebarGroupLabel>ADMIN</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
                   <SidebarMenuItem>
