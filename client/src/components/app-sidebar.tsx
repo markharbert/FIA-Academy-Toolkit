@@ -265,7 +265,7 @@ function isGroupActive(item: NavItem, location: string): boolean {
 export function AppSidebar() {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
-  const { state, isMobile } = useSidebar();
+  const { state } = useSidebar();
   const isCollaborator = !!user?.isCollaborator;
   const navItems = isCollaborator
     ? allNavItems.filter((item) => item.collaboratorVisible)
@@ -502,7 +502,7 @@ export function AppSidebar() {
                 )}
               </DropdownMenuTrigger>
               <DropdownMenuContent
-                side={isMobile ? "top" : "right"}
+                side="top"
                 align="end"
                 sideOffset={8}
                 className="w-64 rounded-xl border-white/10 bg-[hsl(230,55%,12%)] p-2 text-white shadow-2xl"
