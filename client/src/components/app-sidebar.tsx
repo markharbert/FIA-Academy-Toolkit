@@ -24,7 +24,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -507,26 +506,6 @@ export function AppSidebar() {
                 sideOffset={8}
                 className="w-64 rounded-xl border-white/10 bg-[hsl(230,55%,12%)] p-2 text-white shadow-2xl"
               >
-                <DropdownMenuLabel className="flex items-center gap-3 px-2 py-2 font-normal">
-                  <Avatar className="h-9 w-9 rounded-lg">
-                    {user.gravatarUrl && (
-                      <AvatarImage
-                        src={user.gravatarUrl}
-                        alt={user.displayName || user.email || "User"}
-                      />
-                    )}
-                    <AvatarFallback className="rounded-lg bg-violet-500/20 text-violet-200">
-                      <User className="h-4 w-4" />
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="grid min-w-0 flex-1 leading-tight">
-                    <span className="truncate text-sm font-semibold">
-                      {user.displayName || user.email?.split("@")[0] || "Account"}
-                    </span>
-                    <span className="truncate text-xs text-white/50">{user.email}</span>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator className="bg-white/10" />
                 <DropdownMenuItem
                   onSelect={() => setLocation("/account")}
                   className="cursor-pointer rounded-lg px-3 py-2.5 text-white/75 focus:bg-white/10 focus:text-white"
