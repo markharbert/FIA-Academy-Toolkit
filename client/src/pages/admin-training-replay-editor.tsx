@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
-import { ArrowLeft, ChevronDown, ChevronRight, Download, ExternalLink, Eye, EyeOff, Film, Folder, ListVideo, Loader2, Pencil, Plus, RefreshCw, Save, Trash2, Tag, Link as LinkIcon } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, Download, ExternalLink, Eye, EyeOff, Film, Folder, ListVideo, Loader2, Pencil, Plus, RefreshCw, Save, Trash2, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RichTextEditor } from "@/components/projects/rich-text-editor";
+import { TrainingResourceIcon } from "@/components/training-resource-icon";
 import { useToast } from "@/hooks/use-toast";
 
 type Resource = { id: string; name: string; url: string; subtitle: string | null; kind: "link" | "pdf" };
@@ -779,13 +780,7 @@ export default function AdminTrainingReplayEditorPage() {
                   key={item.id}
                   className="group flex items-center gap-3 rounded-md border bg-card px-3 py-4"
                 >
-                  {item.kind === "pdf" ? (
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-red-600 text-[10px] font-extrabold tracking-tight text-white shadow-sm">
-                      PDF
-                    </div>
-                  ) : (
-                    <LinkIcon className="h-5 w-5 shrink-0 text-blue-500" />
-                  )}
+                  <TrainingResourceIcon kind={item.kind} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{item.name}</p>
                     {item.subtitle && (

@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { RichTextEditor } from "@/components/projects/rich-text-editor";
+import { TrainingResourceIcon } from "@/components/training-resource-icon";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -1009,13 +1010,7 @@ export default function AdminLessonEditorPage() {
                   key={r.id}
                   className="flex items-center gap-3 rounded-md border bg-card px-3 py-4 group"
                 >
-                  {r.kind === "pdf" ? (
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-red-600 text-[10px] font-extrabold tracking-tight text-white shadow-sm">
-                      PDF
-                    </div>
-                  ) : (
-                    <Link className="h-5 w-5 text-blue-500 shrink-0" />
-                  )}
+                  <TrainingResourceIcon kind={r.kind} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{r.name}</p>
                     {r.subtitle && (

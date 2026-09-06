@@ -12,6 +12,7 @@ import { buildCourseModuleTree, flattenCourseModuleTree, type CourseModuleTree }
 import { CourseIcon } from "@/lib/course-icons";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { trainingCoursePath, trainingLessonPath } from "@shared/training-url";
+import { TrainingResourceIcon } from "@/components/training-resource-icon";
 
 /** Restrict resource/video URLs to http(s) only — prevents javascript: hrefs. */
 function safeHref(url: string | null | undefined): string {
@@ -815,18 +816,7 @@ export default function TrainingLessonPage() {
                       onMouseEnter={(e) => (e.currentTarget.style.background = "#eff6ff")}
                       onMouseLeave={(e) => (e.currentTarget.style.background = "#f5f9ff")}
                     >
-                      <div
-                        className="h-11 w-11 rounded-lg flex items-center justify-center shrink-0"
-                        style={{ background: "#f3f4f6" }}
-                      >
-                        {r.kind === "pdf" ? (
-                          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-red-600 text-[9px] font-extrabold tracking-tight text-white shadow-sm">
-                            PDF
-                          </div>
-                        ) : (
-                          <Link className="h-5 w-5" style={{ color: "#6b7280" }} />
-                        )}
-                      </div>
+                      <TrainingResourceIcon kind={r.kind} />
                       <div className="flex-1 min-w-0">
                         <p className="text-[13px] font-medium truncate" style={{ color: "#111827" }}>{r.name}</p>
                         {r.subtitle && (

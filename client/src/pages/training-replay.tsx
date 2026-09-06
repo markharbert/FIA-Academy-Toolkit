@@ -3,8 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import Player from "@vimeo/player";
 import DOMPurify from "dompurify";
-import { ArrowLeft, ChevronDown, Clock, ExternalLink, FileText, Link, Play } from "lucide-react";
+import { ArrowLeft, ChevronDown, Clock, ExternalLink, FileText, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TrainingResourceIcon } from "@/components/training-resource-icon";
 import { cn } from "@/lib/utils";
 
 type Resource = { id: string; name: string; url: string; subtitle?: string | null; kind?: string };
@@ -371,11 +372,7 @@ export default function TrainingReplayPage() {
                     rel="noopener noreferrer"
                     className="group flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-4 shadow-sm transition-colors hover:bg-blue-50"
                   >
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-slate-100">
-                      {resource.kind === "pdf"
-                        ? <div className="flex h-10 w-10 items-center justify-center rounded-md bg-red-600 text-[9px] font-extrabold tracking-tight text-white shadow-sm">PDF</div>
-                        : <Link className="h-5 w-5 text-slate-500" />}
-                    </div>
+                    <TrainingResourceIcon kind={resource.kind} />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[13px] font-medium text-slate-950">{resource.name}</p>
                       {resource.subtitle && <p className="truncate text-[11px] text-slate-400">{resource.subtitle}</p>}
