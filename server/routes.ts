@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { transcribeAudio, transcribeAudioWhisper, scoreTranscript, generateTitle, generateDmoSummary, generateBulletPoints, generateLessonChapters, generateReplayMetadata } from "./ai";
+import { transcribeAudio, transcribeAudioWhisper, scoreTranscript, generateTitle, generateDmoSummary, generateBulletPoints, generateLessonChapters, generateReplayDescription, generateReplayMetadata } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio, probeVideo, faststartMp4, prepareTeleprompterMp4, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
 import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema, insertProjectTemplateSchema, insertProjectTemplateTaskSchema, updateProjectTemplateTaskSchema, insertProjectColumnSchema, insertCannedResponseSchema, insertAnnouncementSchema, insertAffiliateLinkSchema } from "@shared/schema";
 import { safeTimezone, todayKeyInTz, dueHasTime } from "@shared/datetime";
@@ -14547,6 +14547,18 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     } catch (error) {
       console.error("[replay Vimeo import]", error);
       res.status(502).json({ message: error instanceof Error ? error.message : "Vimeo transcript import failed." });
+    }
+  });
+  app.post("/api/admin/training-replays/:id/description", requireAdmin, async (req, res) => {
+    try {
+      const replay = await storage.getTrainingReplay(req.params.id);
+      if (!replay) return res.status(404).json({ message: "Not found" });
+      if (!replay.transcriptText) return res.status(400).json({ message: "Import a transcript before regenerating the description." });
+      const description = await generateReplayDescription(replay.title, replay.transcriptText);
+      res.json(await storage.updateTrainingReplay(replay.id, { description }));
+    } catch (error) {
+      console.error("[replay description regeneration]", error);
+      res.status(502).json({ message: error instanceof Error ? error.message : "Could not regenerate the replay description." });
     }
   });
   app.delete("/api/admin/training-replays/:id/transcript", requireAdmin, async (req, res) => {

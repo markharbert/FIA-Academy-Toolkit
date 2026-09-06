@@ -21,6 +21,17 @@ const MAX_INLINE_SIZE = 15 * 1024 * 1024; // 15MB threshold for inline vs File A
 export type GeneratedLessonChapter = { startSeconds: number; title: string };
 export type GeneratedReplayMetadata = { description: string; tags: string[] };
 
+function validateReplayDescription(value: unknown): string {
+  const description = typeof value === "string"
+    ? value.replace(/\s+/g, " ").trim()
+    : "";
+  const sentenceCount = description.match(/[.!?](?:["')\]]*)?(?=\s|$)/g)?.length ?? 0;
+  if (!description || description.length > 280 || sentenceCount !== 1) {
+    throw new Error("AI did not return a valid one-sentence replay description.");
+  }
+  return description;
+}
+
 export async function generateReplayMetadata(
   title: string,
   transcript: string,
@@ -51,9 +62,7 @@ export async function generateReplayMetadata(
   const raw = response.choices[0]?.message?.content;
   if (!raw) throw new Error("AI did not return replay details.");
   const parsed = JSON.parse(raw) as { description?: unknown; tags?: unknown };
-  const description = typeof parsed.description === "string"
-    ? parsed.description.replace(/\s+/g, " ").trim()
-    : "";
+  const description = validateReplayDescription(parsed.description);
   const tags = Array.isArray(parsed.tags)
     ? [...new Set(parsed.tags
         .filter((tag): tag is string => typeof tag === "string")
@@ -61,12 +70,40 @@ export async function generateReplayMetadata(
         .filter(Boolean))]
         .slice(0, 8)
     : [];
-  const sentenceCount = description.match(/[.!?](?:["')\]]*)?(?=\s|$)/g)?.length ?? 0;
-  if (!description || description.length > 280 || sentenceCount !== 1) {
-    throw new Error("AI did not return a valid one-sentence replay description.");
-  }
   if (tags.length < 3) throw new Error("AI did not return enough useful replay tags.");
   return { description, tags };
+}
+
+export async function generateReplayDescription(
+  title: string,
+  transcript: string,
+): Promise<string> {
+  const response = await openai.chat.completions.create({
+    model: "gpt-5.1",
+    messages: [
+      {
+        role: "system",
+        content: [
+          "Write a concise member-facing description for a business training replay.",
+          "Return exactly one complete sentence, ideally 20 to 40 words and no more than 280 characters, grounded in the transcript.",
+          "Make it specific and compelling enough to create honest curiosity about what the member will learn.",
+          "Do not use hype, sensational claims, generic praise, fake urgency, or phrases such as 'game-changing', 'unlock', or 'revolutionary'.",
+          "Do not mention the transcript, captions, or that AI wrote the copy.",
+        ].join(" "),
+      },
+      {
+        role: "user",
+        content: `Return JSON only as {"description":"..."}.\n\nTraining title:\n${title}\n\nTraining transcript:\n${transcript.slice(0, 48_000)}`,
+      },
+    ],
+    response_format: { type: "json_object" },
+    max_completion_tokens: 260,
+    temperature: 0.35,
+  });
+  const raw = response.choices[0]?.message?.content;
+  if (!raw) throw new Error("AI did not return a replay description.");
+  const parsed = JSON.parse(raw) as { description?: unknown };
+  return validateReplayDescription(parsed.description);
 }
 
 export async function generateLessonChapters(

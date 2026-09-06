@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
-import { ArrowLeft, ChevronDown, ChevronRight, Download, ExternalLink, Eye, EyeOff, Film, Folder, ListVideo, Loader2, Pencil, Plus, Save, Trash2, Tag, Link as LinkIcon } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, Download, ExternalLink, Eye, EyeOff, Film, Folder, ListVideo, Loader2, Pencil, Plus, RefreshCw, Save, Trash2, Tag, Link as LinkIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -406,6 +406,21 @@ export default function AdminTrainingReplayEditorPage() {
     onError: (error: Error) =>
       toast({ title: "Couldn’t add transcript", description: error.message, variant: "destructive" }),
   });
+  const regenerateDescription = useMutation({
+    mutationFn: async () => {
+      if (timer.current) clearTimeout(timer.current);
+      const saved = await saveRevision(revision.current);
+      if (!saved) throw new Error("Save the replay before regenerating its description.");
+      return api(`/api/admin/training-replays/${replayId}/description`, { method: "POST" });
+    },
+    onSuccess: (updated: Replay) => {
+      syncTranscriptFields(updated);
+      invalidate();
+      toast({ title: "Description regenerated", description: "The new description is ready to review." });
+    },
+    onError: (error: Error) =>
+      toast({ title: "Couldn’t regenerate description", description: error.message, variant: "destructive" }),
+  });
   const generateTranscriptChapters = useMutation({
     mutationFn: () =>
       api(`/api/admin/training-replays/${replayId}/transcript-chapters`, { method: "POST" }),
@@ -628,7 +643,7 @@ export default function AdminTrainingReplayEditorPage() {
            </div>
          )}
        </section>
-        <section className="grid gap-4 rounded-lg border bg-white/70 p-4 sm:grid-cols-2"><div className="sm:col-span-2"><Label>Description</Label><Textarea className="mt-1 min-h-24" value={form.description || ""} onChange={(e) => change("description", e.target.value)} placeholder="A clear summary for members browsing the vault." /></div><div className="sm:col-span-2"><Label className="flex items-center gap-1.5"><Tag className="h-3.5 w-3.5 text-violet-600" />Category</Label>{addingCategory ? <div className="mt-1 space-y-2"><Input autoFocus value={categoryDraft} placeholder="New category name" onChange={(e) => setCategoryDraft(e.target.value)} /><div className="flex gap-2"><Button type="button" size="sm" disabled={!categoryDraft.trim()} onClick={() => { change("category", categoryDraft.trim()); setAddingCategory(false); setCategoryDraft(""); }}>Add category</Button><Button type="button" size="sm" variant="ghost" onClick={() => { setAddingCategory(false); setCategoryDraft(""); }}>Cancel</Button></div></div> : <Select value={form.category || "__none"} onValueChange={(value) => { if (value === "__new") { setCategoryDraft(""); setAddingCategory(true); } else change("category", value === "__none" ? null : value); }}><SelectTrigger className="mt-1"><SelectValue placeholder="Choose a category" /></SelectTrigger><SelectContent><SelectItem value="__none">No category</SelectItem>{categories.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}<SelectItem value="__new">Create a new category</SelectItem></SelectContent></Select>}</div><div><Label>Duration (min)</Label><Input className="mt-1" type="number" value={form.durationMinutes || ""} onChange={(e) => change("durationMinutes", e.target.value ? Number(e.target.value) : null)} /></div><div><Label>Tags</Label><Input className="mt-1" value={form.tags} onChange={(e) => change("tags", e.target.value)} placeholder="mindset, strategy" /></div></section>
+        <section className="grid gap-4 rounded-lg border bg-white/70 p-4 sm:grid-cols-2"><div className="sm:col-span-2"><div className="flex items-center justify-between gap-3"><Label>Description</Label><Button type="button" size="sm" variant="outline" disabled={!form.transcriptText || regenerateDescription.isPending} onClick={() => regenerateDescription.mutate()}><RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${regenerateDescription.isPending ? "animate-spin" : ""}`} />Regenerate Description</Button></div><Textarea className="mt-1 min-h-24" value={form.description || ""} onChange={(e) => change("description", e.target.value)} placeholder="A clear summary for members browsing the vault." /></div><div className="sm:col-span-2"><Label className="flex items-center gap-1.5"><Tag className="h-3.5 w-3.5 text-violet-600" />Category</Label>{addingCategory ? <div className="mt-1 space-y-2"><Input autoFocus value={categoryDraft} placeholder="New category name" onChange={(e) => setCategoryDraft(e.target.value)} /><div className="flex gap-2"><Button type="button" size="sm" disabled={!categoryDraft.trim()} onClick={() => { change("category", categoryDraft.trim()); setAddingCategory(false); setCategoryDraft(""); }}>Add category</Button><Button type="button" size="sm" variant="ghost" onClick={() => { setAddingCategory(false); setCategoryDraft(""); }}>Cancel</Button></div></div> : <Select value={form.category || "__none"} onValueChange={(value) => { if (value === "__new") { setCategoryDraft(""); setAddingCategory(true); } else change("category", value === "__none" ? null : value); }}><SelectTrigger className="mt-1"><SelectValue placeholder="Choose a category" /></SelectTrigger><SelectContent><SelectItem value="__none">No category</SelectItem>{categories.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}<SelectItem value="__new">Create a new category</SelectItem></SelectContent></Select>}</div><div><Label>Duration (min)</Label><Input className="mt-1" type="number" value={form.durationMinutes || ""} onChange={(e) => change("durationMinutes", e.target.value ? Number(e.target.value) : null)} /></div><div><Label>Tags</Label><Input className="mt-1" value={form.tags} onChange={(e) => change("tags", e.target.value)} placeholder="mindset, strategy" /></div></section>
        <Separator />
        <section><Label className="mb-2 block">Replay content</Label><RichTextEditor value={form.content || ""} onChange={(value) => change("content", value)} /></section>
         <Separator />
