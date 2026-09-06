@@ -32,8 +32,8 @@ export async function generateReplayMetadata(
         role: "system",
         content: [
           "Create member-facing catalog metadata for a business training replay.",
-          "The description must be exactly 2 or 3 complete sentences and grounded in the transcript.",
-          "Make it specific and rich with useful detail while creating honest curiosity about what the member will learn.",
+          "The description must be exactly one complete sentence, ideally 20 to 40 words and no more than 280 characters, grounded in the transcript.",
+          "Make it specific and rich with useful detail while creating honest curiosity about what the member will learn, without becoming a list.",
           "Do not use hype, sensational claims, generic praise, fake urgency, or phrases such as 'game-changing', 'unlock', or 'revolutionary'.",
           "Do not mention the transcript, captions, or that AI wrote the copy.",
           "Return 5 to 8 concise topical tags. Tags should help members find the training, use title case, avoid duplicates, and not include the speaker's name unless central to the topic.",
@@ -62,8 +62,8 @@ export async function generateReplayMetadata(
         .slice(0, 8)
     : [];
   const sentenceCount = description.match(/[.!?](?:["')\]]*)?(?=\s|$)/g)?.length ?? 0;
-  if (!description || description.length > 10_000 || sentenceCount < 2 || sentenceCount > 3) {
-    throw new Error("AI did not return a valid 2–3 sentence replay description.");
+  if (!description || description.length > 280 || sentenceCount !== 1) {
+    throw new Error("AI did not return a valid one-sentence replay description.");
   }
   if (tags.length < 3) throw new Error("AI did not return enough useful replay tags.");
   return { description, tags };
