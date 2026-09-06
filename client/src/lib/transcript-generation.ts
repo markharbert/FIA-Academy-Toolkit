@@ -18,7 +18,8 @@ export async function streamTranscriptGeneration<T>(
     // The server sends real milestones when the connection is streaming.
     // Keep the button moving locally as well because a browser/proxy may
     // buffer those small progress events until the request completes.
-    displayedPercentage = Math.min(90, displayedPercentage + 1);
+    if (displayedPercentage >= 90) return;
+    displayedPercentage += 1;
     onProgress({ percentage: displayedPercentage, stage: displayedStage });
   }, 1500);
 
@@ -70,6 +71,7 @@ export async function streamTranscriptGeneration<T>(
     if (completedData === undefined) {
       throw new Error("Transcript generation ended before the transcript was saved.");
     }
+    window.clearInterval(estimatedProgressTimer);
     updateProgress({ percentage: 100, stage: "Transcript ready" });
     await new Promise((resolve) => window.setTimeout(resolve, 300));
     return completedData;
