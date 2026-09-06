@@ -146,6 +146,37 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
+function startTranscriptProgressStream(res: Response) {
+  res.status(200);
+  res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  let lastPercentage = -1;
+  const write = (event: object) => {
+    if (!res.writableEnded) res.write(`${JSON.stringify(event)}\n`);
+  };
+
+  return {
+    progress: (percentage: number, stage: string) => {
+      const rounded = Math.max(lastPercentage, Math.min(99, Math.round(percentage)));
+      if (rounded === lastPercentage) return;
+      lastPercentage = rounded;
+      write({ type: "progress", percentage: rounded, stage });
+    },
+    complete: (data: unknown) => {
+      write({ type: "progress", percentage: 100, stage: "Transcript ready" });
+      write({ type: "complete", data });
+      res.end();
+    },
+    fail: (message: string) => {
+      write({ type: "error", message });
+      res.end();
+    },
+  };
+}
+
 // Ensure upload directories exist
 if (!fs.existsSync(SCREENSHOTS_DIR)) {
   fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });

@@ -542,6 +542,8 @@ export async function extractRemoteAudioSegments(
   uploadsDir: string,
   outputPrefix: string,
   segmentDurationSeconds = 1200,
+  sourceDurationSeconds?: number,
+  onProgress?: (progress: number) => void,
 ): Promise<AudioSegmentsResult> {
   const outputPattern = path.join(uploadsDir, `${outputPrefix}-%03d.mp3`);
   console.log(`[FFmpeg] Extracting remote Vimeo audio in ${segmentDurationSeconds}s segments...`);
@@ -562,7 +564,17 @@ export async function extractRemoteAudioSegments(
     ]);
     let stderr = "";
     ffmpeg.stderr.on("data", (data) => {
-      stderr += data.toString();
+      const chunk = data.toString();
+      stderr += chunk;
+      if (sourceDurationSeconds && onProgress) {
+        const times = [...chunk.matchAll(/time=(\d+):(\d+):(\d+(?:\.\d+)?)/g)];
+        const latest = times.at(-1);
+        if (latest) {
+          const elapsedSeconds =
+            Number(latest[1]) * 3600 + Number(latest[2]) * 60 + Number(latest[3]);
+          onProgress(Math.min(0.99, Math.max(0, elapsedSeconds / sourceDurationSeconds)));
+        }
+      }
     });
     ffmpeg.on("close", (code) => {
       const segmentPaths = fs.readdirSync(uploadsDir)
