@@ -4,6 +4,59 @@
  */
 
 const VIMEO_ACCESS_TOKEN = process.env.VIMEO_ACCESS_TOKEN || "";
+const VIMEO_CACHE_TTL_MS = 5 * 60 * 1000;
+
+type VimeoCacheEntry<T> = {
+  value: T;
+  expiresAt: number;
+};
+
+const vimeoCache = new Map<string, VimeoCacheEntry<unknown>>();
+const vimeoCacheRefreshes = new Map<string, Promise<unknown>>();
+
+function storeVimeoCacheValue<T>(key: string, value: T) {
+  vimeoCache.delete(key);
+  vimeoCache.set(key, { value, expiresAt: Date.now() + VIMEO_CACHE_TTL_MS });
+  while (vimeoCache.size > 250) {
+    const oldestKey = vimeoCache.keys().next().value;
+    if (typeof oldestKey !== "string") break;
+    vimeoCache.delete(oldestKey);
+  }
+}
+
+async function cachedVimeoValue<T>(key: string, loader: () => Promise<T>): Promise<T> {
+  const now = Date.now();
+  const cached = vimeoCache.get(key) as VimeoCacheEntry<T> | undefined;
+  if (cached && cached.expiresAt > now) return cached.value;
+
+  const refresh = vimeoCacheRefreshes.get(key) as Promise<T> | undefined;
+  if (cached) {
+    if (!refresh) {
+      const backgroundRefresh = loader()
+        .then((value) => {
+          storeVimeoCacheValue(key, value);
+          return value;
+        })
+        .catch((error) => {
+          console.warn(`[Vimeo cache] refresh failed for ${key}:`, error instanceof Error ? error.message : error);
+          return cached.value;
+        })
+        .finally(() => vimeoCacheRefreshes.delete(key));
+      vimeoCacheRefreshes.set(key, backgroundRefresh);
+    }
+    return cached.value;
+  }
+
+  if (refresh) return refresh;
+  const firstLoad = loader()
+    .then((value) => {
+      storeVimeoCacheValue(key, value);
+      return value;
+    })
+    .finally(() => vimeoCacheRefreshes.delete(key));
+  vimeoCacheRefreshes.set(key, firstLoad);
+  return firstLoad;
+}
 
 export interface VimeoVideo {
   id: string;
@@ -168,7 +221,7 @@ export interface VimeoFolder {
 }
 
 /** List the authenticated account's Vimeo folders, including ancestor paths. */
-export async function listVimeoProjects(): Promise<VimeoFolder[]> {
+async function loadVimeoProjects(): Promise<VimeoFolder[]> {
   if (!VIMEO_ACCESS_TOKEN) throw new Error("Vimeo access is not configured");
   const projects: VimeoFolder[] = [];
   let nextUrl: string | null =
@@ -199,16 +252,26 @@ export async function listVimeoProjects(): Promise<VimeoFolder[]> {
   return projects;
 }
 
+export async function listVimeoProjects(): Promise<VimeoFolder[]> {
+  return cachedVimeoValue("folders", loadVimeoProjects);
+}
+
 /** Return one fast, bounded page of videos from the account or a Vimeo folder. */
-export async function listVimeoVideos(
+async function loadVimeoVideos(
   folderId?: string,
   page = 1,
   perPage = 50,
+  query?: string,
 ): Promise<VimeoVideoPage> {
   if (!VIMEO_ACCESS_TOKEN) throw new Error("Vimeo access is not configured");
+  const params = new URLSearchParams({
+    per_page: String(perPage),
+    page: String(page),
+  });
+  if (query?.trim()) params.set("query", query.trim());
   const path = folderId
-    ? `/me/folders/${encodeURIComponent(folderId)}/videos?per_page=${perPage}&page=${page}`
-    : `/me/videos?per_page=${perPage}&page=${page}`;
+    ? `/me/folders/${encodeURIComponent(folderId)}/videos?${params}`
+    : `/me/videos?${params}`;
   const videos: VimeoVideo[] = [];
   const payload = await vimeoGet(path);
   for (const video of Array.isArray(payload?.data) ? payload.data : []) {
@@ -224,4 +287,27 @@ export async function listVimeoVideos(
     }
   }
   return { videos, hasMore: typeof payload?.paging?.next === "string" };
+}
+
+export async function listVimeoVideos(
+  folderId?: string,
+  page = 1,
+  perPage = 50,
+): Promise<VimeoVideoPage> {
+  return cachedVimeoValue(
+    `videos:${folderId || "all"}:${page}:${perPage}`,
+    () => loadVimeoVideos(folderId, page, perPage),
+  );
+}
+
+export async function searchVimeoVideos(
+  query: string,
+  page = 1,
+  perPage = 50,
+): Promise<VimeoVideoPage> {
+  const normalized = query.trim().toLowerCase();
+  return cachedVimeoValue(
+    `search:${normalized}:${page}:${perPage}`,
+    () => loadVimeoVideos(undefined, page, perPage, query),
+  );
 }

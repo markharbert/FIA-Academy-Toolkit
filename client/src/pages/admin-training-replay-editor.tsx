@@ -124,6 +124,8 @@ export default function AdminTrainingReplayEditorPage() {
   const [selectedVimeoFolderId, setSelectedVimeoFolderId] = useState("all");
   const [vimeoVideoPage, setVimeoVideoPage] = useState(1);
   const [vimeoFolderFilter, setVimeoFolderFilter] = useState("");
+  const [vimeoVideoSearch, setVimeoVideoSearch] = useState("");
+  const [debouncedVimeoVideoSearch, setDebouncedVimeoVideoSearch] = useState("");
   const [expandedVimeoFolders, setExpandedVimeoFolders] = useState<Record<string, boolean>>({});
   const [resourceEditor, setResourceEditor] = useState<Resource | null>(null);
   const [resourceDialogOpen, setResourceDialogOpen] = useState(false);
@@ -227,6 +229,7 @@ export default function AdminTrainingReplayEditorPage() {
     queryKey: ["/api/admin/vimeo/folders"],
     queryFn: () => api("/api/admin/vimeo/folders"),
     enabled: vimeoPickerOpen,
+    staleTime: 5 * 60 * 1000,
   });
   const folders = useMemo(() => academyFolders(foldersQuery.data?.folders || []), [foldersQuery.data]);
   const vimeoFolderTree = useMemo(() => buildVimeoFolderTree(folders), [folders]);
@@ -240,8 +243,31 @@ export default function AdminTrainingReplayEditorPage() {
   const videosQuery = useQuery<VimeoVideoPage>({
     queryKey: ["/api/admin/vimeo/folders", selectedVimeoFolderId, "videos", vimeoVideoPage],
     queryFn: () => api(`/api/admin/vimeo/folders/${selectedVimeoFolderId}/videos?page=${vimeoVideoPage}`),
-    enabled: vimeoPickerOpen && selectedVimeoFolderId !== "all",
+    enabled: vimeoPickerOpen && selectedVimeoFolderId !== "all" && !vimeoVideoSearch.trim(),
+    staleTime: 5 * 60 * 1000,
   });
+  const {
+    data: vimeoSearchData,
+    isLoading: vimeoSearchLoading,
+    error: vimeoSearchError,
+  } = useQuery<VimeoVideoPage>({
+    queryKey: ["/api/admin/vimeo/videos/search", debouncedVimeoVideoSearch, vimeoVideoPage],
+    queryFn: () => api(`/api/admin/vimeo/videos/search?q=${encodeURIComponent(debouncedVimeoVideoSearch)}&page=${vimeoVideoPage}`),
+    enabled: vimeoPickerOpen && !!debouncedVimeoVideoSearch,
+    staleTime: 5 * 60 * 1000,
+  });
+  const activeVimeoVideosData = vimeoVideoSearch.trim() ? vimeoSearchData : videosQuery.data;
+  const activeVimeoVideosLoading = vimeoVideoSearch.trim()
+    ? vimeoVideoSearch.trim() !== debouncedVimeoVideoSearch || vimeoSearchLoading
+    : videosQuery.isLoading;
+  const activeVimeoVideosError = vimeoVideoSearch.trim() ? vimeoSearchError : videosQuery.error;
+  useEffect(() => {
+    const timer = window.setTimeout(
+      () => setDebouncedVimeoVideoSearch(vimeoVideoSearch.trim()),
+      300,
+    );
+    return () => window.clearTimeout(timer);
+  }, [vimeoVideoSearch]);
   const tracksQuery = useQuery<{ tracks: Track[] }>({
     queryKey: ["/api/admin/training-replays", replayId, "vimeo-transcript-tracks"],
     queryFn: () => api(`/api/admin/training-replays/${replayId}/vimeo-transcript-tracks`),
@@ -253,6 +279,8 @@ export default function AdminTrainingReplayEditorPage() {
     setSelectedVimeoFolderId(savedFolderId || "all");
     setVimeoVideoPage(1);
     setVimeoFolderFilter("");
+    setVimeoVideoSearch("");
+    setDebouncedVimeoVideoSearch("");
   }, [vimeoPickerOpen]);
   useEffect(() => {
     if (!vimeoPickerOpen || !foldersQuery.data?.folders) return;
@@ -269,6 +297,8 @@ export default function AdminTrainingReplayEditorPage() {
   const selectVimeoFolder = (folderId: string) => {
     setSelectedVimeoFolderId(folderId);
     setVimeoVideoPage(1);
+    setVimeoVideoSearch("");
+    setDebouncedVimeoVideoSearch("");
     window.localStorage.setItem(VIMEO_LAST_FOLDER_STORAGE_KEY, folderId);
   };
   const renderVimeoFolder = (folder: VimeoFolderNode, depth = 0): JSX.Element => {
@@ -602,22 +632,31 @@ export default function AdminTrainingReplayEditorPage() {
               )}
             </div>
             <div className="min-w-0">
-              {videosQuery.isLoading ? (
+              <Input
+                value={vimeoVideoSearch}
+                onChange={(event) => {
+                  setVimeoVideoSearch(event.target.value);
+                  setVimeoVideoPage(1);
+                }}
+                placeholder="Search videos by title…"
+                className="mb-3"
+              />
+              {activeVimeoVideosLoading ? (
                 <div className="flex min-h-48 items-center justify-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading videos…
+                  {vimeoVideoSearch.trim() ? "Searching videos…" : "Loading videos…"}
                 </div>
-              ) : videosQuery.isError ? (
+              ) : activeVimeoVideosError ? (
                 <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-                  {(videosQuery.error as Error).message || "Unable to load Vimeo videos."}
+                  {(activeVimeoVideosError as Error).message || "Unable to load Vimeo videos."}
                 </div>
-              ) : (videosQuery.data?.videos ?? []).length === 0 ? (
+              ) : (activeVimeoVideosData?.videos ?? []).length === 0 ? (
                 <div className="flex min-h-48 items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
-                  No videos in this folder.
+                  {vimeoVideoSearch.trim() ? "No videos match that title." : "No videos in this folder."}
                 </div>
               ) : (
                 <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
-                  {(videosQuery.data?.videos ?? []).map((video) => (
+                  {(activeVimeoVideosData?.videos ?? []).map((video) => (
                     <button
                       key={video.id}
                       type="button"
@@ -652,7 +691,7 @@ export default function AdminTrainingReplayEditorPage() {
                       type="button"
                       size="sm"
                       variant="outline"
-                      disabled={!videosQuery.data?.hasMore}
+                      disabled={!activeVimeoVideosData?.hasMore}
                       onClick={() => setVimeoVideoPage((page) => page + 1)}
                     >
                       Next

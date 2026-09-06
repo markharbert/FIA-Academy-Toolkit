@@ -52,7 +52,7 @@ import {
 } from "./clickfunnels";
 import { listCfCourses, listCfDownloads, getCfCourseStructure, extractVimeoUrl, type CfTreeNode } from "./cf-import-client";
 import { runCfMembershipReconciliation } from "./cfMembershipReconciliation";
-import { listVimeoProjects, listVimeoVideos, extractVimeoVideoId, listVimeoTextTracks, fetchVimeoTranscript } from "./vimeo";
+import { listVimeoProjects, listVimeoVideos, searchVimeoVideos, extractVimeoVideoId, listVimeoTextTracks, fetchVimeoTranscript } from "./vimeo";
 import { FIA_EVENT_CALENDAR_ID, FIA_EVENT_CALENDAR_NAME, FIA_EVENT_CALENDAR_SUBSCRIBE_URL, FIA_EVENT_CALENDAR_TIMEZONE, GoogleCalendarError, getTrainingCalendarEvents } from "./googleCalendar";
 
 const openai = new OpenAI({
@@ -2473,6 +2473,20 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[Vimeo] list videos:", err?.message);
       res.status(502).json({ message: err?.message ?? "Failed to load Vimeo videos" });
+    }
+  });
+
+  app.get("/api/admin/vimeo/videos/search", requireAdmin, async (req: Request, res: Response) => {
+    const parsed = z.object({
+      q: z.string().trim().min(1).max(200),
+      page: z.coerce.number().int().min(1).max(10_000).default(1),
+    }).safeParse(req.query);
+    if (!parsed.success) return res.status(400).json({ message: "Enter a valid Vimeo video title." });
+    try {
+      res.json(await searchVimeoVideos(parsed.data.q, parsed.data.page));
+    } catch (err: any) {
+      console.error("[Vimeo] search videos:", err?.message);
+      res.status(502).json({ message: err?.message ?? "Failed to search Vimeo videos" });
     }
   });
 
