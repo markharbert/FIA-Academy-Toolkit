@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
-import { ArrowLeft, ChevronDown, ChevronRight, Download, ExternalLink, Eye, EyeOff, Film, Folder, ListVideo, Loader2, Pencil, Plus, RefreshCw, Save, Trash2, Tag } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, Download, ExternalLink, Eye, EyeOff, Film, Folder, Link as LinkIcon, ListVideo, Loader2, Pencil, Plus, RefreshCw, Save, Trash2, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
