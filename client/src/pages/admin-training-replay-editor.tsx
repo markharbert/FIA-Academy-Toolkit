@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RichTextEditor } from "@/components/projects/rich-text-editor";
 import { TrainingResourceIcon } from "@/components/training-resource-icon";
 import { TrainingTranscriptStatus } from "@/components/training-transcript-status";
+import { streamTranscriptGeneration, type TranscriptGenerationProgress } from "@/lib/transcript-generation";
 import { useToast } from "@/hooks/use-toast";
 
 type Resource = { id: string; name: string; url: string; subtitle: string | null; kind: "link" | "pdf" };
@@ -148,6 +149,7 @@ export default function AdminTrainingReplayEditorPage() {
   const newResourceUrlRef = useRef<HTMLInputElement>(null);
   const [showTranscriptTracks, setShowTranscriptTracks] = useState(false);
   const [transcriptDeleteOpen, setTranscriptDeleteOpen] = useState(false);
+  const [freshTranscriptProgress, setFreshTranscriptProgress] = useState<TranscriptGenerationProgress | null>(null);
   const [addingCategory, setAddingCategory] = useState(false);
   const [categoryDraft, setCategoryDraft] = useState("");
   const [vimeoPickerOpen, setVimeoPickerOpen] = useState(false);
@@ -420,8 +422,12 @@ export default function AdminTrainingReplayEditorPage() {
       if (timer.current) clearTimeout(timer.current);
       const saved = await saveRevision(revision.current);
       if (!saved) throw new Error("Save the replay before creating a fresh transcript.");
-      return api(`/api/admin/training-replays/${replayId}/fresh-transcript`, { method: "POST" });
+      return streamTranscriptGeneration<Replay>(
+        `/api/admin/training-replays/${replayId}/fresh-transcript`,
+        setFreshTranscriptProgress,
+      );
     },
+    onMutate: () => setFreshTranscriptProgress({ percentage: 0, stage: "Starting" }),
     onSuccess: (updated: Replay) => {
       syncTranscriptFields(updated);
       setShowTranscriptTracks(false);
@@ -433,6 +439,7 @@ export default function AdminTrainingReplayEditorPage() {
     },
     onError: (error: Error) =>
       toast({ title: "Couldn’t create fresh transcript", description: error.message, variant: "destructive" }),
+    onSettled: () => setFreshTranscriptProgress(null),
   });
   const regenerateDescription = useMutation({
     mutationFn: async () => {
@@ -626,7 +633,9 @@ export default function AdminTrainingReplayEditorPage() {
                     ) : (
                       <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
                     )}
-                    {createFreshTranscript.isPending ? "Transcribing video…" : "Create fresh transcript"}
+                     {createFreshTranscript.isPending
+                       ? `Transcribing video · ${freshTranscriptProgress?.percentage ?? 0}%`
+                       : "Create fresh transcript"}
                   </Button>
                  <Button
                    type="button"

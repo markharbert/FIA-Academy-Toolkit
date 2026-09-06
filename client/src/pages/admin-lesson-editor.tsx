@@ -13,6 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { RichTextEditor } from "@/components/projects/rich-text-editor";
 import { TrainingResourceIcon } from "@/components/training-resource-icon";
 import { TrainingTranscriptStatus } from "@/components/training-transcript-status";
+import { streamTranscriptGeneration, type TranscriptGenerationProgress } from "@/lib/transcript-generation";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -222,6 +223,7 @@ export default function AdminLessonEditorPage() {
   const [isNavigatingLesson, setIsNavigatingLesson] = useState(false);
   const [showTranscriptTracks, setShowTranscriptTracks] = useState(false);
   const [transcriptDeleteOpen, setTranscriptDeleteOpen] = useState(false);
+  const [freshTranscriptProgress, setFreshTranscriptProgress] = useState<TranscriptGenerationProgress | null>(null);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const formRef = useRef({ title: "", videoUrl: "", content: "" });
   const revisionRef = useRef(0);
@@ -509,10 +511,16 @@ export default function AdminLessonEditorPage() {
   });
 
   const createFreshTranscript = useMutation({
-    mutationFn: () =>
-      apiFetch(`/api/admin/lessons/${lessonId}/fresh-transcript`, {
-        method: "POST",
-      }),
+    mutationFn: async () => {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+      const saved = await saveCurrentDraft(revisionRef.current);
+      if (!saved) throw new Error("Save the lesson before creating a fresh transcript.");
+      return streamTranscriptGeneration<LessonWithResources>(
+        `/api/admin/lessons/${lessonId}/fresh-transcript`,
+        setFreshTranscriptProgress,
+      );
+    },
+    onMutate: () => setFreshTranscriptProgress({ percentage: 0, stage: "Starting" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/lessons", lessonId] });
       setShowTranscriptTracks(false);
@@ -523,6 +531,7 @@ export default function AdminLessonEditorPage() {
     },
     onError: (e: Error) =>
       toast({ title: "Couldn’t create fresh transcript", description: e.message, variant: "destructive" }),
+    onSettled: () => setFreshTranscriptProgress(null),
   });
 
   const generateTranscriptChapters = useMutation({
@@ -833,7 +842,9 @@ export default function AdminLessonEditorPage() {
                     ) : (
                       <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
                     )}
-                    {createFreshTranscript.isPending ? "Transcribing video…" : "Create fresh transcript"}
+                    {createFreshTranscript.isPending
+                      ? `Transcribing video · ${freshTranscriptProgress?.percentage ?? 0}%`
+                      : "Create fresh transcript"}
                   </Button>
                   <Button
                     type="button"

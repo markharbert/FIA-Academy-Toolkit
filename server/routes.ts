@@ -14163,33 +14163,58 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
 
   app.post("/api/admin/lessons/:id/fresh-transcript", requireAdmin, async (req, res) => {
     const temporaryFiles: string[] = [];
+    let progressStream: ReturnType<typeof startTranscriptProgressStream> | null = null;
     try {
       const lesson = await storage.getCourseLesson(req.params.id);
       const videoId = lesson?.videoUrl ? extractVimeoVideoId(lesson.videoUrl) : null;
       if (!lesson || !videoId) {
         return res.status(400).json({ message: "Add a Vimeo video to this lesson first." });
       }
-      const download = await getVimeoVideoDownload(videoId);
+      progressStream = startTranscriptProgressStream(res);
+      progressStream.progress(2, "Preparing Vimeo video");
+      const [download, durationMinutes] = await Promise.all([
+        getVimeoVideoDownload(videoId),
+        getVimeoVideoDurationMinutes(videoId),
+      ]);
+      progressStream.progress(8, "Extracting audio");
       const prefix = `vimeo-lesson-transcript-${lesson.id}-${crypto.randomBytes(6).toString("hex")}`;
-      const extracted = await extractRemoteAudioSegments(download.link, UPLOADS_DIR, prefix, 600);
+      const extracted = await extractRemoteAudioSegments(
+        download.link,
+        UPLOADS_DIR,
+        prefix,
+        600,
+        durationMinutes ? durationMinutes * 60 : undefined,
+        (fraction) => progressStream?.progress(8 + fraction * 17, "Extracting audio"),
+      );
       temporaryFiles.push(...(extracted.segmentPaths ?? []));
       if (!extracted.success || !extracted.segmentPaths?.length) {
-        return res.status(502).json({ message: extracted.error || "Could not extract the Vimeo video's audio." });
+        throw new Error(extracted.error || "Could not extract the Vimeo video's audio.");
       }
+      progressStream.progress(25, "Transcribing video");
 
+      let completedSegments = 0;
       const segmentTranscripts = await mapWithConcurrency(
         extracted.segmentPaths,
         FRESH_TRANSCRIPT_CONCURRENCY,
-        (segmentPath, index) => transcribeAudioWithTimestamps(
-          segmentPath,
-          index * (extracted.segmentDurationSeconds ?? 600),
-        ),
+        async (segmentPath, index) => {
+          const transcript = await transcribeAudioWithTimestamps(
+            segmentPath,
+            index * (extracted.segmentDurationSeconds ?? 600),
+          );
+          completedSegments += 1;
+          progressStream?.progress(
+            25 + (completedSegments / extracted.segmentPaths!.length) * 65,
+            `Transcribing section ${completedSegments} of ${extracted.segmentPaths!.length}`,
+          );
+          return transcript;
+        },
       );
       const transcriptText = segmentTranscripts.map((segment) => segment.text).filter(Boolean).join("\n\n").trim();
       const transcriptCues = segmentTranscripts.flatMap((segment) => segment.cues);
       const transcriptLanguage = segmentTranscripts.find((segment) => segment.language)?.language || "";
       if (!transcriptText) throw new Error("No speech was found in the Vimeo video.");
 
+      progressStream.progress(95, "Saving transcript");
       const saved = await storage.updateCourseLesson(req.params.id, {
         transcriptText,
         transcriptLanguage: transcriptLanguage || null,
@@ -14198,12 +14223,12 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         transcriptCues,
         transcriptChapters: null,
       });
-      res.json(saved);
+      progressStream.complete(saved);
     } catch (e) {
       console.error("[lesson fresh Vimeo transcription]", e);
-      res.status(502).json({
-        message: e instanceof Error ? e.message : "Could not create a fresh transcript from the Vimeo video.",
-      });
+      const message = e instanceof Error ? e.message : "Could not create a fresh transcript from the Vimeo video.";
+      if (progressStream) progressStream.fail(message);
+      else res.status(502).json({ message });
     } finally {
       for (const filePath of temporaryFiles) {
         try {
@@ -14671,37 +14696,61 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   });
   app.post("/api/admin/training-replays/:id/fresh-transcript", requireAdmin, async (req, res) => {
     const temporaryFiles: string[] = [];
+    let progressStream: ReturnType<typeof startTranscriptProgressStream> | null = null;
     try {
       const replay = await storage.getTrainingReplay(req.params.id);
       const videoId = replay?.videoUrl ? extractVimeoVideoId(replay.videoUrl) : null;
       if (!replay || !videoId) {
         return res.status(400).json({ message: "Add a Vimeo video to this replay first." });
       }
-      const download = await getVimeoVideoDownload(videoId);
+      progressStream = startTranscriptProgressStream(res);
+      progressStream.progress(2, "Preparing Vimeo video");
+      const [download, durationMinutes, thumbnailUrl] = await Promise.all([
+        getVimeoVideoDownload(videoId),
+        getVimeoVideoDurationMinutes(videoId),
+        getVimeoVideoThumbnail(videoId),
+      ]);
+      progressStream.progress(8, "Extracting audio");
       const prefix = `vimeo-transcript-${replay.id}-${crypto.randomBytes(6).toString("hex")}`;
-      const extracted = await extractRemoteAudioSegments(download.link, UPLOADS_DIR, prefix, 600);
+      const extracted = await extractRemoteAudioSegments(
+        download.link,
+        UPLOADS_DIR,
+        prefix,
+        600,
+        durationMinutes ? durationMinutes * 60 : undefined,
+        (fraction) => progressStream?.progress(8 + fraction * 17, "Extracting audio"),
+      );
       temporaryFiles.push(...(extracted.segmentPaths ?? []));
       if (!extracted.success || !extracted.segmentPaths?.length) {
-        return res.status(502).json({ message: extracted.error || "Could not extract the Vimeo video's audio." });
+        throw new Error(extracted.error || "Could not extract the Vimeo video's audio.");
       }
+      progressStream.progress(25, "Transcribing video");
+
+      let completedSegments = 0;
       const segmentTranscripts = await mapWithConcurrency(
         extracted.segmentPaths,
         FRESH_TRANSCRIPT_CONCURRENCY,
-        (segmentPath, index) => transcribeAudioWithTimestamps(
-          segmentPath,
-          index * (extracted.segmentDurationSeconds ?? 600),
-        ),
+        async (segmentPath, index) => {
+          const transcript = await transcribeAudioWithTimestamps(
+            segmentPath,
+            index * (extracted.segmentDurationSeconds ?? 600),
+          );
+          completedSegments += 1;
+          progressStream?.progress(
+            25 + (completedSegments / extracted.segmentPaths!.length) * 60,
+            `Transcribing section ${completedSegments} of ${extracted.segmentPaths!.length}`,
+          );
+          return transcript;
+        },
       );
       const transcriptText = segmentTranscripts.map((segment) => segment.text).filter(Boolean).join("\n\n").trim();
       const transcriptCues = segmentTranscripts.flatMap((segment) => segment.cues);
       const transcriptLanguage = segmentTranscripts.find((segment) => segment.language)?.language || "";
       if (!transcriptText) throw new Error("No speech was found in the Vimeo video.");
-      const [generatedMetadata, durationMinutes, thumbnailUrl] = await Promise.all([
-        generateReplayMetadata(replay.title, transcriptText),
-        getVimeoVideoDurationMinutes(videoId),
-        getVimeoVideoThumbnail(videoId),
-      ]);
-      res.json(await storage.updateTrainingReplay(replay.id, {
+      progressStream.progress(90, "Creating replay details");
+      const generatedMetadata = await generateReplayMetadata(replay.title, transcriptText);
+      progressStream.progress(96, "Saving transcript");
+      const saved = await storage.updateTrainingReplay(replay.id, {
         transcriptText,
         transcriptLanguage: transcriptLanguage || null,
         transcriptSource: "Fresh transcription from Vimeo video",
@@ -14712,12 +14761,13 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         durationMinutes,
         tags: generatedMetadata.tags,
         thumbnailUrl: thumbnailUrl || replay.thumbnailUrl || null,
-      }));
+      });
+      progressStream.complete(saved);
     } catch (error) {
       console.error("[replay fresh Vimeo transcription]", error);
-      res.status(502).json({
-        message: error instanceof Error ? error.message : "Could not create a fresh transcript from the Vimeo video.",
-      });
+      const message = error instanceof Error ? error.message : "Could not create a fresh transcript from the Vimeo video.";
+      if (progressStream) progressStream.fail(message);
+      else res.status(502).json({ message });
     } finally {
       for (const filePath of temporaryFiles) {
         try {
