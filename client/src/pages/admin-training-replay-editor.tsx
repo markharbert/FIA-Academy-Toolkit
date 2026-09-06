@@ -9,12 +9,17 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RichTextEditor } from "@/components/projects/rich-text-editor";
 import { useToast } from "@/hooks/use-toast";
 
 type Resource = { id: string; name: string; url: string; subtitle: string | null; kind: "link" | "pdf" };
-type Replay = { id: string; title: string; description: string | null; category: string | null; tags: string[]; durationMinutes: number | null; videoUrl: string | null; content: string | null; status: "draft" | "published"; resources: Resource[]; transcriptText: string | null; transcriptChapters: unknown[] | null };
+type ReplayChapter = { startSeconds: number; title: string };
+type Replay = { id: string; title: string; description: string | null; category: string | null; tags: string[]; durationMinutes: number | null; videoUrl: string | null; content: string | null; status: "draft" | "published"; resources: Resource[]; transcriptText: string | null; transcriptLanguage: string | null; transcriptSource: string | null; transcriptUpdatedAt: string | null; transcriptChapters: ReplayChapter[] | null };
 type VimeoFolder = { id: string; name: string; parentId?: string; path: string[] };
 type VimeoVideo = { id: string; name: string; url: string; thumbnailUrl?: string };
 type VimeoVideoPage = { videos: VimeoVideo[]; hasMore: boolean };
@@ -123,10 +128,12 @@ export default function AdminTrainingReplayEditorPage() {
   const [resourceEditor, setResourceEditor] = useState<Resource | null>(null);
   const [resourceDialogOpen, setResourceDialogOpen] = useState(false);
   const [resource, setResource] = useState({ name: "", url: "", subtitle: "", kind: "link" as "link" | "pdf" });
-  const [trackPickerOpen, setTrackPickerOpen] = useState(false);
+  const [showTranscriptTracks, setShowTranscriptTracks] = useState(false);
+  const [transcriptDeleteOpen, setTranscriptDeleteOpen] = useState(false);
   const [addingCategory, setAddingCategory] = useState(false);
   const [categoryDraft, setCategoryDraft] = useState("");
   const [vimeoPickerOpen, setVimeoPickerOpen] = useState(false);
+  const videoProvider = detectVideoProvider(form?.videoUrl || "");
 
   const replayQuery = useQuery<Replay>({
     queryKey: ["/api/admin/training-replays", replayId],
@@ -235,7 +242,11 @@ export default function AdminTrainingReplayEditorPage() {
     queryFn: () => api(`/api/admin/vimeo/folders/${selectedVimeoFolderId}/videos?page=${vimeoVideoPage}`),
     enabled: vimeoPickerOpen && selectedVimeoFolderId !== "all",
   });
-  const tracksQuery = useQuery<{ tracks: Track[] }>({ queryKey: ["/api/admin/training-replays", replayId, "vimeo-transcript-tracks"], queryFn: () => api(`/api/admin/training-replays/${replayId}/vimeo-transcript-tracks`), enabled: trackPickerOpen });
+  const tracksQuery = useQuery<{ tracks: Track[] }>({
+    queryKey: ["/api/admin/training-replays", replayId, "vimeo-transcript-tracks"],
+    queryFn: () => api(`/api/admin/training-replays/${replayId}/vimeo-transcript-tracks`),
+    enabled: showTranscriptTracks && videoProvider === "vimeo",
+  });
   useEffect(() => {
     if (!vimeoPickerOpen) return;
     const savedFolderId = window.localStorage.getItem(VIMEO_LAST_FOLDER_STORAGE_KEY);
@@ -296,28 +307,58 @@ export default function AdminTrainingReplayEditorPage() {
     );
   };
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["/api/admin/training-replays", replayId] });
-  const transcriptMutation = useMutation({
-    mutationFn: ({ path, body, method = "POST" }: { path: string; body?: object; method?: string }) =>
-      api(`/api/admin/training-replays/${replayId}/${path}`, {
-        method,
-        headers: body ? { "Content-Type": "application/json" } : undefined,
-        body: body ? JSON.stringify(body) : undefined,
+  const syncTranscriptFields = (updated: Replay) => {
+    if (!formRef.current) return;
+    const next = {
+      ...formRef.current,
+      transcriptText: updated.transcriptText,
+      transcriptLanguage: updated.transcriptLanguage,
+      transcriptSource: updated.transcriptSource,
+      transcriptUpdatedAt: updated.transcriptUpdatedAt,
+      transcriptChapters: updated.transcriptChapters,
+    };
+    formRef.current = next;
+    setForm(next);
+  };
+  const importVimeoTranscript = useMutation({
+    mutationFn: (trackId: string) =>
+      api(`/api/admin/training-replays/${replayId}/vimeo-transcript`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trackId }),
       }),
     onSuccess: (updated: Replay) => {
-      setTrackPickerOpen(false);
-      if (formRef.current) {
-        const next = {
-          ...formRef.current,
-          transcriptText: updated.transcriptText,
-          transcriptChapters: updated.transcriptChapters,
-        };
-        formRef.current = next;
-        setForm(next);
-      }
+      syncTranscriptFields(updated);
+      setShowTranscriptTracks(false);
       invalidate();
+      toast({ title: "Transcript added", description: "The Vimeo transcript is ready for members to view." });
     },
     onError: (error: Error) =>
-      toast({ title: "Transcript action failed", description: error.message, variant: "destructive" }),
+      toast({ title: "Couldn’t add transcript", description: error.message, variant: "destructive" }),
+  });
+  const generateTranscriptChapters = useMutation({
+    mutationFn: () =>
+      api(`/api/admin/training-replays/${replayId}/transcript-chapters`, { method: "POST" }),
+    onSuccess: (updated: Replay) => {
+      syncTranscriptFields(updated);
+      invalidate();
+      toast({ title: "Chapters created", description: "Members can now jump to the key moments in this replay." });
+    },
+    onError: (error: Error) =>
+      toast({ title: "Couldn’t create chapters", description: error.message, variant: "destructive" }),
+  });
+  const deleteTranscript = useMutation({
+    mutationFn: () =>
+      api(`/api/admin/training-replays/${replayId}/transcript`, { method: "DELETE" }),
+    onSuccess: (updated: Replay) => {
+      syncTranscriptFields(updated);
+      setTranscriptDeleteOpen(false);
+      setShowTranscriptTracks(false);
+      invalidate();
+      toast({ title: "Transcript removed", description: "The transcript and its chapters were removed from this replay." });
+    },
+    onError: (error: Error) =>
+      toast({ title: "Couldn’t remove transcript", description: error.message, variant: "destructive" }),
   });
   const resourceMutation = useMutation({
     mutationFn: () => api(resourceEditor ? `/api/admin/training-replays/${replayId}/resources/${resourceEditor.id}` : `/api/admin/training-replays/${replayId}/resources`, { method: resourceEditor ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...resource, subtitle: resource.subtitle || null }) }),
@@ -335,13 +376,166 @@ export default function AdminTrainingReplayEditorPage() {
      <div className="space-y-6">
        <section className="grid gap-4 rounded-lg border bg-white/70 p-4 sm:grid-cols-2"><div className="sm:col-span-2"><Label>Description</Label><Textarea className="mt-1 min-h-24" value={form.description || ""} onChange={(e) => change("description", e.target.value)} placeholder="A clear summary for members browsing the vault." /></div><div className="sm:col-span-2"><Label className="flex items-center gap-1.5"><Tag className="h-3.5 w-3.5 text-violet-600" />Category</Label>{addingCategory ? <div className="mt-1 space-y-2"><Input autoFocus value={categoryDraft} placeholder="New category name" onChange={(e) => setCategoryDraft(e.target.value)} /><div className="flex gap-2"><Button type="button" size="sm" disabled={!categoryDraft.trim()} onClick={() => { change("category", categoryDraft.trim()); setAddingCategory(false); setCategoryDraft(""); }}>Add category</Button><Button type="button" size="sm" variant="ghost" onClick={() => { setAddingCategory(false); setCategoryDraft(""); }}>Cancel</Button></div></div> : <Select value={form.category || "__none"} onValueChange={(value) => { if (value === "__new") { setCategoryDraft(""); setAddingCategory(true); } else change("category", value === "__none" ? null : value); }}><SelectTrigger className="mt-1"><SelectValue placeholder="Choose a category" /></SelectTrigger><SelectContent><SelectItem value="__none">No category</SelectItem>{categories.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}<SelectItem value="__new">Create a new category</SelectItem></SelectContent></Select>}</div><div><Label>Duration (min)</Label><Input className="mt-1" type="number" value={form.durationMinutes || ""} onChange={(e) => change("durationMinutes", e.target.value ? Number(e.target.value) : null)} /></div><div><Label>Tags</Label><Input className="mt-1" value={form.tags} onChange={(e) => change("tags", e.target.value)} placeholder="mindset, strategy" /></div></section>
        <Separator />
-       <section className="space-y-2"><Label className="flex items-center gap-1.5"><LinkIcon className="h-4 w-4 text-muted-foreground" />Video URL</Label><div className="flex gap-2"><Input className="min-w-0 flex-1" value={form.videoUrl || ""} onChange={(e) => change("videoUrl", e.target.value)} placeholder="https://youtube.com/watch… or https://vimeo.com/…" /><Button type="button" variant="outline" className="shrink-0" onClick={() => setVimeoPickerOpen(true)}><Film className="mr-1.5 h-4 w-4 text-blue-500" />Choose Vimeo</Button></div><VideoPreview url={form.videoUrl || ""} /></section>
-      <section className="rounded-xl border p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-semibold">Transcript & chapters</h2><p className="text-sm text-muted-foreground">{form.transcriptText ? "Transcript imported." : "Import a Vimeo caption track to make this searchable."}</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={() => setTrackPickerOpen(true)}>Import transcript</Button>{form.transcriptText && <><a href={`/api/admin/training-replays/${replayId}/transcript/download`}><Button variant="outline" size="sm"><Download className="mr-1 h-4 w-4" />Download</Button></a><Button variant="outline" size="sm" onClick={() => transcriptMutation.mutate({ path: "transcript-chapters" })}><ListVideo className="mr-1 h-4 w-4" />Chapters</Button><Button variant="ghost" size="sm" className="text-destructive" onClick={() => transcriptMutation.mutate({ path: "transcript", method: "DELETE" })}>Delete</Button></>}</div></div></section>
+       <section className="space-y-2">
+         <Label className="flex items-center gap-1.5">
+           <LinkIcon className="h-4 w-4 text-muted-foreground" />
+           Video URL
+         </Label>
+         <div className="flex gap-2">
+           <Input
+             className="min-w-0 flex-1"
+             value={form.videoUrl || ""}
+             onChange={(event) => change("videoUrl", event.target.value)}
+             placeholder="https://youtube.com/watch… or https://vimeo.com/…"
+           />
+           <Button
+             type="button"
+             variant="outline"
+             className="shrink-0 gap-1.5"
+             onClick={() => {
+               setVimeoFolderFilter("");
+               setVimeoPickerOpen(true);
+             }}
+           >
+             <Film className="h-4 w-4 text-blue-500" />
+             Choose Vimeo
+           </Button>
+         </div>
+         <VideoPreview url={form.videoUrl || ""} />
+         {videoProvider === "vimeo" && (
+           <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+             <div className="flex flex-wrap items-center justify-between gap-2">
+               <div>
+                 <p className="text-sm font-medium">Transcript</p>
+                 <p className="text-xs text-muted-foreground">
+                   {form.transcriptText
+                     ? `Imported from ${form.transcriptSource || "Vimeo"}${form.transcriptLanguage ? ` · ${form.transcriptLanguage}` : ""}`
+                     : "Import captions already available for this Vimeo video."}
+                 </p>
+               </div>
+               <div className="flex flex-wrap items-center gap-2">
+                 {form.transcriptText && (
+                   <Button
+                     type="button"
+                     size="sm"
+                     variant="outline"
+                     disabled={generateTranscriptChapters.isPending}
+                     onClick={() => generateTranscriptChapters.mutate()}
+                   >
+                     {generateTranscriptChapters.isPending ? (
+                       <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                     ) : (
+                       <ListVideo className="mr-1.5 h-3.5 w-3.5" />
+                     )}
+                     {form.transcriptChapters?.length ? "Regenerate chapters" : "Generate chapters"}
+                   </Button>
+                 )}
+                 {form.transcriptText && (
+                   <Button asChild size="sm" variant="outline">
+                     <a href={`/api/admin/training-replays/${replayId}/transcript/download`}>
+                       <Download className="mr-1.5 h-3.5 w-3.5" />
+                       Download
+                     </a>
+                   </Button>
+                 )}
+                 {form.transcriptText && (
+                   <Button
+                     type="button"
+                     size="sm"
+                     variant="outline"
+                     className="text-destructive hover:text-destructive"
+                     onClick={() => setTranscriptDeleteOpen(true)}
+                   >
+                     <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                     Remove
+                   </Button>
+                 )}
+                 <Button
+                   type="button"
+                   size="sm"
+                   variant={form.transcriptText ? "outline" : "default"}
+                   onClick={() => setShowTranscriptTracks((shown) => !shown)}
+                 >
+                   {form.transcriptText ? "Replace transcript" : "Add transcript"}
+                 </Button>
+               </div>
+             </div>
+             {showTranscriptTracks && (
+               <div className="border-t pt-3">
+                 {tracksQuery.isLoading ? (
+                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                     <Loader2 className="h-4 w-4 animate-spin" />
+                     Checking Vimeo for transcripts…
+                   </div>
+                 ) : tracksQuery.isError ? (
+                   <p className="text-sm text-destructive">
+                     {tracksQuery.error instanceof Error ? tracksQuery.error.message : "Couldn’t load Vimeo transcripts."}
+                   </p>
+                 ) : (tracksQuery.data?.tracks.length ?? 0) === 0 ? (
+                   <p className="text-sm text-muted-foreground">
+                     Vimeo has no caption or transcript track available for this video yet.
+                   </p>
+                 ) : (
+                   <div className="space-y-2">
+                     <p className="text-xs text-muted-foreground">Choose a Vimeo text track to import:</p>
+                     {tracksQuery.data?.tracks.map((track) => (
+                       <Button
+                         key={track.id}
+                         type="button"
+                         variant="outline"
+                         className="h-auto w-full justify-between py-2 text-left"
+                         disabled={importVimeoTranscript.isPending}
+                         onClick={() => importVimeoTranscript.mutate(track.id)}
+                       >
+                         <span>
+                           <span className="block text-sm">{track.name || track.language || "Vimeo transcript"}</span>
+                           <span className="block text-xs font-normal text-muted-foreground">
+                             {[track.language, track.type].filter(Boolean).join(" · ")}
+                           </span>
+                         </span>
+                         {importVimeoTranscript.isPending ? (
+                           <Loader2 className="h-4 w-4 animate-spin" />
+                         ) : (
+                           <Download className="h-4 w-4" />
+                         )}
+                       </Button>
+                     ))}
+                   </div>
+                 )}
+               </div>
+             )}
+           </div>
+         )}
+       </section>
        <Separator />
        <section><Label className="mb-2 block">Replay content</Label><RichTextEditor value={form.content || ""} onChange={(value) => change("content", value)} /></section>
       <section className="rounded-xl border p-4"><div className="flex items-center justify-between"><h2 className="font-semibold">Resources</h2><Button size="sm" variant="outline" onClick={() => openResource()}><Plus className="mr-1 h-4 w-4" />Add resource</Button></div><div className="mt-3 space-y-2">{(replayQuery.data?.resources || []).map((item) => <div key={item.id} className="flex items-center justify-between rounded bg-muted/50 p-2 text-sm"><span>{item.name}</span><span><Button size="icon" variant="ghost" onClick={() => openResource(item)}><Pencil className="h-4 w-4" /></Button><Button size="icon" variant="ghost" className="text-destructive" onClick={() => deleteResource.mutate(item.id)}><Trash2 className="h-4 w-4" /></Button></span></div>)}</div></section>
     </div></div>
     <Dialog open={resourceDialogOpen} onOpenChange={(open) => { setResourceDialogOpen(open); if (!open) { setResourceEditor(null); setResource({ name: "", url: "", subtitle: "", kind: "link" }); } }}><DialogContent><DialogHeader><DialogTitle>{resourceEditor ? "Edit resource" : "Add resource"}</DialogTitle></DialogHeader><div className="space-y-3"><Input placeholder="Resource name" value={resource.name} onChange={(e) => setResource({ ...resource, name: e.target.value })} /><Input placeholder="https://…" value={resource.url} onChange={(e) => setResource({ ...resource, url: e.target.value })} /><Input placeholder="Optional description" value={resource.subtitle} onChange={(e) => setResource({ ...resource, subtitle: e.target.value })} /><select className="w-full rounded border bg-background p-2" value={resource.kind} onChange={(e) => setResource({ ...resource, kind: e.target.value as "link" | "pdf" })}><option value="link">Link</option><option value="pdf">PDF</option></select><Button className="w-full" disabled={!resource.name || !resource.url || resourceMutation.isPending} onClick={() => resourceMutation.mutate()}>{resourceEditor ? "Save resource" : "Add resource"}</Button></div></DialogContent></Dialog>
+    <AlertDialog open={transcriptDeleteOpen} onOpenChange={(open) => !open && setTranscriptDeleteOpen(false)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Remove transcript?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This will remove the transcript, timestamped cues, and generated chapters from this replay. You can import the Vimeo transcript again later.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={deleteTranscript.isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            disabled={deleteTranscript.isPending}
+            onClick={(event) => {
+              event.preventDefault();
+              deleteTranscript.mutate();
+            }}
+          >
+            {deleteTranscript.isPending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+            Remove transcript
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
       <Dialog open={vimeoPickerOpen} onOpenChange={setVimeoPickerOpen}>
         <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-6xl">
           <DialogHeader>
@@ -470,6 +664,5 @@ export default function AdminTrainingReplayEditorPage() {
           </div>
         </DialogContent>
       </Dialog>
-    <Dialog open={trackPickerOpen} onOpenChange={setTrackPickerOpen}><DialogContent><DialogHeader><DialogTitle>Import Vimeo transcript</DialogTitle><DialogDescription>Choose the caption language Vimeo should import.</DialogDescription></DialogHeader>{tracksQuery.isLoading ? <p className="text-sm text-muted-foreground">Loading tracks…</p> : tracksQuery.isError ? <p className="text-sm text-destructive">{tracksQuery.error instanceof Error ? tracksQuery.error.message : "Couldn’t load Vimeo tracks."}</p> : <div className="space-y-2">{tracksQuery.data?.tracks.map((track) => <Button key={track.id} variant="outline" className="w-full justify-start" onClick={() => transcriptMutation.mutate({ path: "vimeo-transcript", body: { trackId: track.id } })}>{track.name || track.language} <span className="ml-2 text-muted-foreground">{track.language}</span></Button>)}{!tracksQuery.data?.tracks.length && <p className="text-sm text-muted-foreground">No caption tracks are available for this Vimeo video.</p>}</div>}</DialogContent></Dialog>
   </main>;
 }
