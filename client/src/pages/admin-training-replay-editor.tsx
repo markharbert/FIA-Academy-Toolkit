@@ -33,7 +33,7 @@ type CfDownload = {
   editUrl: string | null;
 };
 type Form = Omit<Replay, "resources" | "tags"> & { tags: string };
-type ReplayUpdate = Pick<Form, "title" | "description" | "category" | "durationMinutes" | "videoUrl" | "content" | "status"> & { tags: string[] };
+type ReplayUpdate = Pick<Form, "title" | "description" | "category" | "durationMinutes" | "videoUrl" | "thumbnailUrl" | "content" | "status"> & { tags: string[] };
 
 async function api(url: string, init?: RequestInit) {
   const response = await fetch(url, { credentials: "include", ...init });
@@ -197,6 +197,7 @@ export default function AdminTrainingReplayEditorPage() {
         category: data.category,
         durationMinutes: data.durationMinutes,
         videoUrl: data.videoUrl,
+        thumbnailUrl: data.thumbnailUrl,
         content: data.content,
         status: data.status,
         tags: data.tags.split(",").map((tag) => tag.trim()).filter(Boolean),
@@ -1035,6 +1036,7 @@ export default function AdminTrainingReplayEditorPage() {
                       className="flex w-full items-center gap-3 rounded-md border p-2 text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring"
                       onClick={() => {
                         change("videoUrl", video.url);
+                        change("thumbnailUrl", video.thumbnailUrl || null);
                         if (video.durationMinutes) change("durationMinutes", video.durationMinutes);
                         setVimeoPickerOpen(false);
                       }}

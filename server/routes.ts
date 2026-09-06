@@ -52,7 +52,7 @@ import {
 } from "./clickfunnels";
 import { listCfCourses, listCfDownloads, getCfCourseStructure, extractVimeoUrl, type CfTreeNode } from "./cf-import-client";
 import { runCfMembershipReconciliation } from "./cfMembershipReconciliation";
-import { listVimeoProjects, listVimeoVideos, searchVimeoVideos, extractVimeoVideoId, listVimeoTextTracks, fetchVimeoTranscript, getVimeoVideoDurationMinutes } from "./vimeo";
+import { listVimeoProjects, listVimeoVideos, searchVimeoVideos, extractVimeoVideoId, listVimeoTextTracks, fetchVimeoTranscript, getVimeoVideoDurationMinutes, getVimeoVideoThumbnail } from "./vimeo";
 import { FIA_EVENT_CALENDAR_ID, FIA_EVENT_CALENDAR_NAME, FIA_EVENT_CALENDAR_SUBSCRIBE_URL, FIA_EVENT_CALENDAR_TIMEZONE, GoogleCalendarError, getTrainingCalendarEvents } from "./googleCalendar";
 
 const openai = new OpenAI({
@@ -14536,6 +14536,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         generateReplayMetadata(replay.title, transcript.text),
         getVimeoVideoDurationMinutes(videoId),
       ]);
+      const thumbnailUrl = await getVimeoVideoThumbnail(videoId);
       res.json(await storage.updateTrainingReplay(replay.id, {
         transcriptText: transcript.text, transcriptLanguage: transcript.language || null,
         transcriptSource: `Vimeo${transcript.name ? ` · ${transcript.name}` : ""}`,
@@ -14543,6 +14544,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         description: generatedMetadata.description,
         durationMinutes,
         tags: generatedMetadata.tags,
+        thumbnailUrl: thumbnailUrl || replay.thumbnailUrl || null,
       }));
     } catch (error) {
       console.error("[replay Vimeo import]", error);
@@ -14645,10 +14647,29 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       })).filter((replay) => selectedTags.every((tag) => (replay.tags || []).includes(tag)));
       const categories = [...new Set(all.map((replay) => replay.category).filter((item): item is string => !!item))].sort();
       const tags = [...new Set(all.flatMap((replay) => replay.tags || []))].sort();
-      const items = replays.map((replay) => ({
+      const items = await Promise.all(replays.map(async (replay) => {
+        let thumbnailUrl = replay.thumbnailUrl;
+        if (!thumbnailUrl && replay.videoUrl) {
+          const videoId = extractVimeoVideoId(replay.videoUrl);
+          if (videoId) {
+            try {
+              thumbnailUrl = await getVimeoVideoThumbnail(videoId);
+              if (thumbnailUrl) {
+                void storage.updateTrainingReplay(replay.id, { thumbnailUrl }).catch((error) => {
+                  console.warn("[training library] could not persist Vimeo thumbnail:", error);
+                });
+              }
+            } catch (error) {
+              console.warn("[training library] could not load Vimeo thumbnail:", error);
+            }
+          }
+        }
+        return {
           ...replay,
+          thumbnailUrl,
           transcriptMatches: transcriptMatchSnippets(replay, parsed.data.q),
-        }));
+        };
+      }));
       res.json({
         items,
         replays: items,

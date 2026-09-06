@@ -226,6 +226,17 @@ export async function getVimeoVideoDurationMinutes(videoId: string): Promise<num
   return Math.max(1, Math.ceil(durationSeconds / 60));
 }
 
+export async function getVimeoVideoThumbnail(videoId: string): Promise<string | null> {
+  if (!VIMEO_ACCESS_TOKEN) throw new Error("Vimeo access is not configured");
+  const payload = await cachedVimeoValue(
+    `video-thumbnail:${videoId}`,
+    () => vimeoGet(`/videos/${encodeURIComponent(videoId)}?fields=pictures`),
+  );
+  const pictures = Array.isArray(payload?.pictures?.sizes) ? payload.pictures.sizes : [];
+  const thumbnail = pictures.at(-1)?.link;
+  return typeof thumbnail === "string" && thumbnail ? thumbnail : null;
+}
+
 export interface VimeoFolder {
   id: string;
   name: string;
