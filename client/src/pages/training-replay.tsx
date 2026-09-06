@@ -7,6 +7,7 @@ import { ArrowLeft, ChevronDown, Clock, ExternalLink, FileText, Play } from "luc
 import { Button } from "@/components/ui/button";
 import { TrainingResourceIcon } from "@/components/training-resource-icon";
 import { cn } from "@/lib/utils";
+import { formatTranscriptParagraphs } from "@shared/transcript-format";
 
 type Resource = { id: string; name: string; url: string; subtitle?: string | null; kind?: string };
 type Chapter = { startSeconds: number; title: string };
@@ -94,7 +95,7 @@ export default function TrainingReplayPage() {
   const isVimeoReplay = Boolean(replay?.videoUrl?.includes("vimeo.com"));
   const chapters = replay?.transcriptChapters ?? [];
   const transcriptCues = replay?.transcriptCues ?? [];
-  const transcriptText = replay?.transcriptText ?? "";
+  const transcriptText = replay?.transcriptText ? formatTranscriptParagraphs(replay.transcriptText) : "";
   const transcriptTokens = transcriptText.split(/(\s+)/);
   let transcriptWordCount = 0;
   const transcriptTokenWordIndexes = transcriptTokens.map((token) => {

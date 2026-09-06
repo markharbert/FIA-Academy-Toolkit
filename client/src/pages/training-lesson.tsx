@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import DOMPurify from "dompurify";
 import { cn } from "@/lib/utils";
+import { formatTranscriptParagraphs } from "@shared/transcript-format";
 import { buildCourseModuleTree, flattenCourseModuleTree, type CourseModuleTree } from "@shared/course-structure";
 import { CourseIcon } from "@/lib/course-icons";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -233,7 +234,7 @@ export default function TrainingLessonPage() {
   const isVimeoLesson = !!lesson?.videoUrl?.includes("vimeo.com");
   const chapters = lesson?.transcriptChapters ?? [];
   const transcriptCues = lesson?.transcriptCues ?? [];
-  const transcriptText = lesson?.transcriptText ?? "";
+  const transcriptText = lesson?.transcriptText ? formatTranscriptParagraphs(lesson.transcriptText) : "";
   const transcriptTokens = transcriptText.split(/(\s+)/);
   let transcriptWordCount = 0;
   const transcriptTokenWordIndexes = transcriptTokens.map((token) => {
