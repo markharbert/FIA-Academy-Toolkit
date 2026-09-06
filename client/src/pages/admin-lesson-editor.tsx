@@ -919,22 +919,18 @@ export default function AdminLessonEditorPage() {
           )}
         </div>
 
-        <Separator />
-
-        {/* Content */}
-        <div className="space-y-2">
-          <Label>Lesson Content</Label>
+         {/* Content */}
+         <section className="space-y-3 rounded-lg border bg-white/70 p-4">
+           <Label className="block">Lesson Content</Label>
           <RichTextEditor
             value={content}
             onChange={(html) => handleChange("content", html)}
             placeholder="Write the lesson content here…"
           />
-        </div>
-
-        <Separator />
+         </section>
 
         {/* Resources */}
-        <div className="space-y-3">
+         <section className="space-y-3 rounded-lg border bg-white/70 p-4">
           <div className="flex items-center justify-between">
             <Label>Resources</Label>
              <div className="flex items-center gap-2">
@@ -955,7 +951,7 @@ export default function AdminLessonEditorPage() {
                >
                  <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Resource
                </Button>
-             </div>
+         </section>
           </div>
 
           {/* Add resource form */}
