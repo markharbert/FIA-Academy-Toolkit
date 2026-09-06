@@ -221,7 +221,7 @@ export default function TrainingReplayPage() {
             {replay.title}
           </h1>
           {replay.description && (
-            <p className="mb-7 max-w-[780px] text-base leading-7 text-slate-600 sm:text-lg">
+            <p className="mb-7 w-full text-base leading-7 text-slate-600 sm:text-lg">
               {replay.description}
             </p>
           )}
