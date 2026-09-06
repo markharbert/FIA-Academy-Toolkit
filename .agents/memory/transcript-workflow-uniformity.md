@@ -9,8 +9,8 @@ Transcript controls, status information, generation behavior, timestamps, source
 
 **How to apply:** Whenever transcript behavior or presentation changes on either surface, review and update the corresponding course and replay flows together unless the product requirement explicitly distinguishes them.
 
-Fresh-transcript progress responses must bypass response compression and flush each NDJSON event.
+Fresh-transcript progress responses must bypass response compression, pad each NDJSON event beyond proxy buffering thresholds, flush every event, and emit bounded heartbeat percentages during long AI calls.
 
-**Why:** Compression middleware buffers the small progress messages, making the browser appear stuck until the completed response arrives.
+**Why:** Compression and reverse proxies can buffer small progress messages, while long AI calls naturally produce no intermediate completion events. Either issue makes the browser appear stuck.
 
-**How to apply:** Keep every fresh-transcript streaming endpoint covered by the compression bypass whenever routes are added or renamed.
+**How to apply:** Keep every fresh-transcript endpoint covered by the compression bypass and shared padded stream writer, and clear its heartbeat timer on every exit path.
