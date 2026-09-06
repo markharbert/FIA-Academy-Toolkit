@@ -809,27 +809,8 @@ export default function AdminLessonEditorPage() {
                       : "Import captions already available for this Vimeo video."}
                   </p>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {lesson.transcriptText && (
-                    <Button asChild size="sm" variant="outline">
-                      <a href={`/api/admin/lessons/${lessonId}/transcript/download`}>
-                        <Download className="mr-1.5 h-3.5 w-3.5" />
-                        Download
-                      </a>
-                    </Button>
-                  )}
-                  {lesson.transcriptText && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => setTranscriptDeleteOpen(true)}
-                    >
-                      <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                      Remove
-                    </Button>
-                  )}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
                     size="sm"
@@ -854,6 +835,29 @@ export default function AdminLessonEditorPage() {
                   >
                     Import Vimeo captions
                   </Button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {lesson.transcriptText && (
+                      <Button asChild size="sm" variant="outline">
+                        <a href={`/api/admin/lessons/${lessonId}/transcript/download`}>
+                          <Download className="mr-1.5 h-3.5 w-3.5" />
+                          Download
+                        </a>
+                      </Button>
+                    )}
+                    {lesson.transcriptText && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => setTranscriptDeleteOpen(true)}
+                      >
+                        <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                        Remove
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
               <TrainingTranscriptStatus
