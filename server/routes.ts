@@ -53,7 +53,7 @@ import {
 } from "./clickfunnels";
 import { listCfCourses, listCfDownloads, getCfCourseStructure, extractVimeoUrl, type CfTreeNode } from "./cf-import-client";
 import { runCfMembershipReconciliation } from "./cfMembershipReconciliation";
-import { listVimeoProjects, listVimeoVideos, searchVimeoVideos, extractVimeoVideoId, listVimeoTextTracks, fetchVimeoTranscript, getVimeoVideoDurationMinutes, getVimeoVideoThumbnail, getVimeoVideoDownload } from "./vimeo";
+import { listVimeoProjects, listVimeoVideos, searchVimeoVideos, extractVimeoVideoId, listVimeoTextTracks, fetchVimeoTranscript, getVimeoVideoDurationMinutes, getVimeoVideoThumbnail, getVimeoVideoDownload, syncVimeoChapters, type VimeoChapterInput } from "./vimeo";
 import { FIA_EVENT_CALENDAR_ID, FIA_EVENT_CALENDAR_NAME, FIA_EVENT_CALENDAR_SUBSCRIBE_URL, FIA_EVENT_CALENDAR_TIMEZONE, GoogleCalendarError, getTrainingCalendarEvents } from "./googleCalendar";
 
 const openai = new OpenAI({
@@ -114,6 +114,27 @@ const SCREENSHOTS_DIR = path.join(process.cwd(), "uploads", "feedback-screenshot
 const MAX_VIDEO_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
 const MAX_RETRANSCRIBES_PER_DAY = 3;
 const FRESH_TRANSCRIPT_CONCURRENCY = 3;
+
+type VimeoChapterSyncMetadata = {
+  vimeoChaptersSynced: boolean;
+  vimeoChapterCount?: number;
+  vimeoChapterSyncMessage?: string;
+};
+
+async function trySyncVimeoChapters(
+  videoId: string,
+  chapters: VimeoChapterInput[],
+  context: string,
+): Promise<VimeoChapterSyncMetadata> {
+  try {
+    const result = await syncVimeoChapters(videoId, chapters);
+    return { vimeoChaptersSynced: true, vimeoChapterCount: result.chapterCount };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Vimeo rejected the chapter update.";
+    console.error(`[Vimeo chapter sync] ${context}:`, message);
+    return { vimeoChaptersSynced: false, vimeoChapterSyncMessage: message };
+  }
+}
 
 async function mapWithConcurrency<T, R>(
   items: T[],
@@ -14166,7 +14187,8 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         transcriptChapters: chapters,
         transcriptChaptersGeneratedAt: generatedAt,
       });
-      res.json(saved);
+      const vimeoSync = await trySyncVimeoChapters(videoId, chapters, `lesson ${lesson.id} caption import`);
+      res.json({ ...saved, ...vimeoSync });
     } catch (e) {
       console.error("[Vimeo transcript import]", e);
       res.status(502).json({ message: e instanceof Error ? e.message : "Vimeo transcript import failed." });
@@ -14241,7 +14263,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       progressStream.progress(94, "Creating chapters");
       const transcriptChapters = await generateLessonChapters(transcriptCues);
       const generatedAt = new Date();
-      progressStream.progress(98, "Saving transcript and chapters");
+      progressStream.progress(96, "Saving transcript and chapters");
       const saved = await storage.updateCourseLesson(req.params.id, {
         transcriptText,
         transcriptLanguage: transcriptLanguage || null,
@@ -14251,7 +14273,9 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         transcriptChapters,
         transcriptChaptersGeneratedAt: generatedAt,
       });
-      progressStream.complete(saved);
+      progressStream.progress(98, "Syncing chapters to Vimeo");
+      const vimeoSync = await trySyncVimeoChapters(videoId, transcriptChapters, `lesson ${lesson.id} fresh transcript`);
+      progressStream.complete({ ...saved, ...vimeoSync });
     } catch (e) {
       console.error("[lesson fresh Vimeo transcription]", e);
       const message = e instanceof Error ? e.message : "Could not create a fresh transcript from the Vimeo video.";
@@ -14273,6 +14297,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     try {
       const lesson = await storage.getCourseLesson(req.params.id);
       if (!lesson) return res.status(404).json({ message: "Not found" });
+      const videoId = lesson.videoUrl ? extractVimeoVideoId(lesson.videoUrl) : null;
       const saved = await storage.updateCourseLesson(req.params.id, {
         transcriptText: null,
         transcriptLanguage: null,
@@ -14282,7 +14307,10 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         transcriptChapters: null,
         transcriptChaptersGeneratedAt: null,
       });
-      res.json(saved);
+      const vimeoSync = videoId
+        ? await trySyncVimeoChapters(videoId, [], `lesson ${lesson.id} transcript removal`)
+        : { vimeoChaptersSynced: true, vimeoChapterCount: 0 };
+      res.json({ ...saved, ...vimeoSync });
     } catch (e) {
       console.error("[Vimeo transcript delete]", e);
       res.status(500).json({ message: "Failed to remove transcript." });
@@ -14330,7 +14358,8 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         transcriptChapters: chapters,
         transcriptChaptersGeneratedAt: new Date(),
       });
-      res.json(saved);
+      const vimeoSync = await trySyncVimeoChapters(videoId, chapters, `lesson ${lesson.id} chapter regeneration`);
+      res.json({ ...saved, ...vimeoSync });
     } catch (e) {
       console.error("[Vimeo transcript chapters]", e);
       res.status(502).json({ message: e instanceof Error ? e.message : "Could not create transcript chapters." });
@@ -14347,13 +14376,18 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       if (parsed.data.titles.length !== chapters.length) {
         return res.status(400).json({ message: "Every existing chapter must have a title." });
       }
-      const saved = await storage.updateCourseLesson(req.params.id, {
-        transcriptChapters: chapters.map((chapter, index) => ({
+      const updatedChapters = chapters.map((chapter, index) => ({
           startSeconds: chapter.startSeconds,
           title: parsed.data.titles[index],
-        })),
+        }));
+      const saved = await storage.updateCourseLesson(req.params.id, {
+        transcriptChapters: updatedChapters,
       });
-      res.json(saved);
+      const videoId = lesson.videoUrl ? extractVimeoVideoId(lesson.videoUrl) : null;
+      const vimeoSync = videoId
+        ? await trySyncVimeoChapters(videoId, updatedChapters, `lesson ${lesson.id} chapter title update`)
+        : { vimeoChaptersSynced: false, vimeoChapterSyncMessage: "This lesson does not have a valid Vimeo video." };
+      res.json({ ...saved, ...vimeoSync });
     } catch (error) {
       console.error("[lesson chapter titles]", error);
       res.status(500).json({ message: "Could not save chapter titles." });
@@ -14737,7 +14771,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         generateLessonChapters(transcript.cues),
       ]);
       const generatedAt = new Date();
-      res.json(await storage.updateTrainingReplay(replay.id, {
+      const saved = await storage.updateTrainingReplay(replay.id, {
         transcriptText, transcriptLanguage: transcript.language || null,
         transcriptSource: `Vimeo${transcript.name ? ` · ${transcript.name}` : ""}`,
         transcriptUpdatedAt: new Date(), transcriptCues: transcript.cues, transcriptChapters,
@@ -14746,7 +14780,9 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         durationMinutes,
         tags: generatedMetadata.tags,
         thumbnailUrl: thumbnailUrl || replay.thumbnailUrl || null,
-      }));
+      });
+      const vimeoSync = await trySyncVimeoChapters(videoId, transcriptChapters, `replay ${replay.id} caption import`);
+      res.json({ ...saved, ...vimeoSync });
     } catch (error) {
       console.error("[replay Vimeo import]", error);
       res.status(502).json({ message: error instanceof Error ? error.message : "Vimeo transcript import failed." });
@@ -14823,7 +14859,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         generateLessonChapters(transcriptCues),
       ]);
       const generatedAt = new Date();
-      progressStream.progress(97, "Saving transcript and chapters");
+      progressStream.progress(95, "Saving transcript and chapters");
       const saved = await storage.updateTrainingReplay(replay.id, {
         transcriptText,
         transcriptLanguage: transcriptLanguage || null,
@@ -14837,7 +14873,9 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         tags: generatedMetadata.tags,
         thumbnailUrl: thumbnailUrl || replay.thumbnailUrl || null,
       });
-      progressStream.complete(saved);
+      progressStream.progress(98, "Syncing chapters to Vimeo");
+      const vimeoSync = await trySyncVimeoChapters(videoId, transcriptChapters, `replay ${replay.id} fresh transcript`);
+      progressStream.complete({ ...saved, ...vimeoSync });
     } catch (error) {
       console.error("[replay fresh Vimeo transcription]", error);
       const message = error instanceof Error ? error.message : "Could not create a fresh transcript from the Vimeo video.";
@@ -14868,11 +14906,17 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   });
   app.delete("/api/admin/training-replays/:id/transcript", requireAdmin, async (req, res) => {
     try {
-      if (!await storage.getTrainingReplay(req.params.id)) return res.status(404).json({ message: "Not found" });
-      res.json(await storage.updateTrainingReplay(req.params.id, {
+      const replay = await storage.getTrainingReplay(req.params.id);
+      if (!replay) return res.status(404).json({ message: "Not found" });
+      const videoId = replay.videoUrl ? extractVimeoVideoId(replay.videoUrl) : null;
+      const saved = await storage.updateTrainingReplay(req.params.id, {
         transcriptText: null, transcriptLanguage: null, transcriptSource: null, transcriptUpdatedAt: null,
         transcriptCues: null, transcriptChapters: null, transcriptChaptersGeneratedAt: null,
-      }));
+      });
+      const vimeoSync = videoId
+        ? await trySyncVimeoChapters(videoId, [], `replay ${replay.id} transcript removal`)
+        : { vimeoChaptersSynced: true, vimeoChapterCount: 0 };
+      res.json({ ...saved, ...vimeoSync });
     } catch { res.status(500).json({ message: "Failed to remove transcript." }); }
   });
   app.get("/api/admin/training-replays/:id/transcript/download", requireAdmin, async (req, res) => {
@@ -14896,11 +14940,14 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         if (!track) return res.status(400).json({ message: "Vimeo has no caption track available." });
         cues = (await fetchVimeoTranscript(videoId, track.id)).cues;
       }
-      res.json(await storage.updateTrainingReplay(replay.id, {
+      const chapters = await generateLessonChapters(cues);
+      const saved = await storage.updateTrainingReplay(replay.id, {
         transcriptCues: cues,
-        transcriptChapters: await generateLessonChapters(cues),
+        transcriptChapters: chapters,
         transcriptChaptersGeneratedAt: new Date(),
-      }));
+      });
+      const vimeoSync = await trySyncVimeoChapters(videoId, chapters, `replay ${replay.id} chapter regeneration`);
+      res.json({ ...saved, ...vimeoSync });
     } catch (error) {
       console.error("[replay Vimeo chapters]", error);
       res.status(502).json({ message: error instanceof Error ? error.message : "Could not create transcript chapters." });
@@ -14917,12 +14964,18 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       if (parsed.data.titles.length !== chapters.length) {
         return res.status(400).json({ message: "Every existing chapter must have a title." });
       }
-      res.json(await storage.updateTrainingReplay(replay.id, {
-        transcriptChapters: chapters.map((chapter, index) => ({
+      const updatedChapters = chapters.map((chapter, index) => ({
           startSeconds: chapter.startSeconds,
           title: parsed.data.titles[index],
-        })),
-      }));
+        }));
+      const saved = await storage.updateTrainingReplay(replay.id, {
+        transcriptChapters: updatedChapters,
+      });
+      const videoId = replay.videoUrl ? extractVimeoVideoId(replay.videoUrl) : null;
+      const vimeoSync = videoId
+        ? await trySyncVimeoChapters(videoId, updatedChapters, `replay ${replay.id} chapter title update`)
+        : { vimeoChaptersSynced: false, vimeoChapterSyncMessage: "This replay does not have a valid Vimeo video." };
+      res.json({ ...saved, ...vimeoSync });
     } catch (error) {
       console.error("[replay chapter titles]", error);
       res.status(500).json({ message: "Could not save chapter titles." });

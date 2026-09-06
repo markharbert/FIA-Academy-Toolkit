@@ -48,6 +48,9 @@ type LessonWithResources = {
   status: string;
   durationMinutes: number | null;
   resources: Resource[];
+  vimeoChaptersSynced?: boolean;
+  vimeoChapterCount?: number;
+  vimeoChapterSyncMessage?: string;
 };
 
 type CourseNavigationStructure = {
@@ -200,6 +203,21 @@ export default function AdminLessonEditorPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const showVimeoChapterSyncToast = (
+    updated: LessonWithResources,
+    successTitle: string,
+    successDescription: string,
+  ) => {
+    if (updated.vimeoChaptersSynced === false) {
+      toast({
+        title: "Saved, but Vimeo chapters didn’t sync",
+        description: updated.vimeoChapterSyncMessage || "Check the Vimeo token’s edit permission and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: successTitle, description: successDescription });
+  };
 
   const [title, setTitle] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
@@ -502,11 +520,15 @@ export default function AdminLessonEditorPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ trackId }),
       }),
-    onSuccess: () => {
+    onSuccess: (updated: LessonWithResources) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/lessons", lessonId] });
       queryClient.invalidateQueries({ queryKey: ["/api/training/lessons"] });
       setShowTranscriptTracks(false);
-      toast({ title: "Transcript and chapters added", description: "Both are ready for members to view." });
+      showVimeoChapterSyncToast(
+        updated,
+        "Transcript and chapters added",
+        "The chapters are ready here and in the Vimeo player.",
+      );
     },
     onError: (e: Error) => toast({ title: "Couldn’t add transcript", description: e.message, variant: "destructive" }),
   });
@@ -522,14 +544,15 @@ export default function AdminLessonEditorPage() {
       );
     },
     onMutate: () => setFreshTranscriptProgress({ percentage: 0, stage: "Starting" }),
-    onSuccess: () => {
+    onSuccess: (updated: LessonWithResources) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/lessons", lessonId] });
       queryClient.invalidateQueries({ queryKey: ["/api/training/lessons"] });
       setShowTranscriptTracks(false);
-      toast({
-        title: "Fresh transcript and chapters created",
-        description: "Both now reflect the embedded Vimeo video.",
-      });
+      showVimeoChapterSyncToast(
+        updated,
+        "Fresh transcript and chapters created",
+        "The chapters are ready here and in the Vimeo player.",
+      );
     },
     onError: (e: Error) =>
       toast({ title: "Couldn’t create fresh transcript", description: e.message, variant: "destructive" }),
@@ -541,10 +564,14 @@ export default function AdminLessonEditorPage() {
       apiFetch(`/api/admin/lessons/${lessonId}/transcript-chapters`, {
         method: "POST",
       }),
-    onSuccess: () => {
+    onSuccess: (updated: LessonWithResources) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/lessons", lessonId] });
       queryClient.invalidateQueries({ queryKey: ["/api/training/lessons"] });
-      toast({ title: "Chapters created", description: "Members can now jump to the key moments in this lesson." });
+      showVimeoChapterSyncToast(
+        updated,
+        "Chapters created",
+        "Members can use the same chapter markers here and in the Vimeo player.",
+      );
     },
     onError: (e: Error) => toast({ title: "Couldn’t create chapters", description: e.message, variant: "destructive" }),
   });
@@ -556,10 +583,14 @@ export default function AdminLessonEditorPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ titles }),
       }),
-    onSuccess: () => {
+    onSuccess: (updated: LessonWithResources) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/lessons", lessonId] });
       queryClient.invalidateQueries({ queryKey: ["/api/training/lessons"] });
-      toast({ title: "Chapter titles saved" });
+      showVimeoChapterSyncToast(
+        updated,
+        "Chapter titles saved",
+        "The updated titles are also live in the Vimeo player.",
+      );
     },
     onError: (e: Error) =>
       toast({ title: "Couldn’t save chapter titles", description: e.message, variant: "destructive" }),
@@ -570,11 +601,15 @@ export default function AdminLessonEditorPage() {
       apiFetch(`/api/admin/lessons/${lessonId}/transcript`, {
         method: "DELETE",
       }),
-    onSuccess: () => {
+    onSuccess: (updated: LessonWithResources) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/lessons", lessonId] });
       queryClient.invalidateQueries({ queryKey: ["/api/training/lessons"] });
       setTranscriptDeleteOpen(false);
-      toast({ title: "Transcript removed", description: "The transcript and its chapters were removed from this lesson." });
+      showVimeoChapterSyncToast(
+        updated,
+        "Transcript removed",
+        "The transcript and chapters were removed here and the Vimeo chapter markers were cleared.",
+      );
     },
     onError: (e: Error) => toast({ title: "Couldn’t remove transcript", description: e.message, variant: "destructive" }),
   });

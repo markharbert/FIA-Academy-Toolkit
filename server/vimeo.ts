@@ -89,6 +89,17 @@ export interface VimeoVideoDownload {
   size: number | null;
 }
 
+export interface VimeoChapterInput {
+  startSeconds: number;
+  title: string;
+}
+
+interface VimeoChapter {
+  id: string;
+  startSeconds: number;
+  title: string;
+}
+
 function vimeoHeaders() {
   return {
     Authorization: `Bearer ${VIMEO_ACCESS_TOKEN}`,
@@ -123,6 +134,34 @@ async function vimeoGet(path: string): Promise<any> {
   );
   if (!response.ok) throw new Error(`Vimeo API ${response.status}`);
   return response.json();
+}
+
+async function vimeoWrite(
+  path: string,
+  method: "POST" | "PATCH" | "DELETE",
+  body?: object,
+): Promise<any> {
+  if (!VIMEO_ACCESS_TOKEN) throw new Error("Vimeo access is not configured");
+  const response = await fetch(`https://api.vimeo.com${path}`, {
+    method,
+    headers: {
+      ...vimeoHeaders(),
+      ...(body ? { "Content-Type": "application/json" } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as {
+      error?: string;
+      developer_message?: string;
+    } | null;
+    const detail = payload?.developer_message || payload?.error;
+    throw new Error(`Vimeo chapter update failed (${response.status})${detail ? `: ${detail}` : ""}`);
+  }
+  if (response.status === 204) return null;
+  const text = await response.text();
+  return text ? JSON.parse(text) : null;
 }
 
 function resourceId(uri: unknown): string | null {
@@ -271,6 +310,81 @@ export async function getVimeoVideoDownload(videoId: string): Promise<VimeoVideo
     throw new Error("Vimeo did not provide a downloadable file for this video.");
   }
   return smallest;
+}
+
+async function listVimeoChapters(videoId: string): Promise<VimeoChapter[]> {
+  const payload = await vimeoGet(
+    `/videos/${encodeURIComponent(videoId)}/chapters?per_page=100&fields=uri,title,timecode`,
+  );
+  return (Array.isArray(payload?.data) ? payload.data : [])
+    .map((chapter: any) => ({
+      id: resourceId(chapter?.uri) ?? "",
+      startSeconds: Math.max(0, Math.round(Number(chapter?.timecode))),
+      title: typeof chapter?.title === "string" ? chapter.title : "",
+    }))
+    .filter((chapter: VimeoChapter) =>
+      chapter.id
+      && Number.isFinite(chapter.startSeconds)
+      && chapter.title,
+    );
+}
+
+/**
+ * Make the attached Vimeo video's chapters match the locally generated set.
+ * Matching timecodes are edited in place; stale and duplicate markers are removed.
+ */
+export async function syncVimeoChapters(
+  videoId: string,
+  chapters: VimeoChapterInput[],
+): Promise<{ chapterCount: number }> {
+  if (!VIMEO_ACCESS_TOKEN) throw new Error("Vimeo access is not configured");
+  const desired = chapters
+    .map((chapter) => ({
+      startSeconds: Math.max(0, Math.round(chapter.startSeconds)),
+      title: chapter.title.replace(/\s+/g, " ").trim().slice(0, 50),
+    }))
+    .filter((chapter) => Number.isFinite(chapter.startSeconds) && chapter.title)
+    .sort((a, b) => a.startSeconds - b.startSeconds)
+    .filter((chapter, index, all) =>
+      index === 0 || chapter.startSeconds !== all[index - 1].startSeconds,
+    )
+    .slice(0, 80);
+
+  const desiredByTimecode = new Map(desired.map((chapter) => [chapter.startSeconds, chapter]));
+  const existing = await listVimeoChapters(videoId);
+  const retainedByTimecode = new Map<number, VimeoChapter>();
+
+  for (const chapter of existing) {
+    const isWanted = desiredByTimecode.has(chapter.startSeconds);
+    const isDuplicate = retainedByTimecode.has(chapter.startSeconds);
+    if (!isWanted || isDuplicate) {
+      await vimeoWrite(
+        `/videos/${encodeURIComponent(videoId)}/chapters/${encodeURIComponent(chapter.id)}`,
+        "DELETE",
+      );
+      continue;
+    }
+    retainedByTimecode.set(chapter.startSeconds, chapter);
+  }
+
+  for (const chapter of desired) {
+    const existingChapter = retainedByTimecode.get(chapter.startSeconds);
+    if (!existingChapter) {
+      await vimeoWrite(
+        `/videos/${encodeURIComponent(videoId)}/chapters`,
+        "POST",
+        { title: chapter.title, timecode: chapter.startSeconds },
+      );
+    } else if (existingChapter.title !== chapter.title) {
+      await vimeoWrite(
+        `/videos/${encodeURIComponent(videoId)}/chapters/${encodeURIComponent(existingChapter.id)}`,
+        "PATCH",
+        { title: chapter.title, timecode: chapter.startSeconds },
+      );
+    }
+  }
+
+  return { chapterCount: desired.length };
 }
 
 export interface VimeoFolder {

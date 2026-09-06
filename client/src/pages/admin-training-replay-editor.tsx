@@ -22,7 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 
 type Resource = { id: string; name: string; url: string; subtitle: string | null; kind: "link" | "pdf" };
 type ReplayChapter = { startSeconds: number; title: string };
-type Replay = { id: string; title: string; description: string | null; category: string | null; tags: string[]; durationMinutes: number | null; videoUrl: string | null; content: string | null; status: "draft" | "published"; resources: Resource[]; transcriptText: string | null; transcriptLanguage: string | null; transcriptSource: string | null; transcriptUpdatedAt: string | null; transcriptChapters: ReplayChapter[] | null; transcriptChaptersGeneratedAt: string | null };
+type Replay = { id: string; title: string; description: string | null; category: string | null; tags: string[]; durationMinutes: number | null; videoUrl: string | null; content: string | null; status: "draft" | "published"; resources: Resource[]; transcriptText: string | null; transcriptLanguage: string | null; transcriptSource: string | null; transcriptUpdatedAt: string | null; transcriptChapters: ReplayChapter[] | null; transcriptChaptersGeneratedAt: string | null; vimeoChaptersSynced?: boolean; vimeoChapterCount?: number; vimeoChapterSyncMessage?: string };
 type VimeoFolder = { id: string; name: string; parentId?: string; path: string[] };
 type VimeoVideo = { id: string; name: string; url: string; thumbnailUrl?: string; durationMinutes?: number };
 type VimeoVideoPage = { videos: VimeoVideo[]; hasMore: boolean };
@@ -124,6 +124,21 @@ export default function AdminTrainingReplayEditorPage() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const showVimeoChapterSyncToast = (
+    updated: Replay,
+    successTitle: string,
+    successDescription: string,
+  ) => {
+    if (updated.vimeoChaptersSynced === false) {
+      toast({
+        title: "Saved, but Vimeo chapters didn’t sync",
+        description: updated.vimeoChapterSyncMessage || "Check the Vimeo token’s edit permission and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: successTitle, description: successDescription });
+  };
   const [form, setForm] = useState<Form | null>(null);
   const [, setSaveVersion] = useState(0);
   const formRef = useRef<Form | null>(null);
@@ -413,10 +428,11 @@ export default function AdminTrainingReplayEditorPage() {
       syncTranscriptFields(updated);
       setShowTranscriptTracks(false);
       invalidate();
-      toast({
-        title: "Replay details and chapters created",
-        description: "The transcript, chapters, description, duration, and tags are ready to review.",
-      });
+      showVimeoChapterSyncToast(
+        updated,
+        "Replay details and chapters created",
+        "The details are ready to review, and the chapters are in the Vimeo player.",
+      );
     },
     onError: (error: Error) =>
       toast({ title: "Couldn’t add transcript", description: error.message, variant: "destructive" }),
@@ -436,10 +452,11 @@ export default function AdminTrainingReplayEditorPage() {
       syncTranscriptFields(updated);
       setShowTranscriptTracks(false);
       invalidate();
-      toast({
-        title: "Fresh transcript and chapters created",
-        description: "Both now reflect the embedded Vimeo video.",
-      });
+      showVimeoChapterSyncToast(
+        updated,
+        "Fresh transcript and chapters created",
+        "The chapters are ready here and in the Vimeo player.",
+      );
     },
     onError: (error: Error) =>
       toast({ title: "Couldn’t create fresh transcript", description: error.message, variant: "destructive" }),
@@ -466,7 +483,11 @@ export default function AdminTrainingReplayEditorPage() {
     onSuccess: (updated: Replay) => {
       syncTranscriptFields(updated);
       invalidate();
-      toast({ title: "Chapters created", description: "Members can now jump to the key moments in this replay." });
+      showVimeoChapterSyncToast(
+        updated,
+        "Chapters created",
+        "Members can use the same chapter markers here and in the Vimeo player.",
+      );
     },
     onError: (error: Error) =>
       toast({ title: "Couldn’t create chapters", description: error.message, variant: "destructive" }),
@@ -481,7 +502,11 @@ export default function AdminTrainingReplayEditorPage() {
     onSuccess: (updated: Replay) => {
       syncTranscriptFields(updated);
       invalidate();
-      toast({ title: "Chapter titles saved" });
+      showVimeoChapterSyncToast(
+        updated,
+        "Chapter titles saved",
+        "The updated titles are also live in the Vimeo player.",
+      );
     },
     onError: (error: Error) =>
       toast({ title: "Couldn’t save chapter titles", description: error.message, variant: "destructive" }),
@@ -494,7 +519,11 @@ export default function AdminTrainingReplayEditorPage() {
       setTranscriptDeleteOpen(false);
       setShowTranscriptTracks(false);
       invalidate();
-      toast({ title: "Transcript removed", description: "The transcript and its chapters were removed from this replay." });
+      showVimeoChapterSyncToast(
+        updated,
+        "Transcript removed",
+        "The transcript and chapters were removed here and the Vimeo chapter markers were cleared.",
+      );
     },
     onError: (error: Error) =>
       toast({ title: "Couldn’t remove transcript", description: error.message, variant: "destructive" }),
