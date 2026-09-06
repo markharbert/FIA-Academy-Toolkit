@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import Player from "@vimeo/player";
 import {
-  ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, Circle, ExternalLink, Link,
+  ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, Circle, ExternalLink,
   BookOpen, Clock, SkipBack, SkipForward, FileText, Menu, X, PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 import DOMPurify from "dompurify";
