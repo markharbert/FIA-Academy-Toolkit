@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import {
-  ArrowLeft, Save, Eye, EyeOff, Youtube, Link, Plus, Trash2, ExternalLink, Pencil,
+  ArrowLeft, Check, Save, Eye, EyeOff, Youtube, Link, Plus, Trash2, ExternalLink, Pencil,
   Film, Folder, Loader2, ChevronDown, ChevronRight, ArrowRight, Download, RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -720,9 +720,14 @@ export default function AdminLessonEditorPage() {
             placeholder="Lesson title…"
           />
           <div className="flex items-center gap-2 mt-0.5">
-            <Badge variant={lesson.status === "published" ? "default" : "secondary"} className="capitalize text-xs">
-              {lesson.status}
-            </Badge>
+            {lesson.status === "published" ? (
+              <Badge className="gap-1 bg-emerald-600 text-white hover:bg-emerald-600 text-xs">
+                <Check className="h-3 w-3" />
+                Published
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="text-xs">Draft</Badge>
+            )}
             {isDirty && (
               <span className="text-xs text-muted-foreground">Unsaved changes</span>
             )}
