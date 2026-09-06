@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
-import { ArrowLeft, ChevronDown, ChevronRight, Download, Eye, EyeOff, Film, Folder, ListVideo, Loader2, Pencil, Plus, Save, Trash2, Tag, Link as LinkIcon } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, Download, ExternalLink, Eye, EyeOff, Film, Folder, ListVideo, Loader2, Pencil, Plus, Save, Trash2, Tag, Link as LinkIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,6 +24,14 @@ type VimeoFolder = { id: string; name: string; parentId?: string; path: string[]
 type VimeoVideo = { id: string; name: string; url: string; thumbnailUrl?: string };
 type VimeoVideoPage = { videos: VimeoVideo[]; hasMore: boolean };
 type Track = { id: string; language: string; name: string; type: string };
+type CfDownload = {
+  id: string;
+  public_id: string | null;
+  workspace_id: string;
+  asset_id: string | null;
+  name: string;
+  editUrl: string | null;
+};
 type Form = Omit<Replay, "resources" | "tags"> & { tags: string };
 type ReplayUpdate = Pick<Form, "title" | "description" | "category" | "durationMinutes" | "videoUrl" | "content" | "status"> & { tags: string[] };
 
@@ -127,9 +135,15 @@ export default function AdminTrainingReplayEditorPage() {
   const [vimeoVideoSearch, setVimeoVideoSearch] = useState("");
   const [debouncedVimeoVideoSearch, setDebouncedVimeoVideoSearch] = useState("");
   const [expandedVimeoFolders, setExpandedVimeoFolders] = useState<Record<string, boolean>>({});
-  const [resourceEditor, setResourceEditor] = useState<Resource | null>(null);
-  const [resourceDialogOpen, setResourceDialogOpen] = useState(false);
-  const [resource, setResource] = useState({ name: "", url: "", subtitle: "", kind: "link" as "link" | "pdf" });
+  const [editingResource, setEditingResource] = useState<Resource | null>(null);
+  const [showAddResource, setShowAddResource] = useState(false);
+  const [newResource, setNewResource] = useState({ name: "", url: "", subtitle: "", kind: "link" as "link" | "pdf" });
+  const [resourceToDelete, setResourceToDelete] = useState<Resource | null>(null);
+  const [cfDownloadUrlHint, setCfDownloadUrlHint] = useState(false);
+  const [selectedCfDownloadEditUrl, setSelectedCfDownloadEditUrl] = useState<string | null>(null);
+  const [cfDownloadPickerOpen, setCfDownloadPickerOpen] = useState(false);
+  const [cfDownloadFilter, setCfDownloadFilter] = useState("");
+  const newResourceUrlRef = useRef<HTMLInputElement>(null);
   const [showTranscriptTracks, setShowTranscriptTracks] = useState(false);
   const [transcriptDeleteOpen, setTranscriptDeleteOpen] = useState(false);
   const [addingCategory, setAddingCategory] = useState(false);
@@ -149,6 +163,22 @@ export default function AdminTrainingReplayEditorPage() {
     () => [...new Set((catalogQuery.data || []).map((item) => item.category?.trim()).filter(Boolean) as string[])].sort(),
     [catalogQuery.data],
   );
+  const {
+    data: cfDownloadsData,
+    isLoading: cfDownloadsLoading,
+    error: cfDownloadsError,
+  } = useQuery<{ downloads: CfDownload[] }>({
+    queryKey: ["/api/admin/cf/downloads"],
+    queryFn: () => api("/api/admin/cf/downloads"),
+    enabled: cfDownloadPickerOpen,
+  });
+  const visibleCfDownloads = useMemo(() => {
+    const filter = cfDownloadFilter.trim().toLowerCase();
+    const downloads = cfDownloadsData?.downloads ?? [];
+    return filter
+      ? downloads.filter((download) => download.name.toLowerCase().includes(filter))
+      : downloads;
+  }, [cfDownloadFilter, cfDownloadsData?.downloads]);
   useEffect(() => {
     if (replayQuery.data && !formRef.current) {
       const next = { ...replayQuery.data, tags: (replayQuery.data.tags || []).join(", ") };
@@ -391,12 +421,64 @@ export default function AdminTrainingReplayEditorPage() {
       toast({ title: "Couldn’t remove transcript", description: error.message, variant: "destructive" }),
   });
   const resourceMutation = useMutation({
-    mutationFn: () => api(resourceEditor ? `/api/admin/training-replays/${replayId}/resources/${resourceEditor.id}` : `/api/admin/training-replays/${replayId}/resources`, { method: resourceEditor ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...resource, subtitle: resource.subtitle || null }) }),
-    onSuccess: () => { setResourceDialogOpen(false); setResourceEditor(null); setResource({ name: "", url: "", subtitle: "", kind: "link" }); invalidate(); },
+    mutationFn: (resource: typeof newResource) =>
+      api(
+        editingResource
+          ? `/api/admin/training-replays/${replayId}/resources/${editingResource.id}`
+          : `/api/admin/training-replays/${replayId}/resources`,
+        {
+          method: editingResource ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...resource, subtitle: resource.subtitle || null }),
+        },
+      ),
+    onSuccess: () => {
+      setNewResource({ name: "", url: "", subtitle: "", kind: "link" });
+      setShowAddResource(false);
+      setEditingResource(null);
+      setCfDownloadUrlHint(false);
+      setSelectedCfDownloadEditUrl(null);
+      invalidate();
+    },
     onError: (error: Error) => toast({ title: "Couldn’t save resource", description: error.message, variant: "destructive" }),
   });
-  const deleteResource = useMutation({ mutationFn: (id: string) => api(`/api/admin/training-replays/${replayId}/resources/${id}`, { method: "DELETE" }), onSuccess: invalidate, onError: (error: Error) => toast({ title: "Couldn’t delete resource", description: error.message, variant: "destructive" }) });
-  const openResource = (item?: Resource) => { setResourceEditor(item || null); setResource(item ? { name: item.name, url: item.url, subtitle: item.subtitle || "", kind: item.kind } : { name: "", url: "", subtitle: "", kind: "link" }); setResourceDialogOpen(true); };
+  const deleteResource = useMutation({
+    mutationFn: (id: string) =>
+      api(`/api/admin/training-replays/${replayId}/resources/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      setResourceToDelete(null);
+      invalidate();
+    },
+    onError: (error: Error) => toast({ title: "Couldn’t delete resource", description: error.message, variant: "destructive" }),
+  });
+  const startEditingResource = (item: Resource) => {
+    setEditingResource(item);
+    setNewResource({
+      name: item.name,
+      url: item.url,
+      subtitle: item.subtitle || "",
+      kind: item.kind === "pdf" ? "pdf" : "link",
+    });
+    setCfDownloadUrlHint(false);
+    setSelectedCfDownloadEditUrl(null);
+    setShowAddResource(true);
+  };
+  const cancelResourceEditing = () => {
+    setShowAddResource(false);
+    setEditingResource(null);
+    setNewResource({ name: "", url: "", subtitle: "", kind: "link" });
+    setCfDownloadUrlHint(false);
+    setSelectedCfDownloadEditUrl(null);
+  };
+  const selectCfDownload = (download: CfDownload) => {
+    setCfDownloadPickerOpen(false);
+    setEditingResource(null);
+    setNewResource({ name: download.name, url: "", subtitle: "", kind: "link" });
+    setCfDownloadUrlHint(true);
+    setSelectedCfDownloadEditUrl(download.editUrl);
+    setShowAddResource(true);
+    window.setTimeout(() => newResourceUrlRef.current?.focus(), 50);
+  };
 
   if (replayQuery.isLoading || !form) return <div className="mx-auto max-w-3xl p-6 sm:p-8"><div className="h-8 w-56 animate-pulse rounded bg-muted" /><div className="mt-5 h-80 animate-pulse rounded bg-muted" /></div>;
   if (replayQuery.isError) return <div className="mx-auto max-w-3xl p-8 text-destructive">Couldn’t load this replay. {replayQuery.error instanceof Error ? replayQuery.error.message : ""}</div>;
@@ -539,9 +621,207 @@ export default function AdminTrainingReplayEditorPage() {
        </section>
        <Separator />
        <section><Label className="mb-2 block">Replay content</Label><RichTextEditor value={form.content || ""} onChange={(value) => change("content", value)} /></section>
-      <section className="rounded-xl border p-4"><div className="flex items-center justify-between"><h2 className="font-semibold">Resources</h2><Button size="sm" variant="outline" onClick={() => openResource()}><Plus className="mr-1 h-4 w-4" />Add resource</Button></div><div className="mt-3 space-y-2">{(replayQuery.data?.resources || []).map((item) => <div key={item.id} className="flex items-center justify-between rounded bg-muted/50 p-2 text-sm"><span>{item.name}</span><span><Button size="icon" variant="ghost" onClick={() => openResource(item)}><Pencil className="h-4 w-4" /></Button><Button size="icon" variant="ghost" className="text-destructive" onClick={() => deleteResource.mutate(item.id)}><Trash2 className="h-4 w-4" /></Button></span></div>)}</div></section>
+        <Separator />
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Label>Resources</Label>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setCfDownloadFilter("");
+                  setCfDownloadPickerOpen(true);
+                }}
+              >
+                <Download className="mr-1.5 h-3.5 w-3.5" />
+                Choose ClickFunnels Download
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  if (showAddResource) {
+                    cancelResourceEditing();
+                  } else {
+                    setShowAddResource(true);
+                  }
+                }}
+              >
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Add Resource
+              </Button>
+            </div>
+          </div>
+
+          {showAddResource && (
+            <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Name</Label>
+                  <Input
+                    placeholder="Worksheet PDF"
+                    value={newResource.name}
+                    onChange={(event) => setNewResource((current) => ({ ...current, name: event.target.value }))}
+                    className="h-8 text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Type</Label>
+                  <select
+                    value={newResource.kind}
+                    onChange={(event) => setNewResource((current) => ({
+                      ...current,
+                      kind: event.target.value as "link" | "pdf",
+                    }))}
+                    className="h-8 w-full rounded-md border bg-background px-2 text-sm"
+                  >
+                    <option value="link">Link</option>
+                    <option value="pdf">PDF</option>
+                  </select>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">URL</Label>
+                <Input
+                  ref={newResourceUrlRef}
+                  placeholder="https://…"
+                  value={newResource.url}
+                  onChange={(event) => setNewResource((current) => ({ ...current, url: event.target.value }))}
+                  className="h-8 text-sm"
+                />
+                {cfDownloadUrlHint && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400">
+                    The ClickFunnels API doesn't include the file URL.{" "}
+                    {selectedCfDownloadEditUrl ? (
+                      <a
+                        href={selectedCfDownloadEditUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-semibold underline underline-offset-2 hover:text-amber-800 dark:hover:text-amber-300"
+                      >
+                        Open this asset in ClickFunnels
+                      </a>
+                    ) : (
+                      <span>In ClickFunnels, go to <strong>My Assets → Downloads</strong></span>
+                    )}{" "}
+                    and click the <strong>Copy</strong> icon next to this file, then paste the URL here.
+                  </p>
+                )}
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Subtitle (optional)</Label>
+                <Input
+                  placeholder="A short explanation for members"
+                  value={newResource.subtitle}
+                  onChange={(event) => setNewResource((current) => ({ ...current, subtitle: event.target.value }))}
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={!newResource.name.trim() || !newResource.url.trim() || resourceMutation.isPending}
+                  onClick={() => {
+                    resourceMutation.mutate(newResource);
+                    setCfDownloadUrlHint(false);
+                    setSelectedCfDownloadEditUrl(null);
+                  }}
+                >
+                  {editingResource ? "Save changes" : "Add"}
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={cancelResourceEditing}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {(replayQuery.data?.resources.length ?? 0) > 0 ? (
+            <div className="space-y-2">
+              {replayQuery.data?.resources.map((item) => (
+                <div
+                  key={item.id}
+                  className="group flex items-center gap-3 rounded-md border bg-card px-3 py-4"
+                >
+                  {item.kind === "pdf" ? (
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-red-600 text-[10px] font-extrabold tracking-tight text-white shadow-sm">
+                      PDF
+                    </div>
+                  ) : (
+                    <LinkIcon className="h-5 w-5 shrink-0 text-blue-500" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{item.name}</p>
+                    {item.subtitle && (
+                      <p className="truncate text-xs text-muted-foreground">{item.subtitle}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7"
+                      onClick={() => startEditingResource(item)}
+                      title="Edit resource"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <a href={item.url} target="_blank" rel="noopener noreferrer" title="Open resource">
+                      <Button type="button" size="icon" variant="ghost" className="h-7 w-7">
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </Button>
+                    </a>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 text-destructive hover:text-destructive"
+                      onClick={() => setResourceToDelete(item)}
+                      title="Delete resource"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            !showAddResource && (
+              <p className="text-sm text-muted-foreground">
+                No resources yet. Add PDFs or links members can download.
+              </p>
+            )
+          )}
+        </section>
     </div></div>
-    <Dialog open={resourceDialogOpen} onOpenChange={(open) => { setResourceDialogOpen(open); if (!open) { setResourceEditor(null); setResource({ name: "", url: "", subtitle: "", kind: "link" }); } }}><DialogContent><DialogHeader><DialogTitle>{resourceEditor ? "Edit resource" : "Add resource"}</DialogTitle></DialogHeader><div className="space-y-3"><Input placeholder="Resource name" value={resource.name} onChange={(e) => setResource({ ...resource, name: e.target.value })} /><Input placeholder="https://…" value={resource.url} onChange={(e) => setResource({ ...resource, url: e.target.value })} /><Input placeholder="Optional description" value={resource.subtitle} onChange={(e) => setResource({ ...resource, subtitle: e.target.value })} /><select className="w-full rounded border bg-background p-2" value={resource.kind} onChange={(e) => setResource({ ...resource, kind: e.target.value as "link" | "pdf" })}><option value="link">Link</option><option value="pdf">PDF</option></select><Button className="w-full" disabled={!resource.name || !resource.url || resourceMutation.isPending} onClick={() => resourceMutation.mutate()}>{resourceEditor ? "Save resource" : "Add resource"}</Button></div></DialogContent></Dialog>
+    <AlertDialog open={!!resourceToDelete} onOpenChange={(open) => !open && setResourceToDelete(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete resource?</AlertDialogTitle>
+          <AlertDialogDescription>
+            <strong>{resourceToDelete?.name}</strong> will be permanently removed from this replay.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={deleteResource.isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            disabled={deleteResource.isPending}
+            onClick={(event) => {
+              event.preventDefault();
+              if (resourceToDelete) deleteResource.mutate(resourceToDelete.id);
+            }}
+          >
+            {deleteResource.isPending ? "Deleting…" : "Delete"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
     <AlertDialog open={transcriptDeleteOpen} onOpenChange={(open) => !open && setTranscriptDeleteOpen(false)}>
       <AlertDialogContent>
         <AlertDialogHeader>
@@ -566,6 +846,67 @@ export default function AdminTrainingReplayEditorPage() {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+      <Dialog open={cfDownloadPickerOpen} onOpenChange={setCfDownloadPickerOpen}>
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Download className="h-5 w-5 text-primary" />
+              Choose a ClickFunnels download
+            </DialogTitle>
+            <DialogDescription>
+              Choose an asset to pre-fill its name, or open the asset in ClickFunnels to copy its actual file URL.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={cfDownloadFilter}
+            onChange={(event) => setCfDownloadFilter(event.target.value)}
+            placeholder="Search ClickFunnels downloads…"
+          />
+          {cfDownloadsLoading ? (
+            <div className="flex min-h-40 items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading ClickFunnels downloads…
+            </div>
+          ) : cfDownloadsError ? (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+              {(cfDownloadsError as Error).message || "Unable to load ClickFunnels downloads."}
+            </div>
+          ) : visibleCfDownloads.length === 0 ? (
+            <div className="flex min-h-40 items-center justify-center rounded-md border border-dashed px-4 text-center text-sm text-muted-foreground">
+              {cfDownloadFilter.trim() ? "No matching ClickFunnels downloads." : "No ClickFunnels downloads are available."}
+            </div>
+          ) : (
+            <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
+              {visibleCfDownloads.map((download) => (
+                <div
+                  key={download.id}
+                  className="flex w-full items-center gap-3 rounded-md border p-3 transition-colors hover:bg-muted/50"
+                >
+                  <button
+                    type="button"
+                    disabled={resourceMutation.isPending}
+                    className="flex min-w-0 flex-1 items-center gap-3 text-left focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={() => selectCfDownload(download)}
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-muted">
+                      <Download className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{download.name}</span>
+                      <span className="block text-xs text-muted-foreground">Select this asset</span>
+                    </span>
+                    {resourceMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Plus className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
       <Dialog open={vimeoPickerOpen} onOpenChange={setVimeoPickerOpen}>
         <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-6xl">
           <DialogHeader>
