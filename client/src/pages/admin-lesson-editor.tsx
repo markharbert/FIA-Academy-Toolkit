@@ -655,7 +655,7 @@ export default function AdminLessonEditorPage() {
 
   if (isLoading) {
     return (
-      <div className="p-6 max-w-3xl mx-auto space-y-4">
+      <div className="p-6 max-w-[58rem] mx-auto space-y-4">
         <div className="h-8 w-48 bg-muted rounded animate-pulse" />
         <div className="h-64 bg-muted rounded animate-pulse" />
       </div>
@@ -672,7 +672,7 @@ export default function AdminLessonEditorPage() {
 
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
+    <div className="p-6 max-w-[58rem] mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <Button

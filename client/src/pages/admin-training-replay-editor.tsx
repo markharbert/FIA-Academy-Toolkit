@@ -533,10 +533,10 @@ export default function AdminTrainingReplayEditorPage() {
     window.setTimeout(() => newResourceUrlRef.current?.focus(), 50);
   };
 
-  if (replayQuery.isLoading || !form) return <div className="mx-auto max-w-3xl p-6 sm:p-8"><div className="h-8 w-56 animate-pulse rounded bg-muted" /><div className="mt-5 h-80 animate-pulse rounded bg-muted" /></div>;
-  if (replayQuery.isError) return <div className="mx-auto max-w-3xl p-8 text-destructive">Couldn’t load this replay. {replayQuery.error instanceof Error ? replayQuery.error.message : ""}</div>;
+  if (replayQuery.isLoading || !form) return <div className="mx-auto max-w-[58rem] p-6 sm:p-8"><div className="h-8 w-56 animate-pulse rounded bg-muted" /><div className="mt-5 h-80 animate-pulse rounded bg-muted" /></div>;
+  if (replayQuery.isError) return <div className="mx-auto max-w-[58rem] p-8 text-destructive">Couldn’t load this replay. {replayQuery.error instanceof Error ? replayQuery.error.message : ""}</div>;
   return <main className="min-h-[calc(100dvh-3rem)] bg-[radial-gradient(circle_at_12%_0%,hsl(254_74%_94%),transparent_32rem)] p-4 sm:p-8">
-     <div className="mx-auto max-w-3xl">
+     <div className="mx-auto max-w-[58rem]">
     <header className="mb-7 flex items-start gap-3 border-b border-violet-100 pb-6"><Button variant="ghost" size="icon" className="mt-0.5 shrink-0" onClick={() => void backToLibrary()}><ArrowLeft className="h-4 w-4" /></Button><div className="min-w-0 flex-1"><p className="mb-1 text-xs font-bold uppercase tracking-[0.16em] text-violet-700">Academy vault / replay</p><Input value={form.title} onChange={(e) => change("title", e.target.value)} className="h-auto border-0 bg-transparent px-0 text-2xl font-extrabold shadow-none focus-visible:ring-0" /><div className="mt-1 flex flex-wrap items-center gap-2"><Badge variant={form.status === "published" ? "default" : "secondary"} className="capitalize">{form.status}</Badge>{isDirty && <span className="text-xs text-muted-foreground">Unsaved changes</span>}{saveMutation.isPending && <span className="text-xs text-muted-foreground">Saving changes</span>}</div></div><div className="flex shrink-0 gap-2"><Button variant="outline" size="sm" onClick={() => void saveNow()} disabled={!isDirty || saveMutation.isPending}><Save className="mr-1 h-4 w-4" />Save</Button><Button size="sm" variant={form.status === "published" ? "outline" : "default"} onClick={() => change("status", form.status === "published" ? "draft" : "published")}>{form.status === "published" ? <><EyeOff className="mr-1 h-4 w-4" />Unpublish</> : <><Eye className="mr-1 h-4 w-4" />Publish</>}</Button></div></header>
      <div className="space-y-6">
        <Separator />
