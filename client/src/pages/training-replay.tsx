@@ -202,28 +202,30 @@ export default function TrainingReplayPage() {
           Training Library
         </Button>
 
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          {replay.category && (
-            <span className="inline-flex rounded-full border border-red-700 bg-red-600 px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wider text-white shadow-sm">
-              {replay.category}
-            </span>
-          )}
-          {replay.durationMinutes && (
-            <span className="flex items-center gap-1 text-sm text-slate-500">
-              <Clock className="h-4 w-4" />
-              {replay.durationMinutes} min
-            </span>
+        <div className="mx-auto w-full max-w-[1100px]">
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            {replay.category && (
+              <span className="inline-flex rounded-full border border-red-700 bg-red-600 px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wider text-white shadow-sm">
+                {replay.category}
+              </span>
+            )}
+            {replay.durationMinutes && (
+              <span className="flex items-center gap-1 text-sm text-slate-500">
+                <Clock className="h-4 w-4" />
+                {replay.durationMinutes} min
+              </span>
+            )}
+          </div>
+
+          <h1 className="mb-3 text-[28px] font-bold leading-tight tracking-tight text-slate-950 sm:text-4xl">
+            {replay.title}
+          </h1>
+          {replay.description && (
+            <p className="mb-7 max-w-[780px] text-base leading-7 text-slate-600 sm:text-lg">
+              {replay.description}
+            </p>
           )}
         </div>
-
-        <h1 className="mb-3 text-[28px] font-bold leading-tight tracking-tight text-slate-950 sm:text-4xl">
-          {replay.title}
-        </h1>
-        {replay.description && (
-          <p className="mb-7 max-w-[780px] text-base leading-7 text-slate-600 sm:text-lg">
-            {replay.description}
-          </p>
-        )}
 
         {embedUrl ? (
           <div className="mx-auto mb-8 w-full max-w-[1100px]">
@@ -246,7 +248,7 @@ export default function TrainingReplayPage() {
 
         <div className="mx-auto max-w-[780px]">
           {transcriptText && (
-            <div className="mx-auto mb-8 mt-8 max-w-[680px] overflow-hidden rounded-xl border border-blue-100 bg-blue-50/60">
+            <div className="mx-auto mb-8 mt-8 w-full overflow-hidden rounded-xl border border-blue-100 bg-blue-50/60">
               <button
                 type="button"
                 className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
