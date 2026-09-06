@@ -17,6 +17,8 @@ type TrainingTranscriptStatusProps = {
   chapters?: TrainingChapter[] | null;
   chaptersGeneratedAt?: string | null;
   onSaveChapterTitles?: (titles: string[]) => Promise<void>;
+  onRegenerateChapters?: () => void;
+  isRegeneratingChapters?: boolean;
 };
 
 function formatTranscriptGeneratedAt(value: string): string | null {
@@ -42,10 +44,14 @@ function TrainingChapterEditor({
   chapters,
   generatedAt,
   onSave,
+  onRegenerate,
+  isRegenerating,
 }: {
   chapters: TrainingChapter[];
   generatedAt?: string | null;
   onSave?: (titles: string[]) => Promise<void>;
+  onRegenerate?: () => void;
+  isRegenerating?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [titles, setTitles] = useState(chapters.map((chapter) => chapter.title));
@@ -122,14 +128,34 @@ function TrainingChapterEditor({
               />
             </div>
           ))}
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={reset}>
-              Cancel
-            </Button>
-            <Button type="button" size="sm" disabled={saving || invalid || unchanged} onClick={save}>
-              {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
-              Save titles
-            </Button>
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+            <div>
+              {onRegenerate && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={saving || isRegenerating}
+                  onClick={onRegenerate}
+                >
+                  {isRegenerating ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <ListVideo className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  Regenerate Chapters
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button type="button" size="sm" variant="ghost" disabled={saving || isRegenerating} onClick={reset}>
+                Cancel
+              </Button>
+              <Button type="button" size="sm" disabled={saving || isRegenerating || invalid || unchanged} onClick={save}>
+                {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
+                Save titles
+              </Button>
+            </div>
           </div>
         </div>
       </CollapsibleContent>
@@ -144,6 +170,8 @@ export function TrainingTranscriptStatus({
   chapters,
   chaptersGeneratedAt,
   onSaveChapterTitles,
+  onRegenerateChapters,
+  isRegeneratingChapters,
 }: TrainingTranscriptStatusProps) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -206,6 +234,8 @@ export function TrainingTranscriptStatus({
           chapters={chapters}
           generatedAt={chaptersGeneratedAt}
           onSave={onSaveChapterTitles}
+          onRegenerate={onRegenerateChapters}
+          isRegenerating={isRegeneratingChapters}
         />
       )}
     </>

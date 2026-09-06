@@ -14150,14 +14150,16 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       if (!lesson || !videoId) return res.status(400).json({ message: "Add a Vimeo video to this lesson first." });
       if (!/^\d+$/.test(trackId)) return res.status(400).json({ message: "Choose a transcript language." });
       const transcript = await fetchVimeoTranscript(videoId, trackId);
+      const chapters = await generateLessonChapters(transcript.cues);
+      const generatedAt = new Date();
       const saved = await storage.updateCourseLesson(req.params.id, {
         transcriptText: formatTranscriptParagraphs(transcript.text),
         transcriptLanguage: transcript.language || null,
         transcriptSource: `Vimeo${transcript.name ? ` · ${transcript.name}` : ""}`,
         transcriptUpdatedAt: new Date(),
         transcriptCues: transcript.cues,
-        transcriptChapters: null,
-        transcriptChaptersGeneratedAt: null,
+        transcriptChapters: chapters,
+        transcriptChaptersGeneratedAt: generatedAt,
       });
       res.json(saved);
     } catch (e) {
@@ -14221,15 +14223,18 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       const transcriptLanguage = segmentTranscripts.find((segment) => segment.language)?.language || "";
       if (!transcriptText) throw new Error("No speech was found in the Vimeo video.");
 
-      progressStream.progress(95, "Saving transcript");
+      progressStream.progress(94, "Creating chapters");
+      const transcriptChapters = await generateLessonChapters(transcriptCues);
+      const generatedAt = new Date();
+      progressStream.progress(98, "Saving transcript and chapters");
       const saved = await storage.updateCourseLesson(req.params.id, {
         transcriptText,
         transcriptLanguage: transcriptLanguage || null,
         transcriptSource: "Fresh transcription from Vimeo video",
         transcriptUpdatedAt: new Date(),
         transcriptCues,
-        transcriptChapters: null,
-        transcriptChaptersGeneratedAt: null,
+        transcriptChapters,
+        transcriptChaptersGeneratedAt: generatedAt,
       });
       progressStream.complete(saved);
     } catch (e) {
@@ -14709,16 +14714,18 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       if (!replay || !videoId) return res.status(400).json({ message: "Add a Vimeo video to this replay first." });
       const transcript = await fetchVimeoTranscript(videoId, trackId);
       const transcriptText = formatTranscriptParagraphs(transcript.text);
-      const [generatedMetadata, durationMinutes] = await Promise.all([
+      const [generatedMetadata, durationMinutes, thumbnailUrl, transcriptChapters] = await Promise.all([
         generateReplayMetadata(replay.title, transcriptText),
         getVimeoVideoDurationMinutes(videoId),
+        getVimeoVideoThumbnail(videoId),
+        generateLessonChapters(transcript.cues),
       ]);
-      const thumbnailUrl = await getVimeoVideoThumbnail(videoId);
+      const generatedAt = new Date();
       res.json(await storage.updateTrainingReplay(replay.id, {
         transcriptText, transcriptLanguage: transcript.language || null,
         transcriptSource: `Vimeo${transcript.name ? ` · ${transcript.name}` : ""}`,
-        transcriptUpdatedAt: new Date(), transcriptCues: transcript.cues, transcriptChapters: null,
-        transcriptChaptersGeneratedAt: null,
+        transcriptUpdatedAt: new Date(), transcriptCues: transcript.cues, transcriptChapters,
+        transcriptChaptersGeneratedAt: generatedAt,
         description: generatedMetadata.description,
         durationMinutes,
         tags: generatedMetadata.tags,
@@ -14784,17 +14791,21 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       const transcriptCues = segmentTranscripts.flatMap((segment) => segment.cues);
       const transcriptLanguage = segmentTranscripts.find((segment) => segment.language)?.language || "";
       if (!transcriptText) throw new Error("No speech was found in the Vimeo video.");
-      progressStream.progress(90, "Creating replay details");
-      const generatedMetadata = await generateReplayMetadata(replay.title, transcriptText);
-      progressStream.progress(96, "Saving transcript");
+      progressStream.progress(88, "Creating replay details and chapters");
+      const [generatedMetadata, transcriptChapters] = await Promise.all([
+        generateReplayMetadata(replay.title, transcriptText),
+        generateLessonChapters(transcriptCues),
+      ]);
+      const generatedAt = new Date();
+      progressStream.progress(97, "Saving transcript and chapters");
       const saved = await storage.updateTrainingReplay(replay.id, {
         transcriptText,
         transcriptLanguage: transcriptLanguage || null,
         transcriptSource: "Fresh transcription from Vimeo video",
         transcriptUpdatedAt: new Date(),
         transcriptCues,
-        transcriptChapters: null,
-        transcriptChaptersGeneratedAt: null,
+        transcriptChapters,
+        transcriptChaptersGeneratedAt: generatedAt,
         description: generatedMetadata.description,
         durationMinutes,
         tags: generatedMetadata.tags,

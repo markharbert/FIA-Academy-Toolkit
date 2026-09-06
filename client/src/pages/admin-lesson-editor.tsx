@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import {
   ArrowLeft, Save, Eye, EyeOff, Youtube, Link, Plus, Trash2, ExternalLink, Pencil,
-  Film, Folder, Loader2, ChevronDown, ChevronRight, ArrowRight, Download, ListVideo, RefreshCw,
+  Film, Folder, Loader2, ChevronDown, ChevronRight, ArrowRight, Download, RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -506,7 +506,7 @@ export default function AdminLessonEditorPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/lessons", lessonId] });
       setShowTranscriptTracks(false);
-      toast({ title: "Transcript added", description: "The Vimeo transcript is ready for members to view." });
+      toast({ title: "Transcript and chapters added", description: "Both are ready for members to view." });
     },
     onError: (e: Error) => toast({ title: "Couldn’t add transcript", description: e.message, variant: "destructive" }),
   });
@@ -526,8 +526,8 @@ export default function AdminLessonEditorPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/lessons", lessonId] });
       setShowTranscriptTracks(false);
       toast({
-        title: "Fresh transcript created",
-        description: "The transcript now reflects the audio in the embedded Vimeo video.",
+        title: "Fresh transcript and chapters created",
+        description: "Both now reflect the embedded Vimeo video.",
       });
     },
     onError: (e: Error) =>
@@ -811,22 +811,6 @@ export default function AdminLessonEditorPage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {lesson.transcriptText && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={generateTranscriptChapters.isPending}
-                      onClick={() => generateTranscriptChapters.mutate()}
-                    >
-                      {generateTranscriptChapters.isPending ? (
-                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <ListVideo className="mr-1.5 h-3.5 w-3.5" />
-                      )}
-                      {lesson.transcriptChapters?.length ? "Regenerate chapters" : "Generate chapters"}
-                    </Button>
-                  )}
-                  {lesson.transcriptText && (
                     <Button asChild size="sm" variant="outline">
                       <a href={`/api/admin/lessons/${lessonId}/transcript/download`}>
                         <Download className="mr-1.5 h-3.5 w-3.5" />
@@ -879,6 +863,8 @@ export default function AdminLessonEditorPage() {
                 chapters={lesson.transcriptChapters}
                 chaptersGeneratedAt={lesson.transcriptChaptersGeneratedAt}
                 onSaveChapterTitles={(titles) => updateTranscriptChapters.mutateAsync(titles).then(() => undefined)}
+                onRegenerateChapters={() => generateTranscriptChapters.mutate()}
+                isRegeneratingChapters={generateTranscriptChapters.isPending}
               />
               {showTranscriptTracks && (
                 <div className="border-t pt-3">

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
-import { ArrowLeft, ChevronDown, ChevronRight, Download, ExternalLink, Eye, EyeOff, Film, Folder, Link as LinkIcon, ListVideo, Loader2, Pencil, Plus, RefreshCw, Save, Trash2, Tag } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, Download, ExternalLink, Eye, EyeOff, Film, Folder, Link as LinkIcon, Loader2, Pencil, Plus, RefreshCw, Save, Trash2, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -411,8 +411,8 @@ export default function AdminTrainingReplayEditorPage() {
       setShowTranscriptTracks(false);
       invalidate();
       toast({
-        title: "Replay details created",
-        description: "The transcript, description, duration, and tags are ready to review.",
+        title: "Replay details and chapters created",
+        description: "The transcript, chapters, description, duration, and tags are ready to review.",
       });
     },
     onError: (error: Error) =>
@@ -434,8 +434,8 @@ export default function AdminTrainingReplayEditorPage() {
       setShowTranscriptTracks(false);
       invalidate();
       toast({
-        title: "Fresh transcript created",
-        description: "The transcript now reflects the audio in the embedded Vimeo video.",
+        title: "Fresh transcript and chapters created",
+        description: "Both now reflect the embedded Vimeo video.",
       });
     },
     onError: (error: Error) =>
@@ -602,22 +602,6 @@ export default function AdminTrainingReplayEditorPage() {
                </div>
                <div className="flex flex-wrap items-center gap-2">
                  {form.transcriptText && (
-                   <Button
-                     type="button"
-                     size="sm"
-                     variant="outline"
-                     disabled={generateTranscriptChapters.isPending}
-                     onClick={() => generateTranscriptChapters.mutate()}
-                   >
-                     {generateTranscriptChapters.isPending ? (
-                       <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                     ) : (
-                       <ListVideo className="mr-1.5 h-3.5 w-3.5" />
-                     )}
-                     {form.transcriptChapters?.length ? "Regenerate chapters" : "Generate chapters"}
-                   </Button>
-                 )}
-                 {form.transcriptText && (
                    <Button asChild size="sm" variant="outline">
                      <a href={`/api/admin/training-replays/${replayId}/transcript/download`}>
                        <Download className="mr-1.5 h-3.5 w-3.5" />
@@ -670,6 +654,8 @@ export default function AdminTrainingReplayEditorPage() {
                  chapters={form.transcriptChapters}
                  chaptersGeneratedAt={form.transcriptChaptersGeneratedAt}
                  onSaveChapterTitles={(titles) => updateTranscriptChapters.mutateAsync(titles).then(() => undefined)}
+                 onRegenerateChapters={() => generateTranscriptChapters.mutate()}
+                 isRegeneratingChapters={generateTranscriptChapters.isPending}
                />
              {showTranscriptTracks && (
                <div className="border-t pt-3">
