@@ -42,11 +42,13 @@ declare module "http" {
 // raw-body collector (with 1 MB cap + absolute timeout) has authoritative
 // control over that stream from the start. Regex handles trailing-slash
 // variants so the bypass is not circumventable by appending a slash.
-// Gzip/Brotli all text responses — skip SSE and large upload routes
+// Gzip/Brotli all text responses — skip streaming and large upload routes
 app.use(compression({
   filter: (req, res) => {
-    // Don't compress SSE streams or file-upload paths
+    // Compression buffers small streaming chunks, preventing live progress
+    // updates from reaching the browser until the operation is complete.
     if (req.path.startsWith("/api/sessions") && req.method === "POST") return false;
+    if (req.path.endsWith("/fresh-transcript") && req.method === "POST") return false;
     return compression.filter(req, res);
   },
 }));

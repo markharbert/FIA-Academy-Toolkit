@@ -156,7 +156,10 @@ function startTranscriptProgressStream(res: Response) {
 
   let lastPercentage = -1;
   const write = (event: object) => {
-    if (!res.writableEnded) res.write(`${JSON.stringify(event)}\n`);
+    if (!res.writableEnded) {
+      res.write(`${JSON.stringify(event)}\n`);
+      res.flush?.();
+    }
   };
 
   return {
