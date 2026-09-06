@@ -859,6 +859,7 @@ export default function AdminLessonEditorPage() {
               <TrainingTranscriptStatus
                 updatedAt={lesson.transcriptUpdatedAt}
                 source={lesson.transcriptSource}
+                transcriptText={lesson.transcriptText}
               />
               {showTranscriptTracks && (
                 <div className="border-t pt-3">

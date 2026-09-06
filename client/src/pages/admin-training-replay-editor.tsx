@@ -647,7 +647,11 @@ export default function AdminTrainingReplayEditorPage() {
                  </Button>
                </div>
              </div>
-              <TrainingTranscriptStatus updatedAt={form.transcriptUpdatedAt} source={form.transcriptSource} />
+               <TrainingTranscriptStatus
+                 updatedAt={form.transcriptUpdatedAt}
+                 source={form.transcriptSource}
+                 transcriptText={form.transcriptText}
+               />
              {showTranscriptTracks && (
                <div className="border-t pt-3">
                  {tracksQuery.isLoading ? (

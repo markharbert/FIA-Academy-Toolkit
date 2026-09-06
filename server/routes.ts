@@ -35,6 +35,7 @@ import { formatSwipeListResponse } from "./swipe-api";
 import { safeNormalizeWebsite } from "./inboxIntelScreenshots";
 import { hasExactIds } from "@shared/course-structure";
 import { slugify } from "@shared/slug";
+import { formatTranscriptParagraphs } from "@shared/transcript-format";
 import { resolveEmailLogoPath } from "./email-assets";
 import OpenAI from "openai";
 import {
@@ -14147,7 +14148,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       if (!/^\d+$/.test(trackId)) return res.status(400).json({ message: "Choose a transcript language." });
       const transcript = await fetchVimeoTranscript(videoId, trackId);
       const saved = await storage.updateCourseLesson(req.params.id, {
-        transcriptText: transcript.text,
+        transcriptText: formatTranscriptParagraphs(transcript.text),
         transcriptLanguage: transcript.language || null,
         transcriptSource: `Vimeo${transcript.name ? ` · ${transcript.name}` : ""}`,
         transcriptUpdatedAt: new Date(),
@@ -14209,7 +14210,9 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
           return transcript;
         },
       );
-      const transcriptText = segmentTranscripts.map((segment) => segment.text).filter(Boolean).join("\n\n").trim();
+      const transcriptText = formatTranscriptParagraphs(
+        segmentTranscripts.map((segment) => segment.text).filter(Boolean).join(" "),
+      );
       const transcriptCues = segmentTranscripts.flatMap((segment) => segment.cues);
       const transcriptLanguage = segmentTranscripts.find((segment) => segment.language)?.language || "";
       if (!transcriptText) throw new Error("No speech was found in the Vimeo video.");
@@ -14675,13 +14678,14 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       const videoId = replay?.videoUrl ? extractVimeoVideoId(replay.videoUrl) : null;
       if (!replay || !videoId) return res.status(400).json({ message: "Add a Vimeo video to this replay first." });
       const transcript = await fetchVimeoTranscript(videoId, trackId);
+      const transcriptText = formatTranscriptParagraphs(transcript.text);
       const [generatedMetadata, durationMinutes] = await Promise.all([
-        generateReplayMetadata(replay.title, transcript.text),
+        generateReplayMetadata(replay.title, transcriptText),
         getVimeoVideoDurationMinutes(videoId),
       ]);
       const thumbnailUrl = await getVimeoVideoThumbnail(videoId);
       res.json(await storage.updateTrainingReplay(replay.id, {
-        transcriptText: transcript.text, transcriptLanguage: transcript.language || null,
+        transcriptText, transcriptLanguage: transcript.language || null,
         transcriptSource: `Vimeo${transcript.name ? ` · ${transcript.name}` : ""}`,
         transcriptUpdatedAt: new Date(), transcriptCues: transcript.cues, transcriptChapters: null,
         description: generatedMetadata.description,
@@ -14743,7 +14747,9 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
           return transcript;
         },
       );
-      const transcriptText = segmentTranscripts.map((segment) => segment.text).filter(Boolean).join("\n\n").trim();
+      const transcriptText = formatTranscriptParagraphs(
+        segmentTranscripts.map((segment) => segment.text).filter(Boolean).join(" "),
+      );
       const transcriptCues = segmentTranscripts.flatMap((segment) => segment.cues);
       const transcriptLanguage = segmentTranscripts.find((segment) => segment.language)?.language || "";
       if (!transcriptText) throw new Error("No speech was found in the Vimeo video.");
