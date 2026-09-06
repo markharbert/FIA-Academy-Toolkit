@@ -841,7 +841,7 @@ export default function AdminLessonEditorPage() {
                     variant={lesson.transcriptText ? "outline" : "default"}
                     onClick={() => setShowTranscriptTracks((shown) => !shown)}
                   >
-                    {lesson.transcriptText ? "Replace transcript" : "Add transcript"}
+                    Import Vimeo captions
                   </Button>
                 </div>
               </div>

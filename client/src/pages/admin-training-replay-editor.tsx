@@ -634,7 +634,7 @@ export default function AdminTrainingReplayEditorPage() {
                    variant={form.transcriptText ? "outline" : "default"}
                    onClick={() => setShowTranscriptTracks((shown) => !shown)}
                  >
-                   {form.transcriptText ? "Replace transcript" : "Add transcript"}
+                    Import Vimeo captions
                  </Button>
                </div>
              </div>
