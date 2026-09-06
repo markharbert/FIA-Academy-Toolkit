@@ -69,6 +69,7 @@ type VimeoPickerVideo = {
   name: string;
   url: string;
   thumbnailUrl?: string;
+  durationMinutes?: number;
 };
 
 type VimeoVideoPage = {

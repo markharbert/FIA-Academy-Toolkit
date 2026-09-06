@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { transcribeAudio, transcribeAudioWhisper, scoreTranscript, generateTitle, generateDmoSummary, generateBulletPoints, generateLessonChapters } from "./ai";
+import { transcribeAudio, transcribeAudioWhisper, scoreTranscript, generateTitle, generateDmoSummary, generateBulletPoints, generateLessonChapters, generateReplayMetadata } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio, probeVideo, faststartMp4, prepareTeleprompterMp4, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
 import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema, insertProjectTemplateSchema, insertProjectTemplateTaskSchema, updateProjectTemplateTaskSchema, insertProjectColumnSchema, insertCannedResponseSchema, insertAnnouncementSchema, insertAffiliateLinkSchema } from "@shared/schema";
 import { safeTimezone, todayKeyInTz, dueHasTime } from "@shared/datetime";
@@ -52,7 +52,7 @@ import {
 } from "./clickfunnels";
 import { listCfCourses, listCfDownloads, getCfCourseStructure, extractVimeoUrl, type CfTreeNode } from "./cf-import-client";
 import { runCfMembershipReconciliation } from "./cfMembershipReconciliation";
-import { listVimeoProjects, listVimeoVideos, searchVimeoVideos, extractVimeoVideoId, listVimeoTextTracks, fetchVimeoTranscript } from "./vimeo";
+import { listVimeoProjects, listVimeoVideos, searchVimeoVideos, extractVimeoVideoId, listVimeoTextTracks, fetchVimeoTranscript, getVimeoVideoDurationMinutes } from "./vimeo";
 import { FIA_EVENT_CALENDAR_ID, FIA_EVENT_CALENDAR_NAME, FIA_EVENT_CALENDAR_SUBSCRIBE_URL, FIA_EVENT_CALENDAR_TIMEZONE, GoogleCalendarError, getTrainingCalendarEvents } from "./googleCalendar";
 
 const openai = new OpenAI({
@@ -14532,10 +14532,17 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       const videoId = replay?.videoUrl ? extractVimeoVideoId(replay.videoUrl) : null;
       if (!replay || !videoId) return res.status(400).json({ message: "Add a Vimeo video to this replay first." });
       const transcript = await fetchVimeoTranscript(videoId, trackId);
+      const [generatedMetadata, durationMinutes] = await Promise.all([
+        generateReplayMetadata(replay.title, transcript.text),
+        getVimeoVideoDurationMinutes(videoId),
+      ]);
       res.json(await storage.updateTrainingReplay(replay.id, {
         transcriptText: transcript.text, transcriptLanguage: transcript.language || null,
         transcriptSource: `Vimeo${transcript.name ? ` · ${transcript.name}` : ""}`,
         transcriptUpdatedAt: new Date(), transcriptCues: transcript.cues, transcriptChapters: null,
+        description: generatedMetadata.description,
+        durationMinutes,
+        tags: generatedMetadata.tags,
       }));
     } catch (error) {
       console.error("[replay Vimeo import]", error);

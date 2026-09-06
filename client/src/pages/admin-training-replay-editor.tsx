@@ -21,7 +21,7 @@ type Resource = { id: string; name: string; url: string; subtitle: string | null
 type ReplayChapter = { startSeconds: number; title: string };
 type Replay = { id: string; title: string; description: string | null; category: string | null; tags: string[]; durationMinutes: number | null; videoUrl: string | null; content: string | null; status: "draft" | "published"; resources: Resource[]; transcriptText: string | null; transcriptLanguage: string | null; transcriptSource: string | null; transcriptUpdatedAt: string | null; transcriptChapters: ReplayChapter[] | null };
 type VimeoFolder = { id: string; name: string; parentId?: string; path: string[] };
-type VimeoVideo = { id: string; name: string; url: string; thumbnailUrl?: string };
+type VimeoVideo = { id: string; name: string; url: string; thumbnailUrl?: string; durationMinutes?: number };
 type VimeoVideoPage = { videos: VimeoVideo[]; hasMore: boolean };
 type Track = { id: string; language: string; name: string; type: string };
 type CfDownload = {
@@ -376,22 +376,32 @@ export default function AdminTrainingReplayEditorPage() {
       transcriptSource: updated.transcriptSource,
       transcriptUpdatedAt: updated.transcriptUpdatedAt,
       transcriptChapters: updated.transcriptChapters,
+      description: updated.description,
+      durationMinutes: updated.durationMinutes,
+      tags: (updated.tags || []).join(", "),
     };
     formRef.current = next;
     setForm(next);
   };
   const importVimeoTranscript = useMutation({
-    mutationFn: (trackId: string) =>
-      api(`/api/admin/training-replays/${replayId}/vimeo-transcript`, {
+    mutationFn: async (trackId: string) => {
+      if (timer.current) clearTimeout(timer.current);
+      const saved = await saveRevision(revision.current);
+      if (!saved) throw new Error("Save the replay before importing its transcript.");
+      return api(`/api/admin/training-replays/${replayId}/vimeo-transcript`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ trackId }),
-      }),
+      });
+    },
     onSuccess: (updated: Replay) => {
       syncTranscriptFields(updated);
       setShowTranscriptTracks(false);
       invalidate();
-      toast({ title: "Transcript added", description: "The Vimeo transcript is ready for members to view." });
+      toast({
+        title: "Replay details created",
+        description: "The transcript, description, duration, and tags are ready to review.",
+      });
     },
     onError: (error: Error) =>
       toast({ title: "Couldn’t add transcript", description: error.message, variant: "destructive" }),
@@ -1004,6 +1014,7 @@ export default function AdminTrainingReplayEditorPage() {
                       className="flex w-full items-center gap-3 rounded-md border p-2 text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring"
                       onClick={() => {
                         change("videoUrl", video.url);
+                        if (video.durationMinutes) change("durationMinutes", video.durationMinutes);
                         setVimeoPickerOpen(false);
                       }}
                     >

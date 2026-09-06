@@ -63,6 +63,7 @@ export interface VimeoVideo {
   name: string;
   url: string;
   thumbnailUrl?: string;
+  durationMinutes?: number;
 }
 
 export interface VimeoVideoPage {
@@ -212,6 +213,19 @@ export async function fetchVimeoTranscript(videoId: string, trackId: string): Pr
   return { text, language: track.language, name: track.name, cues };
 }
 
+export async function getVimeoVideoDurationMinutes(videoId: string): Promise<number> {
+  if (!VIMEO_ACCESS_TOKEN) throw new Error("Vimeo access is not configured");
+  const payload = await cachedVimeoValue(
+    `video-duration:${videoId}`,
+    () => vimeoGet(`/videos/${encodeURIComponent(videoId)}?fields=duration`),
+  );
+  const durationSeconds = Number(payload?.duration);
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    throw new Error("Vimeo did not return a valid video duration.");
+  }
+  return Math.max(1, Math.ceil(durationSeconds / 60));
+}
+
 export interface VimeoFolder {
   id: string;
   name: string;
@@ -283,6 +297,9 @@ async function loadVimeoVideos(
         name: video.name,
         url,
         thumbnailUrl: pictures.at(-1)?.link,
+        durationMinutes: Number.isFinite(Number(video.duration)) && Number(video.duration) > 0
+          ? Math.max(1, Math.ceil(Number(video.duration) / 60))
+          : undefined,
       });
     }
   }
