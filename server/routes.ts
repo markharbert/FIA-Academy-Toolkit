@@ -112,6 +112,39 @@ const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 const SCREENSHOTS_DIR = path.join(process.cwd(), "uploads", "feedback-screenshots");
 const MAX_VIDEO_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
 const MAX_RETRANSCRIBES_PER_DAY = 3;
+const FRESH_TRANSCRIPT_CONCURRENCY = 3;
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  let firstError: unknown;
+  let hasError = false;
+
+  const worker = async () => {
+    while (!hasError) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= items.length) return;
+      try {
+        results[index] = await mapper(items[index], index);
+      } catch (error) {
+        if (!hasError) {
+          hasError = true;
+          firstError = error;
+        }
+      }
+    }
+  };
+
+  const workerCount = Math.min(Math.max(1, concurrency), items.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  if (hasError) throw firstError;
+  return results;
+}
 
 // Ensure upload directories exist
 if (!fs.existsSync(SCREENSHOTS_DIR)) {
@@ -14113,19 +14146,17 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         return res.status(502).json({ message: extracted.error || "Could not extract the Vimeo video's audio." });
       }
 
-      const transcriptParts: string[] = [];
-      const transcriptCues: Array<{ startSeconds: number; text: string }> = [];
-      let transcriptLanguage = "";
-      for (let index = 0; index < extracted.segmentPaths.length; index += 1) {
-        const segmentTranscript = await transcribeAudioWithTimestamps(
-          extracted.segmentPaths[index],
+      const segmentTranscripts = await mapWithConcurrency(
+        extracted.segmentPaths,
+        FRESH_TRANSCRIPT_CONCURRENCY,
+        (segmentPath, index) => transcribeAudioWithTimestamps(
+          segmentPath,
           index * (extracted.segmentDurationSeconds ?? 600),
-        );
-        transcriptParts.push(segmentTranscript.text);
-        transcriptCues.push(...segmentTranscript.cues);
-        if (!transcriptLanguage && segmentTranscript.language) transcriptLanguage = segmentTranscript.language;
-      }
-      const transcriptText = transcriptParts.filter(Boolean).join("\n\n").trim();
+        ),
+      );
+      const transcriptText = segmentTranscripts.map((segment) => segment.text).filter(Boolean).join("\n\n").trim();
+      const transcriptCues = segmentTranscripts.flatMap((segment) => segment.cues);
+      const transcriptLanguage = segmentTranscripts.find((segment) => segment.language)?.language || "";
       if (!transcriptText) throw new Error("No speech was found in the Vimeo video.");
 
       const saved = await storage.updateCourseLesson(req.params.id, {
@@ -14622,19 +14653,17 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       if (!extracted.success || !extracted.segmentPaths?.length) {
         return res.status(502).json({ message: extracted.error || "Could not extract the Vimeo video's audio." });
       }
-      const transcriptParts: string[] = [];
-      const transcriptCues: Array<{ startSeconds: number; text: string }> = [];
-      let transcriptLanguage = "";
-      for (let index = 0; index < extracted.segmentPaths.length; index += 1) {
-        const segmentTranscript = await transcribeAudioWithTimestamps(
-          extracted.segmentPaths[index],
+      const segmentTranscripts = await mapWithConcurrency(
+        extracted.segmentPaths,
+        FRESH_TRANSCRIPT_CONCURRENCY,
+        (segmentPath, index) => transcribeAudioWithTimestamps(
+          segmentPath,
           index * (extracted.segmentDurationSeconds ?? 600),
-        );
-        transcriptParts.push(segmentTranscript.text);
-        transcriptCues.push(...segmentTranscript.cues);
-        if (!transcriptLanguage && segmentTranscript.language) transcriptLanguage = segmentTranscript.language;
-      }
-      const transcriptText = transcriptParts.filter(Boolean).join("\n\n").trim();
+        ),
+      );
+      const transcriptText = segmentTranscripts.map((segment) => segment.text).filter(Boolean).join("\n\n").trim();
+      const transcriptCues = segmentTranscripts.flatMap((segment) => segment.cues);
+      const transcriptLanguage = segmentTranscripts.find((segment) => segment.language)?.language || "";
       if (!transcriptText) throw new Error("No speech was found in the Vimeo video.");
       const [generatedMetadata, durationMinutes, thumbnailUrl] = await Promise.all([
         generateReplayMetadata(replay.title, transcriptText),

@@ -296,51 +296,80 @@ export async function transcribeAudioWithTimestamps(
   const audioBuffer = fs.readFileSync(absolutePath);
   const fileSizeMB = audioBuffer.length / 1024 / 1024;
   console.log(`[AI] Timestamped Gemini transcription: ${path.basename(audioPath)} (${fileSizeMB.toFixed(2)}MB)`);
-  const response = await gemini.models.generateContent({
-    model: "gemini-flash-latest",
-    contents: [{
-      role: "user",
-      parts: [
-        {
-          inlineData: {
-            mimeType: "audio/mpeg",
-            data: audioBuffer.toString("base64"),
+  const encodedAudio = audioBuffer.toString("base64");
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const response = await gemini.models.generateContent({
+        model: "gemini-flash-latest",
+        contents: [{
+          role: "user",
+          parts: [
+            {
+              inlineData: {
+                mimeType: "audio/mpeg",
+                data: encodedAudio,
+              },
+            },
+            {
+              text: [
+                "Transcribe every spoken word in this audio accurately.",
+                "Segment timestamps must be seconds from the beginning of this audio clip.",
+                "Use natural phrase-level segments, preserve the spoken order, and do not add commentary or words that are not audible.",
+              ].join(" "),
+            },
+          ],
+        }],
+        config: {
+          responseMimeType: "application/json",
+          responseJsonSchema: {
+            type: "object",
+            properties: {
+              language: { type: "string" },
+              segments: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    startSeconds: { type: "number" },
+                    text: { type: "string" },
+                  },
+                  required: ["startSeconds", "text"],
+                },
+              },
+            },
+            required: ["language", "segments"],
           },
+          temperature: 0.1,
+          maxOutputTokens: 32768,
         },
-        {
-          text: [
-            "Transcribe every spoken word in this audio accurately.",
-            "Return JSON only with this shape:",
-            '{"language":"en","text":"complete transcript","segments":[{"startSeconds":0,"text":"spoken words"}]}.',
-            "Segment timestamps must be seconds from the beginning of this audio clip.",
-            "Use natural phrase-level segments, preserve the spoken order, and do not add commentary or words that are not audible.",
-          ].join(" "),
-        },
-      ],
-    }],
-    config: {
-      responseMimeType: "application/json",
-      temperature: 0.1,
-      maxOutputTokens: 32768,
-    },
-  });
-  const raw = (response.text || "").trim().replace(/^```json\s*|\s*```$/g, "");
-  const transcription = JSON.parse(raw) as { language?: unknown; text?: unknown; segments?: unknown };
-  const cues = (Array.isArray(transcription.segments) ? transcription.segments : [])
-    .map((segment: any) => ({
-      startSeconds: startOffsetSeconds + Math.max(0, Number(segment?.startSeconds ?? segment?.start) || 0),
-      text: typeof segment?.text === "string" ? segment.text.replace(/\s+/g, " ").trim() : "",
-    }))
-    .filter((cue: { startSeconds: number; text: string }) => cue.text);
-  const text = typeof transcription.text === "string" && transcription.text.trim()
-    ? transcription.text.trim()
-    : cues.map((cue: { text: string }) => cue.text).join(" ");
-  if (!text) throw new Error("The transcription service did not detect any speech.");
-  return {
-    text,
-    language: typeof transcription.language === "string" ? transcription.language : "",
-    cues: cues.length ? cues : [{ startSeconds: startOffsetSeconds, text }],
-  };
+      });
+      const raw = (response.text || "").trim().replace(/^```json\s*|\s*```$/g, "");
+      const transcription = JSON.parse(raw) as { language?: unknown; segments?: unknown };
+      const cues = (Array.isArray(transcription.segments) ? transcription.segments : [])
+        .map((segment: any) => ({
+          startSeconds: startOffsetSeconds + Math.max(0, Number(segment?.startSeconds) || 0),
+          text: typeof segment?.text === "string" ? segment.text.replace(/\s+/g, " ").trim() : "",
+        }))
+        .filter((cue: { startSeconds: number; text: string }) => cue.text);
+      const text = cues.map((cue: { text: string }) => cue.text).join(" ");
+      if (!text) throw new Error("The transcription service did not detect any speech.");
+      return {
+        text,
+        language: typeof transcription.language === "string" ? transcription.language : "",
+        cues,
+      };
+    } catch (error) {
+      lastError = error;
+      if (attempt < 2) {
+        console.warn(`[AI] Timestamped transcription attempt ${attempt} failed; retrying once.`);
+        await new Promise((resolve) => setTimeout(resolve, 750));
+      }
+    }
+  }
+
+  throw lastError;
 }
 
 const scoringSystemPrompt = `You are a no-nonsense video marketing coach. Your feedback is direct, specific, and short. No flattery, no filler phrases like "great foundation" or "you're off to a good start." Say exactly what worked, what didn't, and what to fix — like a coach who respects the person enough to be straight with them. Analyze the transcript of a practice video based on the 5-part video creation formula.
