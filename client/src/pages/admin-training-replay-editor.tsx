@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
-import { ArrowLeft, ChevronDown, ChevronRight, Download, ExternalLink, Eye, EyeOff, Film, Folder, Link as LinkIcon, ListVideo, Loader2, Pencil, Plus, RefreshCw, Save, Trash2, Tag } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, Clock3, Download, ExternalLink, Eye, EyeOff, Film, Folder, Link as LinkIcon, ListVideo, Loader2, Pencil, Plus, RefreshCw, Save, Trash2, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -93,6 +93,16 @@ function detectVideoProvider(url: string): "youtube" | "vimeo" | "other" | null 
   if (url.includes("vimeo.com")) return "vimeo";
   if (url.startsWith("http")) return "other";
   return null;
+}
+
+function formatTranscriptGeneratedAt(value: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
 }
 
 function VideoPreview({ url }: { url: string }) {
@@ -637,6 +647,20 @@ export default function AdminTrainingReplayEditorPage() {
                  </Button>
                </div>
              </div>
+              {form.transcriptUpdatedAt && (
+                <div className="flex items-start gap-2 rounded-md border border-violet-100 bg-violet-50/60 px-3 py-2 text-xs text-violet-950">
+                  <Clock3 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-600" />
+                  <span>
+                    Transcript generated on{" "}
+                    <span className="font-semibold">
+                      {formatTranscriptGeneratedAt(form.transcriptUpdatedAt) || "an unknown date"}
+                    </span>
+                    {form.transcriptSource && (
+                      <span className="text-violet-800/75"> · {form.transcriptSource}</span>
+                    )}
+                  </span>
+                </div>
+              )}
              {showTranscriptTracks && (
                <div className="border-t pt-3">
                  {tracksQuery.isLoading ? (
