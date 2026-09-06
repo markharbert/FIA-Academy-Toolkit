@@ -530,6 +530,66 @@ export interface AudioResult {
   error?: string;
 }
 
+export interface AudioSegmentsResult {
+  success: boolean;
+  segmentPaths?: string[];
+  segmentDurationSeconds?: number;
+  error?: string;
+}
+
+export async function extractRemoteAudioSegments(
+  videoUrl: string,
+  uploadsDir: string,
+  outputPrefix: string,
+  segmentDurationSeconds = 1200,
+): Promise<AudioSegmentsResult> {
+  const outputPattern = path.join(uploadsDir, `${outputPrefix}-%03d.mp3`);
+  console.log(`[FFmpeg] Extracting remote Vimeo audio in ${segmentDurationSeconds}s segments...`);
+  return new Promise((resolve) => {
+    const ffmpeg = spawn("ffmpeg", [
+      "-i", videoUrl,
+      "-vn",
+      "-map", "0:a:0",
+      "-acodec", "libmp3lame",
+      "-ac", "1",
+      "-ar", "16000",
+      "-b:a", "48k",
+      "-f", "segment",
+      "-segment_time", String(segmentDurationSeconds),
+      "-reset_timestamps", "1",
+      "-y",
+      outputPattern,
+    ]);
+    let stderr = "";
+    ffmpeg.stderr.on("data", (data) => {
+      stderr += data.toString();
+    });
+    ffmpeg.on("close", (code) => {
+      const segmentPaths = fs.readdirSync(uploadsDir)
+        .filter((name) => name.startsWith(`${outputPrefix}-`) && name.endsWith(".mp3"))
+        .sort()
+        .map((name) => path.join(uploadsDir, name));
+      if (code === 0 && segmentPaths.length > 0) {
+        console.log(`[FFmpeg] Extracted ${segmentPaths.length} remote audio segment(s)`);
+        resolve({ success: true, segmentPaths, segmentDurationSeconds });
+      } else {
+        const safeError = stderr.replaceAll(videoUrl, "[Vimeo URL redacted]");
+        console.error("[FFmpeg] Remote audio extraction failed:", safeError.slice(-500));
+        resolve({
+          success: false,
+          segmentPaths,
+          segmentDurationSeconds,
+          error: "Could not extract audio from this Vimeo video.",
+        });
+      }
+    });
+    ffmpeg.on("error", (error) => {
+      console.error("[FFmpeg] Remote audio extraction process failed:", error.message);
+      resolve({ success: false, error: "FFmpeg could not process the Vimeo video." });
+    });
+  });
+}
+
 /**
  * Fast audio extraction optimized for speech transcription.
  * Uses mono, 16kHz sample rate, and MP3 compression for minimum file size

@@ -20,6 +20,11 @@ const MAX_INLINE_SIZE = 15 * 1024 * 1024; // 15MB threshold for inline vs File A
 
 export type GeneratedLessonChapter = { startSeconds: number; title: string };
 export type GeneratedReplayMetadata = { description: string; tags: string[] };
+export type TimestampedTranscript = {
+  text: string;
+  language: string;
+  cues: Array<{ startSeconds: number; text: string }>;
+};
 
 function validateReplayDescription(value: unknown): string {
   const description = typeof value === "string"
@@ -281,6 +286,61 @@ export async function transcribeAudioWhisper(audioPath: string): Promise<string>
   });
 
   return (typeof transcription === "string" ? transcription : (transcription as any).text ?? "").trim();
+}
+
+export async function transcribeAudioWithTimestamps(
+  audioPath: string,
+  startOffsetSeconds = 0,
+): Promise<TimestampedTranscript> {
+  const absolutePath = path.resolve(audioPath);
+  const audioBuffer = fs.readFileSync(absolutePath);
+  const fileSizeMB = audioBuffer.length / 1024 / 1024;
+  console.log(`[AI] Timestamped Gemini transcription: ${path.basename(audioPath)} (${fileSizeMB.toFixed(2)}MB)`);
+  const response = await gemini.models.generateContent({
+    model: "gemini-flash-latest",
+    contents: [{
+      role: "user",
+      parts: [
+        {
+          inlineData: {
+            mimeType: "audio/mpeg",
+            data: audioBuffer.toString("base64"),
+          },
+        },
+        {
+          text: [
+            "Transcribe every spoken word in this audio accurately.",
+            "Return JSON only with this shape:",
+            '{"language":"en","text":"complete transcript","segments":[{"startSeconds":0,"text":"spoken words"}]}.',
+            "Segment timestamps must be seconds from the beginning of this audio clip.",
+            "Use natural phrase-level segments, preserve the spoken order, and do not add commentary or words that are not audible.",
+          ].join(" "),
+        },
+      ],
+    }],
+    config: {
+      responseMimeType: "application/json",
+      temperature: 0.1,
+      maxOutputTokens: 32768,
+    },
+  });
+  const raw = (response.text || "").trim().replace(/^```json\s*|\s*```$/g, "");
+  const transcription = JSON.parse(raw) as { language?: unknown; text?: unknown; segments?: unknown };
+  const cues = (Array.isArray(transcription.segments) ? transcription.segments : [])
+    .map((segment: any) => ({
+      startSeconds: startOffsetSeconds + Math.max(0, Number(segment?.startSeconds ?? segment?.start) || 0),
+      text: typeof segment?.text === "string" ? segment.text.replace(/\s+/g, " ").trim() : "",
+    }))
+    .filter((cue: { startSeconds: number; text: string }) => cue.text);
+  const text = typeof transcription.text === "string" && transcription.text.trim()
+    ? transcription.text.trim()
+    : cues.map((cue: { text: string }) => cue.text).join(" ");
+  if (!text) throw new Error("The transcription service did not detect any speech.");
+  return {
+    text,
+    language: typeof transcription.language === "string" ? transcription.language : "",
+    cues: cues.length ? cues : [{ startSeconds: startOffsetSeconds, text }],
+  };
 }
 
 const scoringSystemPrompt = `You are a no-nonsense video marketing coach. Your feedback is direct, specific, and short. No flattery, no filler phrases like "great foundation" or "you're off to a good start." Say exactly what worked, what didn't, and what to fix — like a coach who respects the person enough to be straight with them. Analyze the transcript of a practice video based on the 5-part video creation formula.

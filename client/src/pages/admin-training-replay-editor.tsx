@@ -414,6 +414,25 @@ export default function AdminTrainingReplayEditorPage() {
     onError: (error: Error) =>
       toast({ title: "Couldn’t add transcript", description: error.message, variant: "destructive" }),
   });
+  const createFreshTranscript = useMutation({
+    mutationFn: async () => {
+      if (timer.current) clearTimeout(timer.current);
+      const saved = await saveRevision(revision.current);
+      if (!saved) throw new Error("Save the replay before creating a fresh transcript.");
+      return api(`/api/admin/training-replays/${replayId}/fresh-transcript`, { method: "POST" });
+    },
+    onSuccess: (updated: Replay) => {
+      syncTranscriptFields(updated);
+      setShowTranscriptTracks(false);
+      invalidate();
+      toast({
+        title: "Fresh transcript created",
+        description: "The transcript now reflects the audio in the embedded Vimeo video.",
+      });
+    },
+    onError: (error: Error) =>
+      toast({ title: "Couldn’t create fresh transcript", description: error.message, variant: "destructive" }),
+  });
   const regenerateDescription = useMutation({
     mutationFn: async () => {
       if (timer.current) clearTimeout(timer.current);
@@ -594,6 +613,20 @@ export default function AdminTrainingReplayEditorPage() {
                      Remove
                    </Button>
                  )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={createFreshTranscript.isPending || importVimeoTranscript.isPending}
+                    onClick={() => createFreshTranscript.mutate()}
+                  >
+                    {createFreshTranscript.isPending ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    {createFreshTranscript.isPending ? "Transcribing video…" : "Create fresh transcript"}
+                  </Button>
                  <Button
                    type="button"
                    size="sm"

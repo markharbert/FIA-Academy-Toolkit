@@ -2,8 +2,8 @@ import { z } from "zod";
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { transcribeAudio, transcribeAudioWhisper, scoreTranscript, generateTitle, generateDmoSummary, generateBulletPoints, generateLessonChapters, generateReplayDescription, generateReplayMetadata } from "./ai";
-import { convertToMp4, generateThumbnail, extractAudio, probeVideo, faststartMp4, prepareTeleprompterMp4, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
+import { transcribeAudio, transcribeAudioWhisper, transcribeAudioWithTimestamps, scoreTranscript, generateTitle, generateDmoSummary, generateBulletPoints, generateLessonChapters, generateReplayDescription, generateReplayMetadata } from "./ai";
+import { convertToMp4, generateThumbnail, extractAudio, extractRemoteAudioSegments, probeVideo, faststartMp4, prepareTeleprompterMp4, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
 import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema, insertProjectTemplateSchema, insertProjectTemplateTaskSchema, updateProjectTemplateTaskSchema, insertProjectColumnSchema, insertCannedResponseSchema, insertAnnouncementSchema, insertAffiliateLinkSchema } from "@shared/schema";
 import { safeTimezone, todayKeyInTz, dueHasTime } from "@shared/datetime";
 import bcrypt from "bcrypt";
@@ -52,7 +52,7 @@ import {
 } from "./clickfunnels";
 import { listCfCourses, listCfDownloads, getCfCourseStructure, extractVimeoUrl, type CfTreeNode } from "./cf-import-client";
 import { runCfMembershipReconciliation } from "./cfMembershipReconciliation";
-import { listVimeoProjects, listVimeoVideos, searchVimeoVideos, extractVimeoVideoId, listVimeoTextTracks, fetchVimeoTranscript, getVimeoVideoDurationMinutes, getVimeoVideoThumbnail } from "./vimeo";
+import { listVimeoProjects, listVimeoVideos, searchVimeoVideos, extractVimeoVideoId, listVimeoTextTracks, fetchVimeoTranscript, getVimeoVideoDurationMinutes, getVimeoVideoThumbnail, getVimeoVideoDownload } from "./vimeo";
 import { FIA_EVENT_CALENDAR_ID, FIA_EVENT_CALENDAR_NAME, FIA_EVENT_CALENDAR_SUBSCRIBE_URL, FIA_EVENT_CALENDAR_TIMEZONE, GoogleCalendarError, getTrainingCalendarEvents } from "./googleCalendar";
 
 const openai = new OpenAI({
@@ -14549,6 +14549,67 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     } catch (error) {
       console.error("[replay Vimeo import]", error);
       res.status(502).json({ message: error instanceof Error ? error.message : "Vimeo transcript import failed." });
+    }
+  });
+  app.post("/api/admin/training-replays/:id/fresh-transcript", requireAdmin, async (req, res) => {
+    const temporaryFiles: string[] = [];
+    try {
+      const replay = await storage.getTrainingReplay(req.params.id);
+      const videoId = replay?.videoUrl ? extractVimeoVideoId(replay.videoUrl) : null;
+      if (!replay || !videoId) {
+        return res.status(400).json({ message: "Add a Vimeo video to this replay first." });
+      }
+      const download = await getVimeoVideoDownload(videoId);
+      const prefix = `vimeo-transcript-${replay.id}-${crypto.randomBytes(6).toString("hex")}`;
+      const extracted = await extractRemoteAudioSegments(download.link, UPLOADS_DIR, prefix, 600);
+      temporaryFiles.push(...(extracted.segmentPaths ?? []));
+      if (!extracted.success || !extracted.segmentPaths?.length) {
+        return res.status(502).json({ message: extracted.error || "Could not extract the Vimeo video's audio." });
+      }
+      const transcriptParts: string[] = [];
+      const transcriptCues: Array<{ startSeconds: number; text: string }> = [];
+      let transcriptLanguage = "";
+      for (let index = 0; index < extracted.segmentPaths.length; index += 1) {
+        const segmentTranscript = await transcribeAudioWithTimestamps(
+          extracted.segmentPaths[index],
+          index * (extracted.segmentDurationSeconds ?? 600),
+        );
+        transcriptParts.push(segmentTranscript.text);
+        transcriptCues.push(...segmentTranscript.cues);
+        if (!transcriptLanguage && segmentTranscript.language) transcriptLanguage = segmentTranscript.language;
+      }
+      const transcriptText = transcriptParts.filter(Boolean).join("\n\n").trim();
+      if (!transcriptText) throw new Error("No speech was found in the Vimeo video.");
+      const [generatedMetadata, durationMinutes, thumbnailUrl] = await Promise.all([
+        generateReplayMetadata(replay.title, transcriptText),
+        getVimeoVideoDurationMinutes(videoId),
+        getVimeoVideoThumbnail(videoId),
+      ]);
+      res.json(await storage.updateTrainingReplay(replay.id, {
+        transcriptText,
+        transcriptLanguage: transcriptLanguage || null,
+        transcriptSource: "Fresh transcription from Vimeo video",
+        transcriptUpdatedAt: new Date(),
+        transcriptCues,
+        transcriptChapters: null,
+        description: generatedMetadata.description,
+        durationMinutes,
+        tags: generatedMetadata.tags,
+        thumbnailUrl: thumbnailUrl || replay.thumbnailUrl || null,
+      }));
+    } catch (error) {
+      console.error("[replay fresh Vimeo transcription]", error);
+      res.status(502).json({
+        message: error instanceof Error ? error.message : "Could not create a fresh transcript from the Vimeo video.",
+      });
+    } finally {
+      for (const filePath of temporaryFiles) {
+        try {
+          if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        } catch (error) {
+          console.warn("[replay fresh Vimeo transcription] cleanup failed:", error);
+        }
+      }
     }
   });
   app.post("/api/admin/training-replays/:id/description", requireAdmin, async (req, res) => {

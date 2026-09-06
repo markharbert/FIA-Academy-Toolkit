@@ -84,6 +84,11 @@ export interface VimeoTranscriptCue {
   text: string;
 }
 
+export interface VimeoVideoDownload {
+  link: string;
+  size: number | null;
+}
+
 function vimeoHeaders() {
   return {
     Authorization: `Bearer ${VIMEO_ACCESS_TOKEN}`,
@@ -235,6 +240,37 @@ export async function getVimeoVideoThumbnail(videoId: string): Promise<string | 
   const pictures = Array.isArray(payload?.pictures?.sizes) ? payload.pictures.sizes : [];
   const thumbnail = pictures.at(-1)?.link;
   return typeof thumbnail === "string" && thumbnail ? thumbnail : null;
+}
+
+export async function getVimeoVideoDownload(videoId: string): Promise<VimeoVideoDownload> {
+  if (!VIMEO_ACCESS_TOKEN) throw new Error("Vimeo access is not configured");
+  const payload = await vimeoGet(
+    `/videos/${encodeURIComponent(videoId)}?fields=download,files`,
+  );
+  const candidates = [
+    ...(Array.isArray(payload?.download) ? payload.download : []),
+    ...(Array.isArray(payload?.files) ? payload.files : []),
+  ]
+    .filter((file: any) =>
+      typeof file?.link === "string"
+      && file.link
+      && file.quality !== "hls"
+      && (typeof file.type !== "string" || file.type.includes("mp4")),
+    )
+    .map((file: any) => ({
+      link: file.link as string,
+      size: Number.isFinite(Number(file.size)) && Number(file.size) > 0
+        ? Number(file.size)
+        : null,
+    }))
+    .sort((a: VimeoVideoDownload, b: VimeoVideoDownload) =>
+      (a.size ?? Number.MAX_SAFE_INTEGER) - (b.size ?? Number.MAX_SAFE_INTEGER),
+    );
+  const smallest = candidates[0];
+  if (!smallest) {
+    throw new Error("Vimeo did not provide a downloadable file for this video.");
+  }
+  return smallest;
 }
 
 export interface VimeoFolder {
