@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
-import { ArrowLeft, Download, Eye, EyeOff, Film, ListVideo, Pencil, Plus, Save, Trash2, Tag, Link as LinkIcon } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, Download, Eye, EyeOff, Film, Folder, ListVideo, Loader2, Pencil, Plus, Save, Trash2, Tag, Link as LinkIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,8 +15,9 @@ import { useToast } from "@/hooks/use-toast";
 
 type Resource = { id: string; name: string; url: string; subtitle: string | null; kind: "link" | "pdf" };
 type Replay = { id: string; title: string; description: string | null; category: string | null; tags: string[]; durationMinutes: number | null; videoUrl: string | null; content: string | null; status: "draft" | "published"; resources: Resource[]; transcriptText: string | null; transcriptChapters: unknown[] | null };
-type Folder = { id: string; name: string; parentId?: string; path?: string[] };
-type VimeoVideo = { id: string; name: string; url: string };
+type VimeoFolder = { id: string; name: string; parentId?: string; path: string[] };
+type VimeoVideo = { id: string; name: string; url: string; thumbnailUrl?: string };
+type VimeoVideoPage = { videos: VimeoVideo[]; hasMore: boolean };
 type Track = { id: string; language: string; name: string; type: string };
 type Form = Omit<Replay, "resources" | "tags"> & { tags: string };
 type ReplayUpdate = Pick<Form, "title" | "description" | "category" | "durationMinutes" | "videoUrl" | "content" | "status"> & { tags: string[] };
@@ -30,7 +31,35 @@ async function api(url: string, init?: RequestInit) {
   return response.json();
 }
 
-function academyFolders(folders: Folder[]) {
+type VimeoFolderNode = VimeoFolder & { children: VimeoFolderNode[] };
+
+const VIMEO_LAST_FOLDER_STORAGE_KEY = "academy-toolkit:last-vimeo-folder";
+
+function buildVimeoFolderTree(folders: VimeoFolder[]): VimeoFolderNode[] {
+  const nodes = new Map<string, VimeoFolderNode>(
+    folders.map((folder) => [folder.id, { ...folder, children: [] }]),
+  );
+  const roots: VimeoFolderNode[] = [];
+
+  for (const node of nodes.values()) {
+    const parent = node.parentId ? nodes.get(node.parentId) : undefined;
+    if (parent && parent.id !== node.id) parent.children.push(node);
+    else roots.push(node);
+  }
+
+  const sortNodes = (items: VimeoFolderNode[]) => {
+    items.sort((a, b) => a.name.localeCompare(b.name));
+    items.forEach((item) => sortNodes(item.children));
+  };
+  sortNodes(roots);
+  return roots;
+}
+
+function flattenVimeoFolderTree(nodes: VimeoFolderNode[]): VimeoFolderNode[] {
+  return nodes.flatMap((node) => [node, ...flattenVimeoFolderTree(node.children)]);
+}
+
+function academyFolders(folders: VimeoFolder[]) {
   const permitted = new Set(folders.filter((folder) => folder.name.trim().toLowerCase() === "fearless influencer academy").map((folder) => folder.id));
   let changed = true;
   while (changed) {
@@ -87,7 +116,10 @@ export default function AdminTrainingReplayEditorPage() {
   const timer = useRef<ReturnType<typeof setTimeout>>();
   const saving = useRef<Promise<boolean> | null>(null);
   const queued = useRef<number | null>(null);
-  const [folderId, setFolderId] = useState("");
+  const [selectedVimeoFolderId, setSelectedVimeoFolderId] = useState("all");
+  const [vimeoVideoPage, setVimeoVideoPage] = useState(1);
+  const [vimeoFolderFilter, setVimeoFolderFilter] = useState("");
+  const [expandedVimeoFolders, setExpandedVimeoFolders] = useState<Record<string, boolean>>({});
   const [resourceEditor, setResourceEditor] = useState<Resource | null>(null);
   const [resourceDialogOpen, setResourceDialogOpen] = useState(false);
   const [resource, setResource] = useState({ name: "", url: "", subtitle: "", kind: "link" as "link" | "pdf" });
@@ -184,11 +216,85 @@ export default function AdminTrainingReplayEditorPage() {
     return () => { if (timer.current) clearTimeout(timer.current); window.removeEventListener("beforeunload", warn); };
   }, []);
 
-  const foldersQuery = useQuery<{ folders: Folder[] }>({ queryKey: ["/api/admin/vimeo/folders"], queryFn: () => api("/api/admin/vimeo/folders") });
+  const foldersQuery = useQuery<{ folders: VimeoFolder[] }>({
+    queryKey: ["/api/admin/vimeo/folders"],
+    queryFn: () => api("/api/admin/vimeo/folders"),
+    enabled: vimeoPickerOpen,
+  });
   const folders = useMemo(() => academyFolders(foldersQuery.data?.folders || []), [foldersQuery.data]);
-  useEffect(() => { if (!folderId && folders[0]) setFolderId(folders[0].id); }, [folderId, folders]);
-  const videosQuery = useQuery<{ videos: VimeoVideo[] }>({ queryKey: ["/api/admin/vimeo/folders", folderId, "videos"], queryFn: () => api(`/api/admin/vimeo/folders/${folderId}/videos`), enabled: !!folderId });
+  const vimeoFolderTree = useMemo(() => buildVimeoFolderTree(folders), [folders]);
+  const vimeoFolderSearchResults = useMemo(() => {
+    const filter = vimeoFolderFilter.trim().toLowerCase();
+    if (!filter) return [];
+    return flattenVimeoFolderTree(vimeoFolderTree).filter((folder) =>
+      [folder.name, ...(folder.path || [])].some((part) => part.toLowerCase().includes(filter)),
+    );
+  }, [vimeoFolderFilter, vimeoFolderTree]);
+  const videosQuery = useQuery<VimeoVideoPage>({
+    queryKey: ["/api/admin/vimeo/folders", selectedVimeoFolderId, "videos", vimeoVideoPage],
+    queryFn: () => api(`/api/admin/vimeo/folders/${selectedVimeoFolderId}/videos?page=${vimeoVideoPage}`),
+    enabled: vimeoPickerOpen && selectedVimeoFolderId !== "all",
+  });
   const tracksQuery = useQuery<{ tracks: Track[] }>({ queryKey: ["/api/admin/training-replays", replayId, "vimeo-transcript-tracks"], queryFn: () => api(`/api/admin/training-replays/${replayId}/vimeo-transcript-tracks`), enabled: trackPickerOpen });
+  useEffect(() => {
+    if (!vimeoPickerOpen) return;
+    const savedFolderId = window.localStorage.getItem(VIMEO_LAST_FOLDER_STORAGE_KEY);
+    setSelectedVimeoFolderId(savedFolderId || "all");
+    setVimeoVideoPage(1);
+    setVimeoFolderFilter("");
+  }, [vimeoPickerOpen]);
+  useEffect(() => {
+    if (!vimeoPickerOpen || !foldersQuery.data?.folders) return;
+    const academyFolder = folders.find(
+      (folder) => folder.name.trim().toLowerCase() === "fearless influencer academy",
+    );
+    const selectedFolderIsInAcademy = folders.some((folder) => folder.id === selectedVimeoFolderId);
+    if (academyFolder && !selectedFolderIsInAcademy) {
+      setSelectedVimeoFolderId(academyFolder.id);
+      setVimeoVideoPage(1);
+      window.localStorage.setItem(VIMEO_LAST_FOLDER_STORAGE_KEY, academyFolder.id);
+    }
+  }, [folders, foldersQuery.data?.folders, selectedVimeoFolderId, vimeoPickerOpen]);
+  const selectVimeoFolder = (folderId: string) => {
+    setSelectedVimeoFolderId(folderId);
+    setVimeoVideoPage(1);
+    window.localStorage.setItem(VIMEO_LAST_FOLDER_STORAGE_KEY, folderId);
+  };
+  const renderVimeoFolder = (folder: VimeoFolderNode, depth = 0): JSX.Element => {
+    const isExpanded = expandedVimeoFolders[folder.id] ?? depth === 0;
+    return (
+      <div key={folder.id}>
+        <div className="flex items-start gap-0.5">
+          {folder.children.length > 0 ? (
+            <button
+              type="button"
+              aria-label={isExpanded ? `Collapse ${folder.name}` : `Expand ${folder.name}`}
+              className="flex h-7 w-6 shrink-0 items-center justify-center rounded hover:bg-muted"
+              onClick={() => setExpandedVimeoFolders((current) => ({
+                ...current,
+                [folder.id]: !isExpanded,
+              }))}
+            >
+              {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+            </button>
+          ) : (
+            <span className="w-6 shrink-0" />
+          )}
+          <Button
+            type="button"
+            variant={selectedVimeoFolderId === folder.id ? "secondary" : "ghost"}
+            className="h-auto min-h-10 min-w-0 flex-1 justify-start gap-2 py-2 text-left"
+            style={{ paddingLeft: `${8 + Math.min(depth, 6) * 8}px` }}
+            onClick={() => selectVimeoFolder(folder.id)}
+          >
+            <Folder className="h-4 w-4 shrink-0" />
+            <span className="whitespace-normal break-words">{folder.name}</span>
+          </Button>
+        </div>
+        {isExpanded && folder.children.map((child) => renderVimeoFolder(child, depth + 1))}
+      </div>
+    );
+  };
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["/api/admin/training-replays", replayId] });
   const transcriptMutation = useMutation({
     mutationFn: ({ path, body, method = "POST" }: { path: string; body?: object; method?: string }) =>
@@ -236,7 +342,134 @@ export default function AdminTrainingReplayEditorPage() {
       <section className="rounded-xl border p-4"><div className="flex items-center justify-between"><h2 className="font-semibold">Resources</h2><Button size="sm" variant="outline" onClick={() => openResource()}><Plus className="mr-1 h-4 w-4" />Add resource</Button></div><div className="mt-3 space-y-2">{(replayQuery.data?.resources || []).map((item) => <div key={item.id} className="flex items-center justify-between rounded bg-muted/50 p-2 text-sm"><span>{item.name}</span><span><Button size="icon" variant="ghost" onClick={() => openResource(item)}><Pencil className="h-4 w-4" /></Button><Button size="icon" variant="ghost" className="text-destructive" onClick={() => deleteResource.mutate(item.id)}><Trash2 className="h-4 w-4" /></Button></span></div>)}</div></section>
     </div></div>
     <Dialog open={resourceDialogOpen} onOpenChange={(open) => { setResourceDialogOpen(open); if (!open) { setResourceEditor(null); setResource({ name: "", url: "", subtitle: "", kind: "link" }); } }}><DialogContent><DialogHeader><DialogTitle>{resourceEditor ? "Edit resource" : "Add resource"}</DialogTitle></DialogHeader><div className="space-y-3"><Input placeholder="Resource name" value={resource.name} onChange={(e) => setResource({ ...resource, name: e.target.value })} /><Input placeholder="https://…" value={resource.url} onChange={(e) => setResource({ ...resource, url: e.target.value })} /><Input placeholder="Optional description" value={resource.subtitle} onChange={(e) => setResource({ ...resource, subtitle: e.target.value })} /><select className="w-full rounded border bg-background p-2" value={resource.kind} onChange={(e) => setResource({ ...resource, kind: e.target.value as "link" | "pdf" })}><option value="link">Link</option><option value="pdf">PDF</option></select><Button className="w-full" disabled={!resource.name || !resource.url || resourceMutation.isPending} onClick={() => resourceMutation.mutate()}>{resourceEditor ? "Save resource" : "Add resource"}</Button></div></DialogContent></Dialog>
-     <Dialog open={vimeoPickerOpen} onOpenChange={setVimeoPickerOpen}><DialogContent className="max-w-2xl"><DialogHeader><DialogTitle>Choose a Vimeo video</DialogTitle><DialogDescription>Browse videos from the Fearless Influencer Academy folders.</DialogDescription></DialogHeader><div className="space-y-3"><select className="w-full rounded border bg-background p-2 text-sm" value={folderId} onChange={(e) => setFolderId(e.target.value)}>{folders.map((folder) => <option key={folder.id} value={folder.id}>{[...(folder.path || []), folder.name].join(" / ")}</option>)}</select>{videosQuery.isLoading ? <div className="h-24 animate-pulse rounded bg-muted" /> : <div className="grid max-h-80 gap-2 overflow-y-auto sm:grid-cols-2">{videosQuery.data?.videos.map((video) => <button type="button" className="rounded-lg border p-3 text-left text-sm transition hover:border-violet-400 hover:bg-violet-50" key={video.id} onClick={() => { change("videoUrl", video.url); setVimeoPickerOpen(false); }}>{video.name}</button>)}{!videosQuery.data?.videos.length && <p className="text-sm text-muted-foreground">No videos found in this folder.</p>}</div>}</div></DialogContent></Dialog>
+      <Dialog open={vimeoPickerOpen} onOpenChange={setVimeoPickerOpen}>
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-6xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Film className="h-5 w-5 text-blue-500" />
+              Choose a Vimeo video
+            </DialogTitle>
+            <DialogDescription>
+              Select a Fearless Influencer Academy video to use for this replay.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 sm:grid-cols-[24rem_minmax(0,1fr)]">
+            <div className="max-h-[55vh] space-y-1 overflow-y-auto rounded-md border bg-muted/20 p-2">
+              <Input
+                value={vimeoFolderFilter}
+                onChange={(event) => setVimeoFolderFilter(event.target.value)}
+                placeholder="Search folders…"
+                className="mb-2 h-8 text-sm"
+              />
+              <p className="px-2 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Folders
+              </p>
+              {foldersQuery.isLoading ? (
+                <div className="flex items-center gap-2 px-2 py-3 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Loading folders…
+                </div>
+              ) : foldersQuery.isError ? (
+                <p className="px-2 py-3 text-xs text-muted-foreground">
+                  The Fearless Influencer Academy folder is unavailable for this Vimeo token.
+                </p>
+              ) : vimeoFolderFilter.trim() ? (
+                vimeoFolderSearchResults.length > 0 ? (
+                  <div className="space-y-1">
+                    {vimeoFolderSearchResults.map((folder) => (
+                      <Button
+                        key={folder.id}
+                        type="button"
+                        variant={selectedVimeoFolderId === folder.id ? "secondary" : "ghost"}
+                        className="h-auto w-full justify-start gap-2 py-2 text-left"
+                        onClick={() => selectVimeoFolder(folder.id)}
+                      >
+                        <Folder className="h-4 w-4 shrink-0" />
+                        <span className="min-w-0">
+                          <span className="block whitespace-normal break-words text-sm">{folder.name}</span>
+                          {folder.path.length > 0 && (
+                            <span className="block whitespace-normal break-words text-xs font-normal text-muted-foreground">
+                              {folder.path.join(" / ")}
+                            </span>
+                          )}
+                        </span>
+                      </Button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="px-2 py-3 text-xs text-muted-foreground">No matching folders.</p>
+                )
+              ) : vimeoFolderTree.length > 0 ? (
+                vimeoFolderTree.map((folder) => renderVimeoFolder(folder))
+              ) : (
+                <p className="px-2 py-3 text-xs text-muted-foreground">
+                  The Fearless Influencer Academy folder was not found.
+                </p>
+              )}
+            </div>
+            <div className="min-w-0">
+              {videosQuery.isLoading ? (
+                <div className="flex min-h-48 items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading videos…
+                </div>
+              ) : videosQuery.isError ? (
+                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                  {(videosQuery.error as Error).message || "Unable to load Vimeo videos."}
+                </div>
+              ) : (videosQuery.data?.videos ?? []).length === 0 ? (
+                <div className="flex min-h-48 items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
+                  No videos in this folder.
+                </div>
+              ) : (
+                <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
+                  {(videosQuery.data?.videos ?? []).map((video) => (
+                    <button
+                      key={video.id}
+                      type="button"
+                      className="flex w-full items-center gap-3 rounded-md border p-2 text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring"
+                      onClick={() => {
+                        change("videoUrl", video.url);
+                        setVimeoPickerOpen(false);
+                      }}
+                    >
+                      {video.thumbnailUrl ? (
+                        <img src={video.thumbnailUrl} alt="" className="h-12 w-20 rounded bg-muted object-cover" />
+                      ) : (
+                        <div className="flex h-12 w-20 items-center justify-center rounded bg-muted">
+                          <Film className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                      )}
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium">{video.name}</span>
+                    </button>
+                  ))}
+                  <div className="flex items-center justify-between border-t pt-3">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={vimeoVideoPage === 1}
+                      onClick={() => setVimeoVideoPage((page) => page - 1)}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-xs text-muted-foreground">Page {vimeoVideoPage}</span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={!videosQuery.data?.hasMore}
+                      onClick={() => setVimeoVideoPage((page) => page + 1)}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     <Dialog open={trackPickerOpen} onOpenChange={setTrackPickerOpen}><DialogContent><DialogHeader><DialogTitle>Import Vimeo transcript</DialogTitle><DialogDescription>Choose the caption language Vimeo should import.</DialogDescription></DialogHeader>{tracksQuery.isLoading ? <p className="text-sm text-muted-foreground">Loading tracks…</p> : tracksQuery.isError ? <p className="text-sm text-destructive">{tracksQuery.error instanceof Error ? tracksQuery.error.message : "Couldn’t load Vimeo tracks."}</p> : <div className="space-y-2">{tracksQuery.data?.tracks.map((track) => <Button key={track.id} variant="outline" className="w-full justify-start" onClick={() => transcriptMutation.mutate({ path: "vimeo-transcript", body: { trackId: track.id } })}>{track.name || track.language} <span className="ml-2 text-muted-foreground">{track.language}</span></Button>)}{!tracksQuery.data?.tracks.length && <p className="text-sm text-muted-foreground">No caption tracks are available for this Vimeo video.</p>}</div>}</DialogContent></Dialog>
   </main>;
 }
