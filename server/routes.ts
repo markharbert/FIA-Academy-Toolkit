@@ -14097,6 +14097,62 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }
   });
 
+  app.post("/api/admin/lessons/:id/fresh-transcript", requireAdmin, async (req, res) => {
+    const temporaryFiles: string[] = [];
+    try {
+      const lesson = await storage.getCourseLesson(req.params.id);
+      const videoId = lesson?.videoUrl ? extractVimeoVideoId(lesson.videoUrl) : null;
+      if (!lesson || !videoId) {
+        return res.status(400).json({ message: "Add a Vimeo video to this lesson first." });
+      }
+      const download = await getVimeoVideoDownload(videoId);
+      const prefix = `vimeo-lesson-transcript-${lesson.id}-${crypto.randomBytes(6).toString("hex")}`;
+      const extracted = await extractRemoteAudioSegments(download.link, UPLOADS_DIR, prefix, 600);
+      temporaryFiles.push(...(extracted.segmentPaths ?? []));
+      if (!extracted.success || !extracted.segmentPaths?.length) {
+        return res.status(502).json({ message: extracted.error || "Could not extract the Vimeo video's audio." });
+      }
+
+      const transcriptParts: string[] = [];
+      const transcriptCues: Array<{ startSeconds: number; text: string }> = [];
+      let transcriptLanguage = "";
+      for (let index = 0; index < extracted.segmentPaths.length; index += 1) {
+        const segmentTranscript = await transcribeAudioWithTimestamps(
+          extracted.segmentPaths[index],
+          index * (extracted.segmentDurationSeconds ?? 600),
+        );
+        transcriptParts.push(segmentTranscript.text);
+        transcriptCues.push(...segmentTranscript.cues);
+        if (!transcriptLanguage && segmentTranscript.language) transcriptLanguage = segmentTranscript.language;
+      }
+      const transcriptText = transcriptParts.filter(Boolean).join("\n\n").trim();
+      if (!transcriptText) throw new Error("No speech was found in the Vimeo video.");
+
+      const saved = await storage.updateCourseLesson(req.params.id, {
+        transcriptText,
+        transcriptLanguage: transcriptLanguage || null,
+        transcriptSource: "Fresh transcription from Vimeo video",
+        transcriptUpdatedAt: new Date(),
+        transcriptCues,
+        transcriptChapters: null,
+      });
+      res.json(saved);
+    } catch (e) {
+      console.error("[lesson fresh Vimeo transcription]", e);
+      res.status(502).json({
+        message: e instanceof Error ? e.message : "Could not create a fresh transcript from the Vimeo video.",
+      });
+    } finally {
+      for (const filePath of temporaryFiles) {
+        try {
+          if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        } catch (error) {
+          console.warn("[lesson fresh Vimeo transcription] cleanup failed:", error);
+        }
+      }
+    }
+  });
+
   app.delete("/api/admin/lessons/:id/transcript", requireAdmin, async (req, res) => {
     try {
       const lesson = await storage.getCourseLesson(req.params.id);

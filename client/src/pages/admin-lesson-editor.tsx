@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import {
   ArrowLeft, Save, Eye, EyeOff, Youtube, Link, Plus, Trash2, ExternalLink, Pencil,
-  Film, Folder, Loader2, ChevronDown, ChevronRight, ArrowRight, Download, ListVideo,
+  Film, Folder, Loader2, ChevronDown, ChevronRight, ArrowRight, Download, ListVideo, RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { RichTextEditor } from "@/components/projects/rich-text-editor";
 import { TrainingResourceIcon } from "@/components/training-resource-icon";
+import { TrainingTranscriptStatus } from "@/components/training-transcript-status";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -507,6 +508,23 @@ export default function AdminLessonEditorPage() {
     onError: (e: Error) => toast({ title: "Couldn’t add transcript", description: e.message, variant: "destructive" }),
   });
 
+  const createFreshTranscript = useMutation({
+    mutationFn: () =>
+      apiFetch(`/api/admin/lessons/${lessonId}/fresh-transcript`, {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/lessons", lessonId] });
+      setShowTranscriptTracks(false);
+      toast({
+        title: "Fresh transcript created",
+        description: "The transcript now reflects the audio in the embedded Vimeo video.",
+      });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Couldn’t create fresh transcript", description: e.message, variant: "destructive" }),
+  });
+
   const generateTranscriptChapters = useMutation({
     mutationFn: () =>
       apiFetch(`/api/admin/lessons/${lessonId}/transcript-chapters`, {
@@ -766,7 +784,7 @@ export default function AdminLessonEditorPage() {
                       : "Import captions already available for this Vimeo video."}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {lesson.transcriptText && (
                     <Button
                       type="button"
@@ -806,6 +824,20 @@ export default function AdminLessonEditorPage() {
                   <Button
                     type="button"
                     size="sm"
+                    variant="outline"
+                    disabled={createFreshTranscript.isPending || importVimeoTranscript.isPending}
+                    onClick={() => createFreshTranscript.mutate()}
+                  >
+                    {createFreshTranscript.isPending ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    {createFreshTranscript.isPending ? "Transcribing video…" : "Create fresh transcript"}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
                     variant={lesson.transcriptText ? "outline" : "default"}
                     onClick={() => setShowTranscriptTracks((shown) => !shown)}
                   >
@@ -813,6 +845,10 @@ export default function AdminLessonEditorPage() {
                   </Button>
                 </div>
               </div>
+              <TrainingTranscriptStatus
+                updatedAt={lesson.transcriptUpdatedAt}
+                source={lesson.transcriptSource}
+              />
               {showTranscriptTracks && (
                 <div className="border-t pt-3">
                   {vimeoTranscriptTracksLoading ? (
