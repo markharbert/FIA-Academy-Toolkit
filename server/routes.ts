@@ -157,7 +157,9 @@ function startTranscriptProgressStream(res: Response) {
   let lastPercentage = -1;
   const write = (event: object) => {
     if (!res.writableEnded) {
-      res.write(`${JSON.stringify(event)}\n`);
+      // Keep each event above common reverse-proxy buffering thresholds.
+      // The client ignores the trailing whitespace after parsing the JSON.
+      res.write(`${JSON.stringify(event).padEnd(2048, " ")}\n`);
       res.flush?.();
     }
   };
@@ -14174,6 +14176,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   app.post("/api/admin/lessons/:id/fresh-transcript", requireAdmin, async (req, res) => {
     const temporaryFiles: string[] = [];
     let progressStream: ReturnType<typeof startTranscriptProgressStream> | null = null;
+    let transcriptionHeartbeat: ReturnType<typeof setInterval> | null = null;
     try {
       const lesson = await storage.getCourseLesson(req.params.id);
       const videoId = lesson?.videoUrl ? extractVimeoVideoId(lesson.videoUrl) : null;
@@ -14203,6 +14206,11 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       progressStream.progress(25, "Transcribing video");
 
       let completedSegments = 0;
+      let transcriptionPercentage = 25;
+      transcriptionHeartbeat = setInterval(() => {
+        transcriptionPercentage = Math.min(88, transcriptionPercentage + 1);
+        progressStream?.progress(transcriptionPercentage, "Transcribing video");
+      }, 4000);
       const segmentTranscripts = await mapWithConcurrency(
         extracted.segmentPaths,
         FRESH_TRANSCRIPT_CONCURRENCY,
@@ -14212,8 +14220,12 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
             index * (extracted.segmentDurationSeconds ?? 600),
           );
           completedSegments += 1;
+           transcriptionPercentage = Math.max(
+             transcriptionPercentage,
+             25 + (completedSegments / extracted.segmentPaths!.length) * 65,
+           );
           progressStream?.progress(
-            25 + (completedSegments / extracted.segmentPaths!.length) * 65,
+             transcriptionPercentage,
             `Transcribing section ${completedSegments} of ${extracted.segmentPaths!.length}`,
           );
           return transcript;
@@ -14246,6 +14258,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       if (progressStream) progressStream.fail(message);
       else res.status(502).json({ message });
     } finally {
+      if (transcriptionHeartbeat) clearInterval(transcriptionHeartbeat);
       for (const filePath of temporaryFiles) {
         try {
           if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
@@ -14742,6 +14755,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   app.post("/api/admin/training-replays/:id/fresh-transcript", requireAdmin, async (req, res) => {
     const temporaryFiles: string[] = [];
     let progressStream: ReturnType<typeof startTranscriptProgressStream> | null = null;
+    let transcriptionHeartbeat: ReturnType<typeof setInterval> | null = null;
     try {
       const replay = await storage.getTrainingReplay(req.params.id);
       const videoId = replay?.videoUrl ? extractVimeoVideoId(replay.videoUrl) : null;
@@ -14772,6 +14786,11 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       progressStream.progress(25, "Transcribing video");
 
       let completedSegments = 0;
+      let transcriptionPercentage = 25;
+      transcriptionHeartbeat = setInterval(() => {
+        transcriptionPercentage = Math.min(88, transcriptionPercentage + 1);
+        progressStream?.progress(transcriptionPercentage, "Transcribing video");
+      }, 4000);
       const segmentTranscripts = await mapWithConcurrency(
         extracted.segmentPaths,
         FRESH_TRANSCRIPT_CONCURRENCY,
@@ -14781,8 +14800,12 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
             index * (extracted.segmentDurationSeconds ?? 600),
           );
           completedSegments += 1;
+           transcriptionPercentage = Math.max(
+             transcriptionPercentage,
+             25 + (completedSegments / extracted.segmentPaths!.length) * 60,
+           );
           progressStream?.progress(
-            25 + (completedSegments / extracted.segmentPaths!.length) * 60,
+             transcriptionPercentage,
             `Transcribing section ${completedSegments} of ${extracted.segmentPaths!.length}`,
           );
           return transcript;
@@ -14821,6 +14844,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       if (progressStream) progressStream.fail(message);
       else res.status(502).json({ message });
     } finally {
+      if (transcriptionHeartbeat) clearInterval(transcriptionHeartbeat);
       for (const filePath of temporaryFiles) {
         try {
           if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
