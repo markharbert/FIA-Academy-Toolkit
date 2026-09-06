@@ -377,7 +377,10 @@ export default function AdminTrainingReplayEditorPage() {
       </div>
     );
   };
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["/api/admin/training-replays", replayId] });
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ["/api/admin/training-replays", replayId] });
+    void queryClient.invalidateQueries({ queryKey: ["/api/training/replays"] });
+  };
   const syncTranscriptFields = (updated: Replay) => {
     if (!formRef.current) return;
     const next = {

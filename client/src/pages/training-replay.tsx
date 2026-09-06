@@ -81,6 +81,9 @@ export default function TrainingReplayPage() {
   const { data: replay, isLoading, isError } = useQuery<Replay>({
     queryKey: ["/api/training/replays", slug],
     queryFn: () => api(`/api/training/replays/${slug}`),
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [transcriptTab, setTranscriptTab] = useState<"chapters" | "transcript">("chapters");

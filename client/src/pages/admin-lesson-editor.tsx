@@ -505,6 +505,7 @@ export default function AdminLessonEditorPage() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/lessons", lessonId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/training/lessons"] });
       setShowTranscriptTracks(false);
       toast({ title: "Transcript and chapters added", description: "Both are ready for members to view." });
     },
@@ -524,6 +525,7 @@ export default function AdminLessonEditorPage() {
     onMutate: () => setFreshTranscriptProgress({ percentage: 0, stage: "Starting" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/lessons", lessonId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/training/lessons"] });
       setShowTranscriptTracks(false);
       toast({
         title: "Fresh transcript and chapters created",
@@ -542,6 +544,7 @@ export default function AdminLessonEditorPage() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/lessons", lessonId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/training/lessons"] });
       toast({ title: "Chapters created", description: "Members can now jump to the key moments in this lesson." });
     },
     onError: (e: Error) => toast({ title: "Couldn’t create chapters", description: e.message, variant: "destructive" }),
@@ -556,6 +559,7 @@ export default function AdminLessonEditorPage() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/lessons", lessonId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/training/lessons"] });
       toast({ title: "Chapter titles saved" });
     },
     onError: (e: Error) =>
@@ -569,6 +573,7 @@ export default function AdminLessonEditorPage() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/lessons", lessonId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/training/lessons"] });
       setTranscriptDeleteOpen(false);
       toast({ title: "Transcript removed", description: "The transcript and its chapters were removed from this lesson." });
     },

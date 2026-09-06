@@ -181,6 +181,9 @@ export default function TrainingLessonPage() {
       `/api/training/lessons/${lessonIdentifier}?courseId=${encodeURIComponent(courseIdentifier)}${moduleSlug ? `&moduleSlug=${encodeURIComponent(moduleSlug)}` : ""}`,
     ),
     enabled: !!lessonIdentifier,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 
   // Mark progress
