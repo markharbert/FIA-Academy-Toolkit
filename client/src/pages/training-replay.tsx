@@ -197,12 +197,12 @@ export default function TrainingReplayPage() {
   return (
     <main className="min-h-[calc(100vh-3rem)] bg-slate-50">
       <div className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-        <Button variant="ghost" className="-ml-3 mb-5" onClick={() => go("/training/library")}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Training Library
-        </Button>
-
         <div className="mx-auto w-full max-w-[1100px]">
+          <Button variant="ghost" className="-ml-4 mb-5" onClick={() => go("/training/library")}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Training Library
+          </Button>
+
           <div className="mb-4 flex flex-wrap items-center gap-2">
             {replay.category && (
               <span className="inline-flex rounded-full border border-red-700 bg-red-600 px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wider text-white shadow-sm">
