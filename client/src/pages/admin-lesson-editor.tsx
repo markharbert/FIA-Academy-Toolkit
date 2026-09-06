@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { RichTextEditor } from "@/components/projects/rich-text-editor";
 import { TrainingResourceIcon } from "@/components/training-resource-icon";
 import { TrainingTranscriptStatus } from "@/components/training-transcript-status";
@@ -951,7 +950,7 @@ export default function AdminLessonEditorPage() {
                >
                  <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Resource
                </Button>
-         </section>
+             </div>
           </div>
 
           {/* Add resource form */}
@@ -1109,7 +1108,7 @@ export default function AdminLessonEditorPage() {
               </p>
             )
           )}
-        </div>
+        </section>
       </div>
 
       <AlertDialog open={!!resourceToDelete} onOpenChange={(open) => !open && setResourceToDelete(null)}>
