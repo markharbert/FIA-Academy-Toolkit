@@ -22,7 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 
 type Resource = { id: string; name: string; url: string; subtitle: string | null; kind: "link" | "pdf" };
 type ReplayChapter = { startSeconds: number; title: string };
-type Replay = { id: string; title: string; description: string | null; category: string | null; tags: string[]; durationMinutes: number | null; videoUrl: string | null; content: string | null; status: "draft" | "published"; resources: Resource[]; transcriptText: string | null; transcriptLanguage: string | null; transcriptSource: string | null; transcriptUpdatedAt: string | null; transcriptChapters: ReplayChapter[] | null };
+type Replay = { id: string; title: string; description: string | null; category: string | null; tags: string[]; durationMinutes: number | null; videoUrl: string | null; content: string | null; status: "draft" | "published"; resources: Resource[]; transcriptText: string | null; transcriptLanguage: string | null; transcriptSource: string | null; transcriptUpdatedAt: string | null; transcriptChapters: ReplayChapter[] | null; transcriptChaptersGeneratedAt: string | null };
 type VimeoFolder = { id: string; name: string; parentId?: string; path: string[] };
 type VimeoVideo = { id: string; name: string; url: string; thumbnailUrl?: string; durationMinutes?: number };
 type VimeoVideoPage = { videos: VimeoVideo[]; hasMore: boolean };
@@ -387,6 +387,7 @@ export default function AdminTrainingReplayEditorPage() {
       transcriptSource: updated.transcriptSource,
       transcriptUpdatedAt: updated.transcriptUpdatedAt,
       transcriptChapters: updated.transcriptChapters,
+      transcriptChaptersGeneratedAt: updated.transcriptChaptersGeneratedAt,
       description: updated.description,
       durationMinutes: updated.durationMinutes,
       tags: (updated.tags || []).join(", "),
@@ -466,6 +467,21 @@ export default function AdminTrainingReplayEditorPage() {
     },
     onError: (error: Error) =>
       toast({ title: "Couldn’t create chapters", description: error.message, variant: "destructive" }),
+  });
+  const updateTranscriptChapters = useMutation({
+    mutationFn: (titles: string[]) =>
+      api(`/api/admin/training-replays/${replayId}/transcript-chapters`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ titles }),
+      }),
+    onSuccess: (updated: Replay) => {
+      syncTranscriptFields(updated);
+      invalidate();
+      toast({ title: "Chapter titles saved" });
+    },
+    onError: (error: Error) =>
+      toast({ title: "Couldn’t save chapter titles", description: error.message, variant: "destructive" }),
   });
   const deleteTranscript = useMutation({
     mutationFn: () =>
@@ -651,6 +667,9 @@ export default function AdminTrainingReplayEditorPage() {
                  updatedAt={form.transcriptUpdatedAt}
                  source={form.transcriptSource}
                  transcriptText={form.transcriptText}
+                 chapters={form.transcriptChapters}
+                 chaptersGeneratedAt={form.transcriptChaptersGeneratedAt}
+                 onSaveChapterTitles={(titles) => updateTranscriptChapters.mutateAsync(titles).then(() => undefined)}
                />
              {showTranscriptTracks && (
                <div className="border-t pt-3">

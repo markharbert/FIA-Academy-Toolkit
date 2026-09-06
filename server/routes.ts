@@ -13871,6 +13871,9 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     status: courseStatusSchema.optional(),
     durationMinutes: z.number().int().min(0).max(100_000).nullable().optional(),
   }).strict().refine((updates) => Object.keys(updates).length > 0, "At least one update is required");
+  const chapterTitlesSchema = z.object({
+    titles: z.array(z.string().trim().min(1, "Chapter titles cannot be empty").max(60)).min(1).max(20),
+  }).strict();
   const resourceUpdateSchema = z.object({
     name: z.string().trim().min(1, "Resource name is required").max(500).optional(),
     url: z.string().trim().min(1, "Resource URL is required").max(4_000).optional(),
@@ -14154,6 +14157,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         transcriptUpdatedAt: new Date(),
         transcriptCues: transcript.cues,
         transcriptChapters: null,
+        transcriptChaptersGeneratedAt: null,
       });
       res.json(saved);
     } catch (e) {
@@ -14225,6 +14229,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         transcriptUpdatedAt: new Date(),
         transcriptCues,
         transcriptChapters: null,
+        transcriptChaptersGeneratedAt: null,
       });
       progressStream.complete(saved);
     } catch (e) {
@@ -14254,6 +14259,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         transcriptUpdatedAt: null,
         transcriptCues: null,
         transcriptChapters: null,
+        transcriptChaptersGeneratedAt: null,
       });
       res.json(saved);
     } catch (e) {
@@ -14301,11 +14307,35 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       const saved = await storage.updateCourseLesson(req.params.id, {
         transcriptCues: cues,
         transcriptChapters: chapters,
+        transcriptChaptersGeneratedAt: new Date(),
       });
       res.json(saved);
     } catch (e) {
       console.error("[Vimeo transcript chapters]", e);
       res.status(502).json({ message: e instanceof Error ? e.message : "Could not create transcript chapters." });
+    }
+  });
+
+  app.put("/api/admin/lessons/:id/transcript-chapters", requireAdmin, async (req, res) => {
+    const parsed = chapterTitlesSchema.safeParse(req.body);
+    if (!parsed.success) return validationError(res, parsed.error);
+    try {
+      const lesson = await storage.getCourseLesson(req.params.id);
+      const chapters = Array.isArray(lesson?.transcriptChapters) ? lesson.transcriptChapters : [];
+      if (!lesson || chapters.length === 0) return res.status(404).json({ message: "No generated chapters were found." });
+      if (parsed.data.titles.length !== chapters.length) {
+        return res.status(400).json({ message: "Every existing chapter must have a title." });
+      }
+      const saved = await storage.updateCourseLesson(req.params.id, {
+        transcriptChapters: chapters.map((chapter, index) => ({
+          startSeconds: chapter.startSeconds,
+          title: parsed.data.titles[index],
+        })),
+      });
+      res.json(saved);
+    } catch (error) {
+      console.error("[lesson chapter titles]", error);
+      res.status(500).json({ message: "Could not save chapter titles." });
     }
   });
 
@@ -14688,6 +14718,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         transcriptText, transcriptLanguage: transcript.language || null,
         transcriptSource: `Vimeo${transcript.name ? ` · ${transcript.name}` : ""}`,
         transcriptUpdatedAt: new Date(), transcriptCues: transcript.cues, transcriptChapters: null,
+        transcriptChaptersGeneratedAt: null,
         description: generatedMetadata.description,
         durationMinutes,
         tags: generatedMetadata.tags,
@@ -14763,6 +14794,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         transcriptUpdatedAt: new Date(),
         transcriptCues,
         transcriptChapters: null,
+        transcriptChaptersGeneratedAt: null,
         description: generatedMetadata.description,
         durationMinutes,
         tags: generatedMetadata.tags,
@@ -14801,7 +14833,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       if (!await storage.getTrainingReplay(req.params.id)) return res.status(404).json({ message: "Not found" });
       res.json(await storage.updateTrainingReplay(req.params.id, {
         transcriptText: null, transcriptLanguage: null, transcriptSource: null, transcriptUpdatedAt: null,
-        transcriptCues: null, transcriptChapters: null,
+        transcriptCues: null, transcriptChapters: null, transcriptChaptersGeneratedAt: null,
       }));
     } catch { res.status(500).json({ message: "Failed to remove transcript." }); }
   });
@@ -14826,10 +14858,36 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         if (!track) return res.status(400).json({ message: "Vimeo has no caption track available." });
         cues = (await fetchVimeoTranscript(videoId, track.id)).cues;
       }
-      res.json(await storage.updateTrainingReplay(replay.id, { transcriptCues: cues, transcriptChapters: await generateLessonChapters(cues) }));
+      res.json(await storage.updateTrainingReplay(replay.id, {
+        transcriptCues: cues,
+        transcriptChapters: await generateLessonChapters(cues),
+        transcriptChaptersGeneratedAt: new Date(),
+      }));
     } catch (error) {
       console.error("[replay Vimeo chapters]", error);
       res.status(502).json({ message: error instanceof Error ? error.message : "Could not create transcript chapters." });
+    }
+  });
+
+  app.put("/api/admin/training-replays/:id/transcript-chapters", requireAdmin, async (req, res) => {
+    const parsed = chapterTitlesSchema.safeParse(req.body);
+    if (!parsed.success) return replayValidationError(res, parsed.error);
+    try {
+      const replay = await storage.getTrainingReplay(req.params.id);
+      const chapters = Array.isArray(replay?.transcriptChapters) ? replay.transcriptChapters : [];
+      if (!replay || chapters.length === 0) return res.status(404).json({ message: "No generated chapters were found." });
+      if (parsed.data.titles.length !== chapters.length) {
+        return res.status(400).json({ message: "Every existing chapter must have a title." });
+      }
+      res.json(await storage.updateTrainingReplay(replay.id, {
+        transcriptChapters: chapters.map((chapter, index) => ({
+          startSeconds: chapter.startSeconds,
+          title: parsed.data.titles[index],
+        })),
+      }));
+    } catch (error) {
+      console.error("[replay chapter titles]", error);
+      res.status(500).json({ message: "Could not save chapter titles." });
     }
   });
 

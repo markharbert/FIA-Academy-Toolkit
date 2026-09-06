@@ -992,7 +992,15 @@ async function runStartupMigrations() {
         ADD COLUMN IF NOT EXISTS transcript_source TEXT,
         ADD COLUMN IF NOT EXISTS transcript_updated_at TIMESTAMP,
         ADD COLUMN IF NOT EXISTS transcript_cues JSONB,
-        ADD COLUMN IF NOT EXISTS transcript_chapters JSONB
+        ADD COLUMN IF NOT EXISTS transcript_chapters JSONB,
+        ADD COLUMN IF NOT EXISTS transcript_chapters_generated_at TIMESTAMP
+    `);
+    await db.execute(sql`
+      UPDATE course_lessons
+      SET transcript_chapters_generated_at = updated_at
+      WHERE transcript_chapters_generated_at IS NULL
+        AND jsonb_typeof(transcript_chapters) = 'array'
+        AND jsonb_array_length(transcript_chapters) > 0
     `);
     console.log("[startup] course_lessons transcript columns migration complete");
 

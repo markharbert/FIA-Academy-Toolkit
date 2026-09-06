@@ -6878,6 +6878,7 @@ export async function runMigrations(): Promise<void> {
         transcript_updated_at TIMESTAMP,
         transcript_cues JSONB,
         transcript_chapters JSONB,
+        transcript_chapters_generated_at TIMESTAMP,
         duration_minutes INTEGER,
         category TEXT,
         tags JSONB DEFAULT '[]'::jsonb,
@@ -6887,6 +6888,14 @@ export async function runMigrations(): Promise<void> {
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+    await pool.query(`ALTER TABLE training_replays ADD COLUMN IF NOT EXISTS transcript_chapters_generated_at TIMESTAMP`);
+    await pool.query(`
+      UPDATE training_replays
+      SET transcript_chapters_generated_at = updated_at
+      WHERE transcript_chapters_generated_at IS NULL
+        AND jsonb_typeof(transcript_chapters) = 'array'
+        AND jsonb_array_length(transcript_chapters) > 0
     `);
     await pool.query(`
       CREATE TABLE IF NOT EXISTS training_replay_resources (

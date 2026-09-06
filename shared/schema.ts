@@ -2259,6 +2259,7 @@ export const courseLessons = pgTable("course_lessons", {
   transcriptUpdatedAt: timestamp("transcript_updated_at"),
   transcriptCues: jsonb("transcript_cues").$type<LessonTranscriptCue[]>(),
   transcriptChapters: jsonb("transcript_chapters").$type<LessonChapter[]>(),
+  transcriptChaptersGeneratedAt: timestamp("transcript_chapters_generated_at"),
   content: text("content"), // TipTap HTML
   status: varchar("status", { length: 20 }).notNull().default("draft"),
   durationMinutes: integer("duration_minutes"),
@@ -2303,6 +2304,7 @@ export const trainingReplays = pgTable("training_replays", {
   transcriptUpdatedAt: timestamp("transcript_updated_at"),
   transcriptCues: jsonb("transcript_cues").$type<LessonTranscriptCue[]>(),
   transcriptChapters: jsonb("transcript_chapters").$type<LessonChapter[]>(),
+  transcriptChaptersGeneratedAt: timestamp("transcript_chapters_generated_at"),
   durationMinutes: integer("duration_minutes"),
   category: text("category"),
   tags: jsonb("tags").$type<string[]>(),

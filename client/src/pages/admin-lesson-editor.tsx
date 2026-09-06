@@ -44,6 +44,7 @@ type LessonWithResources = {
   transcriptSource: string | null;
   transcriptUpdatedAt: string | null;
   transcriptChapters: LessonChapter[] | null;
+  transcriptChaptersGeneratedAt: string | null;
   content: string | null;
   status: string;
   durationMinutes: number | null;
@@ -546,6 +547,21 @@ export default function AdminLessonEditorPage() {
     onError: (e: Error) => toast({ title: "Couldn’t create chapters", description: e.message, variant: "destructive" }),
   });
 
+  const updateTranscriptChapters = useMutation({
+    mutationFn: (titles: string[]) =>
+      apiFetch(`/api/admin/lessons/${lessonId}/transcript-chapters`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ titles }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/lessons", lessonId] });
+      toast({ title: "Chapter titles saved" });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Couldn’t save chapter titles", description: e.message, variant: "destructive" }),
+  });
+
   const deleteTranscript = useMutation({
     mutationFn: () =>
       apiFetch(`/api/admin/lessons/${lessonId}/transcript`, {
@@ -860,6 +876,9 @@ export default function AdminLessonEditorPage() {
                 updatedAt={lesson.transcriptUpdatedAt}
                 source={lesson.transcriptSource}
                 transcriptText={lesson.transcriptText}
+                chapters={lesson.transcriptChapters}
+                chaptersGeneratedAt={lesson.transcriptChaptersGeneratedAt}
+                onSaveChapterTitles={(titles) => updateTranscriptChapters.mutateAsync(titles).then(() => undefined)}
               />
               {showTranscriptTracks && (
                 <div className="border-t pt-3">
