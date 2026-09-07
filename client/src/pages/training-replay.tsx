@@ -353,9 +353,7 @@ export default function TrainingReplayPage() {
               </time>
             </div>
 
-            {comment.deletedAt ? (
-              <p className="mt-2 text-sm italic text-slate-400">This comment was deleted.</p>
-            ) : isEditing ? (
+            {isEditing ? (
               <div className="mt-3">
                 <Textarea
                   value={editBody}
@@ -417,7 +415,7 @@ export default function TrainingReplayPage() {
               </>
             )}
 
-            {isConfirmingDelete && !comment.deletedAt && (
+            {isConfirmingDelete && (
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-100 bg-red-50 px-3 py-2.5">
                 <span className="text-xs font-semibold text-red-800">
                   {children.length > 0
@@ -442,7 +440,7 @@ export default function TrainingReplayPage() {
               </div>
             )}
 
-            {isReplying && !isEditing && !comment.deletedAt && (
+            {isReplying && !isEditing && (
               <div className="mt-4 rounded-xl border border-violet-100 bg-violet-50/50 p-3">
                 <Textarea
                   value={replyBody}

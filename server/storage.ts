@@ -6731,7 +6731,10 @@ export class DatabaseStorage implements IStorage {
       })
       .from(trainingReplayComments)
       .leftJoin(users, eq(users.id, trainingReplayComments.userId))
-      .where(eq(trainingReplayComments.replayId, replayId))
+      .where(and(
+        eq(trainingReplayComments.replayId, replayId),
+        isNull(trainingReplayComments.deletedAt),
+      ))
       .orderBy(asc(trainingReplayComments.createdAt));
 
     return rows.map((row) => ({
