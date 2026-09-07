@@ -668,6 +668,7 @@ export default function AdminLessonEditorPage() {
   };
 
   const selectVimeoVideo = (video: VimeoPickerVideo) => {
+    handleChange("title", video.name);
     handleChange("videoUrl", video.url);
     setVimeoPickerOpen(false);
     toast({ title: "Vimeo video selected", description: video.name });

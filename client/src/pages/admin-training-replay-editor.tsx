@@ -1224,6 +1224,7 @@ export default function AdminTrainingReplayEditorPage() {
                       type="button"
                       className="flex w-full items-center gap-3 rounded-md border p-2 text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring"
                       onClick={() => {
+                        change("title", video.name);
                         change("videoUrl", video.url);
                         change("thumbnailUrl", video.thumbnailUrl || null);
                         if (video.durationMinutes) change("durationMinutes", video.durationMinutes);
