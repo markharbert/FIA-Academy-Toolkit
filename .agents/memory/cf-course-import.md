@@ -67,3 +67,11 @@ Recovered ClickFunnels data must populate the editable Vault replay record, not 
 **Why:** ClickFunnels often uses one generic site meta description across lessons, while replay-specific text may exist in the lesson body or Vimeo metadata.
 
 **How to apply:** Persist video URL, body content, description, thumbnail, and resources; prefer specific page metadata, then visible intro text, then Vimeo metadata, and never overwrite admin edits.
+
+## Authenticated page request identity
+
+Direct ClickFunnels lesson-page fetches must send the authenticated browser's cookie, User-Agent, and course-page Referer together.
+
+**Why:** Sending only the valid SSO cookie makes the ClickFunnels Cloudflare worker return HTTP 500, which looks like an unavailable lesson and produces an empty import.
+
+**How to apply:** Capture all three values during the SSO browser handoff and preserve them on every concurrent protected-page request.

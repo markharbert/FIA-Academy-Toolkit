@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { extractCfLessonContent, extractVideoUrl, extractVimeoUrl } from "./cf-import-client";
+import {
+  authenticatedLessonPageHeaders,
+  extractCfLessonContent,
+  extractVideoUrl,
+  extractVimeoUrl,
+} from "./cf-import-client";
 
 test("extracts a Vimeo player URL and preserves its private-video token", () => {
   assert.equal(
@@ -81,5 +86,21 @@ test("recognizes Wistia and direct HTML5 video URLs", () => {
   assert.equal(
     extractVideoUrl('<video src="https://cdn.example.com/replay.mp4"></video>'),
     "https://cdn.example.com/replay.mp4",
+  );
+});
+
+test("authenticated lesson requests retain the browser identity ClickFunnels requires", () => {
+  assert.deepEqual(
+    authenticatedLessonPageHeaders({
+      cookie: "session=authenticated",
+      userAgent: "Browser User Agent",
+      referer: "https://courses.example.com/courses/example",
+    }),
+    {
+      Cookie: "session=authenticated",
+      "User-Agent": "Browser User Agent",
+      Referer: "https://courses.example.com/courses/example",
+      Accept: "text/html,application/xhtml+xml",
+    },
   );
 });

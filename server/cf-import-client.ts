@@ -260,8 +260,8 @@ export function extractCfLessonContent(
   // navigation and the lesson sidebar are not imported as replay content.
   const mediaRoot = mediaElement?.closest(".containerInnerV2, .containerInner");
   const root = explicitRoot ?? mediaRoot ?? document.body;
-  const visibleDescription = [...root.querySelectorAll("p")]
-    .map((paragraph) => cleanText(paragraph.textContent))
+  const visibleDescription = [...root.querySelectorAll("p, li")]
+    .map((element) => cleanText(element.textContent))
     .find((text) =>
       text.length >= 30
       && !/click here to|download|fearless marketing lab is your go-to hub/i.test(text),
@@ -343,7 +343,7 @@ async function fetchCfLessonPage(
   coursePath: string | null,
   sectionPath: string | null,
   currentPath: string,
-  sessionCookie?: string,
+  session?: CfRecoverySession,
 ): Promise<{ html: string; url: string } | null> {
   if (!CF_SSO_DOMAIN) return null;
   let origin: URL;
@@ -359,10 +359,9 @@ async function fetchCfLessonPage(
   try {
     for (let redirect = 0; redirect < 3; redirect++) {
       const response: Response = await fetch(url.toString(), {
-        headers: {
-          ...(sessionCookie ? { Cookie: sessionCookie } : authHeaders()),
-          Accept: "text/html,application/xhtml+xml",
-        },
+        headers: session
+          ? authenticatedLessonPageHeaders(session)
+          : { ...authHeaders(), Accept: "text/html,application/xhtml+xml" },
         redirect: "manual",
         signal: AbortSignal.timeout(15_000),
       });
@@ -394,10 +393,25 @@ function isUnavailableLessonHtml(html: string): boolean {
     || body.includes("you don't have access to this course");
 }
 
+type CfRecoverySession = {
+  cookie: string;
+  userAgent: string;
+  referer: string;
+};
+
+export function authenticatedLessonPageHeaders(session: CfRecoverySession): Record<string, string> {
+  return {
+    Cookie: session.cookie,
+    "User-Agent": session.userAgent,
+    Referer: session.referer,
+    Accept: "text/html,application/xhtml+xml",
+  };
+}
+
 async function createAuthenticatedRecoverySession(
   email: string,
   coursePath: string | null,
-): Promise<string | null> {
+): Promise<CfRecoverySession | null> {
   if (!email || !coursePath || !CF_SSO_DOMAIN) return null;
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
   try {
@@ -424,7 +438,11 @@ async function createAuthenticatedRecoverySession(
       .map((cookie) => `${cookie.name}=${cookie.value}`)
       .join("; ");
     if (!sessionCookie) throw new Error("ClickFunnels did not create an authenticated session");
-    return sessionCookie;
+    return {
+      cookie: sessionCookie,
+      userAgent: await page.evaluate(() => navigator.userAgent),
+      referer: courseUrl,
+    };
   } catch (error) {
     console.warn("[CF Import] Authenticated browser recovery unavailable:", error instanceof Error ? error.message : error);
     return null;
@@ -437,15 +455,15 @@ async function recoverLessonContent(
   coursePath: string | null,
   sectionPath: string | null,
   lesson: CfLesson,
-  sessionCookie?: string,
+  session?: CfRecoverySession,
 ): Promise<void> {
   let recovered = extractCfLessonContent(lesson.body);
-  if (lesson.current_path && sessionCookie) {
+  if (lesson.current_path && session) {
     const page = await fetchCfLessonPage(
       coursePath,
       sectionPath,
       lesson.current_path,
-      sessionCookie,
+      session,
     );
     if (page) {
       if (!isUnavailableLessonHtml(page.html)) {
@@ -643,14 +661,14 @@ export async function getCfCourseStructure(
   if (recoveryTotal > 0) {
     onProgress(`Opening an authenticated recovery session for ${recoveryTotal} selected lessons...`);
   }
-  const sessionCookie = recoveryEmail && recoveryTotal > 0
+  const recoverySession = recoveryEmail && recoveryTotal > 0
     ? await createAuthenticatedRecoverySession(recoveryEmail, coursePath)
     : null;
-  if (recoveryTotal > 0 && !sessionCookie) {
+  if (recoveryTotal > 0 && !recoverySession) {
     onProgress("Authenticated recovery unavailable; using API content only...");
   }
 
-  const recoveryWorkerCount = sessionCookie
+  const recoveryWorkerCount = recoverySession
     ? Math.min(24, recoveryTotal || 1)
     : Math.min(12, recoveryTotal || 1);
   const recoveryWorkers = Array.from({ length: recoveryWorkerCount }, async () => {
@@ -661,7 +679,7 @@ export async function getCfCourseStructure(
         coursePath,
         sectionRoutePath(item.section, sections),
         item.lesson,
-        sessionCookie ?? undefined,
+        recoverySession ?? undefined,
       );
       if (item.lesson.videoUrl) videosFound++;
       if (item.lesson.recoveryStatus === "recovered") contentRecovered++;
