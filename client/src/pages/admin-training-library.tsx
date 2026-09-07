@@ -1,15 +1,18 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Check, ChevronDown, ChevronUp, Eye, EyeOff, Library, Pencil, Plus, Search, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Eye, EyeOff, FolderCog, Library, Pencil, Plus, Search, SlidersHorizontal, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 
 type Replay = { id: string; title: string; description?: string | null; category?: string | null; status: "draft" | "published"; durationMinutes?: number | null; tags?: string[] | null; sortOrder?: number };
+type ReplayCategory = { id: string; name: string; replayCount: number };
 async function api(url: string, init?: RequestInit) {
   const res = await fetch(url, { credentials: "include", ...init });
   if (!res.ok) { const error = await res.json().catch(() => ({})); throw new Error(error.message || res.statusText); }
@@ -26,8 +29,17 @@ export default function AdminTrainingLibraryPage() {
   const [remove, setRemove] = useState<Replay | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Replay | null>(null);
   const [deleteText, setDeleteText] = useState("");
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [editingCategory, setEditingCategory] = useState<ReplayCategory | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState("");
+  const [categoryToDelete, setCategoryToDelete] = useState<ReplayCategory | null>(null);
   const { data: allReplays = [], isLoading, isError, refetch } = useQuery<Replay[]>({ queryKey: ["/api/admin/training-replays"], queryFn: () => api("/api/admin/training-replays") });
-  const categories = useMemo(() => [...new Set(allReplays.map((replay) => replay.category?.trim()).filter(Boolean) as string[])].sort(), [allReplays]);
+  const { data: categoryRecords = [], isLoading: categoriesLoading } = useQuery<ReplayCategory[]>({
+    queryKey: ["/api/admin/training-replay-categories"],
+    queryFn: () => api("/api/admin/training-replay-categories"),
+  });
+  const categories = useMemo(() => categoryRecords.map((item) => item.name), [categoryRecords]);
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
     return allReplays.filter((replay) => (status === "all" || replay.status === status)
@@ -35,7 +47,10 @@ export default function AdminTrainingLibraryPage() {
       && (!term || [replay.title, replay.description, replay.category, ...(replay.tags || [])].filter(Boolean).join(" ").toLowerCase().includes(term)));
   }, [allReplays, category, search, status]);
   const canReorder = status === "all" && category === "all" && !search.trim();
-  const refresh = () => qc.invalidateQueries({ queryKey: ["/api/admin/training-replays"] });
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: ["/api/admin/training-replays"] });
+    void qc.invalidateQueries({ queryKey: ["/api/admin/training-replay-categories"] });
+  };
   const create = useMutation({ mutationFn: () => api("/api/admin/training-replays", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Untitled replay", status: "draft" }) }), onSuccess: (replay) => setLocation(`/admin/training-library/${replay.id}`), onError: (error: Error) => toast({ title: "Couldn’t create replay", description: error.message, variant: "destructive" }) });
   const update = useMutation({ mutationFn: ({ id, body }: { id: string; body: object }) => api(`/api/admin/training-replays/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }), onSuccess: refresh, onError: (error: Error) => toast({ title: "Update failed", description: error.message, variant: "destructive" }) });
   const reorder = useMutation({
@@ -54,13 +69,61 @@ export default function AdminTrainingLibraryPage() {
     },
     onError: (error: Error) => toast({ title: "Delete failed", description: error.message, variant: "destructive" }),
   });
+  const createCategory = useMutation({
+    mutationFn: (name: string) => api("/api/admin/training-replay-categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    }),
+    onSuccess: () => {
+      setNewCategoryName("");
+      refresh();
+      toast({ title: "Category added", description: "It is now available for every new and existing replay." });
+    },
+    onError: (error: Error) => toast({ title: "Couldn’t add category", description: error.message, variant: "destructive" }),
+  });
+  const renameCategory = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => api(`/api/admin/training-replay-categories/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    }),
+    onSuccess: () => {
+      setEditingCategory(null);
+      setEditingCategoryName("");
+      refresh();
+      toast({ title: "Category renamed", description: "Replays using it were updated automatically." });
+    },
+    onError: (error: Error) => toast({ title: "Couldn’t rename category", description: error.message, variant: "destructive" }),
+  });
+  const deleteCategory = useMutation({
+    mutationFn: (id: string) => api(`/api/admin/training-replay-categories/${id}`, { method: "DELETE" }),
+    onSuccess: (result: { replaysUncategorized: number }) => {
+      if (category === categoryToDelete?.name) setCategory("all");
+      setCategoryToDelete(null);
+      refresh();
+      toast({
+        title: "Category deleted",
+        description: result.replaysUncategorized
+          ? `${result.replaysUncategorized} replay${result.replaysUncategorized === 1 ? " is" : "s are"} now uncategorized.`
+          : "No replays were changed.",
+      });
+    },
+    onError: (error: Error) => toast({ title: "Couldn’t delete category", description: error.message, variant: "destructive" }),
+  });
   const published = allReplays.filter((replay) => replay.status === "published").length;
 
   return <main className="min-h-[calc(100dvh-3rem)] bg-[radial-gradient(circle_at_18%_0%,hsl(254_74%_94%),transparent_28rem)] px-4 py-6 sm:px-8">
     <div className="mx-auto max-w-6xl">
       <header className="mb-6 flex flex-col gap-5 border-b border-violet-100 pb-6 sm:flex-row sm:items-end sm:justify-between">
         <div><div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-violet-700"><Library className="h-4 w-4" /> Academy vault</div><h1 className="text-3xl font-extrabold tracking-tight text-slate-950">Vault Manager</h1><p className="mt-1 text-sm text-slate-600">Create, organize, and publish your replay catalog.</p></div>
-        <Button onClick={() => create.mutate()} disabled={create.isPending} className="shadow-sm"><Plus className="mr-2 h-4 w-4" />New replay</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setCategoriesOpen(true)} className="border-violet-200 bg-white/80 shadow-sm">
+            <FolderCog className="mr-2 h-4 w-4 text-violet-600" />
+            Manage categories
+          </Button>
+          <Button onClick={() => create.mutate()} disabled={create.isPending} className="shadow-sm"><Plus className="mr-2 h-4 w-4" />New replay</Button>
+        </div>
       </header>
       <section className="mb-5 grid gap-3 sm:grid-cols-3">
         {[["Total replays", allReplays.length, "Catalog records"], ["Published", published, "Visible to members"], ["Drafts", allReplays.length - published, "Still in preparation"]].map(([label, count, detail]) => <div key={label as string} className="rounded-xl border border-violet-100 bg-white/80 px-4 py-3 shadow-sm"><p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</p><div className="mt-1 flex items-baseline gap-2"><strong className="text-2xl text-slate-950">{count}</strong><span className="text-xs text-slate-500">{detail}</span></div></div>)}
@@ -80,6 +143,136 @@ export default function AdminTrainingLibraryPage() {
           <div className="flex shrink-0 items-start gap-0.5"><Button variant="ghost" size="icon" aria-label={`Edit ${replay.title}`} onClick={() => setLocation(`/admin/training-library/${replay.id}`)}><Pencil className="h-4 w-4" /></Button><Button variant="ghost" size="icon" aria-label={replay.status === "published" ? "Unpublish replay" : "Publish replay"} onClick={() => update.mutate({ id: replay.id, body: { status: replay.status === "published" ? "draft" : "published" } })}>{replay.status === "published" ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</Button><Button variant="ghost" size="icon" className="text-destructive" aria-label={`Delete ${replay.title}`} onClick={() => setRemove(replay)}><Trash2 className="h-4 w-4" /></Button></div>
         </article>)}</div>}
     </div>
+    <Dialog open={categoriesOpen} onOpenChange={setCategoriesOpen}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <span className="rounded-lg bg-violet-100 p-2 text-violet-700"><FolderCog className="h-4 w-4" /></span>
+            Manage Vault categories
+          </DialogTitle>
+          <DialogDescription>
+            Categories stay available for future replays, even when no replay currently uses them.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="rounded-xl border border-violet-100 bg-violet-50/60 p-3">
+          <Label htmlFor="new-vault-category" className="text-xs font-bold uppercase tracking-wider text-violet-900">
+            Add a category
+          </Label>
+          <div className="mt-2 flex gap-2">
+            <Input
+              id="new-vault-category"
+              value={newCategoryName}
+              onChange={(event) => setNewCategoryName(event.target.value)}
+              placeholder="Category name"
+              maxLength={200}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && newCategoryName.trim() && !createCategory.isPending) {
+                  createCategory.mutate(newCategoryName.trim());
+                }
+              }}
+            />
+            <Button
+              disabled={!newCategoryName.trim() || createCategory.isPending}
+              onClick={() => createCategory.mutate(newCategoryName.trim())}
+            >
+              <Plus className="mr-1.5 h-4 w-4" />
+              Add
+            </Button>
+          </div>
+        </div>
+        <div className="max-h-[22rem] space-y-2 overflow-y-auto pr-1">
+          {categoriesLoading ? (
+            <div className="space-y-2">{[1, 2, 3].map((item) => <div key={item} className="h-14 animate-pulse rounded-lg bg-muted" />)}</div>
+          ) : categoryRecords.length === 0 ? (
+            <div className="rounded-xl border border-dashed p-8 text-center">
+              <FolderCog className="mx-auto h-7 w-7 text-violet-300" />
+              <p className="mt-2 text-sm font-medium">No categories yet</p>
+              <p className="text-xs text-muted-foreground">Add one above or import a categorized replay.</p>
+            </div>
+          ) : categoryRecords.map((item) => (
+            <div key={item.id} className="flex items-center gap-3 rounded-xl border bg-white p-3 shadow-sm">
+              {editingCategory?.id === item.id ? (
+                <>
+                  <Input
+                    autoFocus
+                    value={editingCategoryName}
+                    onChange={(event) => setEditingCategoryName(event.target.value)}
+                    maxLength={200}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && editingCategoryName.trim() && !renameCategory.isPending) {
+                        renameCategory.mutate({ id: item.id, name: editingCategoryName.trim() });
+                      }
+                      if (event.key === "Escape") setEditingCategory(null);
+                    }}
+                  />
+                  <Button
+                    size="sm"
+                    disabled={!editingCategoryName.trim() || renameCategory.isPending}
+                    onClick={() => renameCategory.mutate({ id: item.id, name: editingCategoryName.trim() })}
+                  >
+                    Save
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditingCategory(null)}>Cancel</Button>
+                </>
+              ) : (
+                <>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-slate-900">{item.name}</p>
+                    <p className="text-xs text-slate-500">{item.replayCount} replay{item.replayCount === 1 ? "" : "s"}</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Rename ${item.name}`}
+                    onClick={() => {
+                      setEditingCategory(item);
+                      setEditingCategoryName(item.name);
+                    }}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-destructive hover:text-destructive"
+                    aria-label={`Delete ${item.name}`}
+                    onClick={() => setCategoryToDelete(item)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+    <AlertDialog open={!!categoryToDelete} onOpenChange={(open) => !open && setCategoryToDelete(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete “{categoryToDelete?.name}”?</AlertDialogTitle>
+          <AlertDialogDescription>
+            The category will disappear from future replay choices.
+            {categoryToDelete?.replayCount
+              ? ` ${categoryToDelete.replayCount} replay${categoryToDelete.replayCount === 1 ? "" : "s"} will become uncategorized, but no replay will be deleted.`
+              : " No replays will be deleted."}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={deleteCategory.isPending}>Keep category</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive"
+            disabled={deleteCategory.isPending}
+            onClick={(event) => {
+              event.preventDefault();
+              if (categoryToDelete && !deleteCategory.isPending) deleteCategory.mutate(categoryToDelete.id);
+            }}
+          >
+            {deleteCategory.isPending ? "Deleting…" : "Delete category"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
     <AlertDialog open={!!remove} onOpenChange={(open) => !open && setRemove(null)}>
       <AlertDialogContent>
         <AlertDialogHeader>

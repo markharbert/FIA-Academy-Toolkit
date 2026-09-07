@@ -22,6 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 
 type Resource = { id: string; name: string; url: string; subtitle: string | null; kind: "link" | "pdf" };
 type ReplayChapter = { startSeconds: number; title: string };
+type ReplayCategory = { id: string; name: string; replayCount: number };
 type Replay = { id: string; title: string; description: string | null; category: string | null; tags: string[]; durationMinutes: number | null; videoUrl: string | null; content: string | null; status: "draft" | "published"; resources: Resource[]; transcriptText: string | null; transcriptLanguage: string | null; transcriptSource: string | null; transcriptUpdatedAt: string | null; transcriptChapters: ReplayChapter[] | null; transcriptChaptersGeneratedAt: string | null; transcriptProcessingStatus: "idle" | "queued" | "processing" | "complete" | "failed"; transcriptProcessingError: string | null; vimeoChaptersSynced?: boolean; vimeoChapterCount?: number; vimeoChapterSyncMessage?: string };
 type VimeoFolder = { id: string; name: string; parentId?: string; path: string[] };
 type VimeoVideo = { id: string; name: string; url: string; thumbnailUrl?: string; durationMinutes?: number };
@@ -178,16 +179,16 @@ export default function AdminTrainingReplayEditorPage() {
       return status === "queued" || status === "processing" ? 4_000 : false;
     },
   });
-  const catalogQuery = useQuery<Replay[]>({
-    queryKey: ["/api/admin/training-replays"],
-    queryFn: () => api("/api/admin/training-replays"),
+  const categoriesQuery = useQuery<ReplayCategory[]>({
+    queryKey: ["/api/admin/training-replay-categories"],
+    queryFn: () => api("/api/admin/training-replay-categories"),
   });
   const categories = useMemo(
     () => [...new Set([
-      ...(catalogQuery.data || []).map((item) => item.category?.trim()).filter(Boolean) as string[],
+      ...(categoriesQuery.data || []).map((item) => item.name),
       form?.category?.trim(),
     ].filter(Boolean) as string[])].sort(),
-    [catalogQuery.data, form?.category],
+    [categoriesQuery.data, form?.category],
   );
   const {
     data: cfDownloadsData,
@@ -254,6 +255,7 @@ export default function AdminTrainingReplayEditorPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/training-replays"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/training-replay-categories"] });
     },
     onError: (error: Error) => toast({ title: "Save failed", description: error.message, variant: "destructive" }),
   });

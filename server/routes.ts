@@ -14649,6 +14649,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }, "URL must use http or https");
   const replayTagsSchema = z.array(z.string().trim().min(1).max(100)).max(30)
     .transform((tags) => [...new Set(tags.map((tag) => tag.trim()))]);
+  const replayCategoryNameSchema = z.string().trim().min(1, "Category name is required").max(200);
   const replayCreateSchema = z.object({
     title: replayTitleSchema,
     description: z.string().trim().max(10_000).nullable().optional(),
@@ -14686,6 +14687,52 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   function replayValidationError(res: Response, error: z.ZodError) {
     return res.status(400).json({ message: error.issues[0]?.message || "Invalid replay data" });
   }
+
+  app.get("/api/admin/training-replay-categories", requireAdmin, async (_req, res) => {
+    try {
+      res.json(await storage.getTrainingReplayCategories());
+    } catch (error) {
+      console.error("[training-replay-categories] list error:", error);
+      res.status(500).json({ message: "Failed to load replay categories" });
+    }
+  });
+
+  app.post("/api/admin/training-replay-categories", requireAdmin, async (req, res) => {
+    const parsed = z.object({ name: replayCategoryNameSchema }).strict().safeParse(req.body);
+    if (!parsed.success) return replayValidationError(res, parsed.error);
+    try {
+      res.status(201).json(await storage.createTrainingReplayCategory(parsed.data.name));
+    } catch (error) {
+      console.error("[training-replay-categories] create error:", error);
+      res.status(409).json({ message: "A category with that name already exists." });
+    }
+  });
+
+  app.put("/api/admin/training-replay-categories/:id", requireAdmin, async (req, res) => {
+    const parsed = z.object({ name: replayCategoryNameSchema }).strict().safeParse(req.body);
+    if (!parsed.success) return replayValidationError(res, parsed.error);
+    try {
+      const category = await storage.updateTrainingReplayCategory(req.params.id, parsed.data.name);
+      if (!category) return res.status(404).json({ message: "Category not found" });
+      res.json(category);
+    } catch (error) {
+      console.error("[training-replay-categories] update error:", error);
+      res.status(409).json({
+        message: error instanceof Error ? error.message : "Could not rename category.",
+      });
+    }
+  });
+
+  app.delete("/api/admin/training-replay-categories/:id", requireAdmin, async (req, res) => {
+    try {
+      const result = await storage.deleteTrainingReplayCategory(req.params.id);
+      if (!result.deleted) return res.status(404).json({ message: "Category not found" });
+      res.json(result);
+    } catch (error) {
+      console.error("[training-replay-categories] delete error:", error);
+      res.status(500).json({ message: "Failed to delete category" });
+    }
+  });
 
   app.get("/api/admin/training-replays", requireAdmin, async (req, res) => {
     const parsed = z.object({ status: replayStatusSchema.optional() }).safeParse(req.query);

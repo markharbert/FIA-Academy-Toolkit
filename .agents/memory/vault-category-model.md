@@ -3,8 +3,8 @@ name: Vault category model
 description: Product and ordering rules for categories in the replay Vault.
 ---
 
-Replay categories are custom, admin-created labels stored directly on replays and derived from the replay catalog. Do not replace them with a fixed framework or a separate category entity unless the product requirements change.
+Replay categories are custom, admin-created labels backed by a persistent category registry. Keep the replay's category label for compatibility, but use the registry as the source of choices in admin interfaces. Creating or importing a categorized replay must register the category automatically. Renaming a category updates every replay using it; deleting one uncategorizes those replays without deleting them.
 
-**Why:** The Vault needs flexible organization that admins can extend while editing a replay, without category-management overhead.
+**Why:** Categories must remain available when no replay currently uses them, and admins need one safe place to create, rename, and remove the available choices.
 
-**How to apply:** Reuse derived categories as filters in both Vault Manager and the browsing Vault. Only permit ordering against the complete, unfiltered catalog so a partial result set cannot overwrite global replay order.
+**How to apply:** Use persistent categories for Vault Manager filters and replay editor choices. Continue deriving member-facing facets from published replay data so empty categories are not shown to members. Only permit ordering against the complete, unfiltered catalog.

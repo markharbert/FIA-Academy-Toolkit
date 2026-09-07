@@ -2290,6 +2290,14 @@ export const insertCourseResourceSchema = createInsertSchema(courseResources).om
 // ── Training Library replays ─────────────────────────────────────────────────
 // These are deliberately independent from courses: a replay can be curated and
 // published without belonging to the course/module/lesson hierarchy.
+export const trainingReplayCategories = pgTable("training_replay_categories", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 200 }).notNull().unique(),
+  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+export type TrainingReplayCategory = typeof trainingReplayCategories.$inferSelect;
+
 export const trainingReplays = pgTable("training_replays", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),

@@ -60,7 +60,8 @@ import {
   type Course, type InsertCourse, type CourseModule, type InsertCourseModule,
   type CourseLesson, type InsertCourseLesson, type CourseResource, type InsertCourseResource,
   type CourseProgress,
-  trainingReplays, trainingReplayResources, trainingReplayProgress, trainingReplayComments,
+  trainingReplayCategories, trainingReplays, trainingReplayResources, trainingReplayProgress, trainingReplayComments,
+  type TrainingReplayCategory,
   type TrainingReplay, type InsertTrainingReplay,
   type TrainingReplayResource, type InsertTrainingReplayResource,
   type TrainingReplayProgress, type TrainingReplayComment,
@@ -854,6 +855,11 @@ export interface IStorage {
   getUserCourseProgress(userId: string, courseId: string): Promise<CourseProgress[]>;
 
   // Training Library replays (standalone from courses)
+  getTrainingReplayCategories(): Promise<Array<TrainingReplayCategory & { replayCount: number }>>;
+  createTrainingReplayCategory(name: string): Promise<TrainingReplayCategory>;
+  updateTrainingReplayCategory(id: string, name: string): Promise<TrainingReplayCategory | undefined>;
+  deleteTrainingReplayCategory(id: string): Promise<{ deleted: boolean; replaysUncategorized: number }>;
+  ensureTrainingReplayCategory(name: string): Promise<void>;
   getTrainingReplays(): Promise<TrainingReplay[]>;
   getTrainingReplay(id: string): Promise<TrainingReplay | undefined>;
   getTrainingReplayBySlug(slug: string): Promise<TrainingReplay | undefined>;
@@ -6493,6 +6499,76 @@ export class DatabaseStorage implements IStorage {
 
   // ── Training Library replays ───────────────────────────────────────────────
 
+  async getTrainingReplayCategories(): Promise<Array<TrainingReplayCategory & { replayCount: number }>> {
+    const rows = await db
+      .select({
+        category: trainingReplayCategories,
+        replayCount: sql<number>`COUNT(${trainingReplays.id})::int`,
+      })
+      .from(trainingReplayCategories)
+      .leftJoin(
+        trainingReplays,
+        sql`LOWER(${trainingReplays.category}) = LOWER(${trainingReplayCategories.name})`,
+      )
+      .groupBy(trainingReplayCategories.id)
+      .orderBy(trainingReplayCategories.name);
+    return rows.map((row) => ({ ...row.category, replayCount: row.replayCount }));
+  }
+
+  async ensureTrainingReplayCategory(name: string): Promise<void> {
+    const normalized = name.trim();
+    if (!normalized) return;
+    await db.insert(trainingReplayCategories)
+      .values({ name: normalized })
+      .onConflictDoNothing();
+  }
+
+  async createTrainingReplayCategory(name: string): Promise<TrainingReplayCategory> {
+    const normalized = name.trim();
+    const [existing] = await db.select().from(trainingReplayCategories)
+      .where(sql`LOWER(${trainingReplayCategories.name}) = LOWER(${normalized})`);
+    if (existing) return existing;
+    const [created] = await db.insert(trainingReplayCategories).values({ name: normalized }).returning();
+    return created;
+  }
+
+  async updateTrainingReplayCategory(id: string, name: string): Promise<TrainingReplayCategory | undefined> {
+    const normalized = name.trim();
+    return db.transaction(async (tx) => {
+      const [current] = await tx.select().from(trainingReplayCategories)
+        .where(eq(trainingReplayCategories.id, id));
+      if (!current) return undefined;
+      const [duplicate] = await tx.select().from(trainingReplayCategories)
+        .where(and(
+          sql`LOWER(${trainingReplayCategories.name}) = LOWER(${normalized})`,
+          sql`${trainingReplayCategories.id} <> ${id}`,
+        ));
+      if (duplicate) throw new Error("A category with that name already exists.");
+      await tx.update(trainingReplays)
+        .set({ category: normalized, updatedAt: new Date() })
+        .where(sql`LOWER(${trainingReplays.category}) = LOWER(${current.name})`);
+      const [updated] = await tx.update(trainingReplayCategories)
+        .set({ name: normalized, updatedAt: new Date() })
+        .where(eq(trainingReplayCategories.id, id))
+        .returning();
+      return updated;
+    });
+  }
+
+  async deleteTrainingReplayCategory(id: string): Promise<{ deleted: boolean; replaysUncategorized: number }> {
+    return db.transaction(async (tx) => {
+      const [current] = await tx.select().from(trainingReplayCategories)
+        .where(eq(trainingReplayCategories.id, id));
+      if (!current) return { deleted: false, replaysUncategorized: 0 };
+      const uncategorized = await tx.update(trainingReplays)
+        .set({ category: null, updatedAt: new Date() })
+        .where(sql`LOWER(${trainingReplays.category}) = LOWER(${current.name})`)
+        .returning({ id: trainingReplays.id });
+      await tx.delete(trainingReplayCategories).where(eq(trainingReplayCategories.id, id));
+      return { deleted: true, replaysUncategorized: uncategorized.length };
+    });
+  }
+
   async getTrainingReplays(): Promise<TrainingReplay[]> {
     return db.select().from(trainingReplays).orderBy(trainingReplays.sortOrder, trainingReplays.createdAt);
   }
@@ -6508,11 +6584,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTrainingReplay(replay: InsertTrainingReplay): Promise<TrainingReplay> {
+    if (replay.category) await this.ensureTrainingReplayCategory(replay.category);
     const [row] = await db.insert(trainingReplays).values(replay).returning();
     return row;
   }
 
   async updateTrainingReplay(id: string, updates: Partial<TrainingReplay>): Promise<TrainingReplay | undefined> {
+    if (updates.category) await this.ensureTrainingReplayCategory(updates.category);
     const [row] = await db.update(trainingReplays).set({ ...updates, updatedAt: new Date() }).where(eq(trainingReplays.id, id)).returning();
     return row || undefined;
   }
@@ -6536,6 +6614,12 @@ export class DatabaseStorage implements IStorage {
     }
 
     return db.transaction(async (tx) => {
+      const categoryNames = [...new Set(rows.map((row) => row.category?.trim()).filter((name): name is string => !!name))];
+      if (categoryNames.length) {
+        await tx.insert(trainingReplayCategories)
+          .values(categoryNames.map((name) => ({ name })))
+          .onConflictDoNothing();
+      }
       const externalIds = rows.map((row) => row.externalId);
       const existing = await tx
         .select()
@@ -7140,6 +7224,25 @@ export async function runMigrations(): Promise<void> {
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS training_replay_categories (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(200) NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS training_replay_categories_name_lower_unique
+      ON training_replay_categories(LOWER(name))
+    `);
+    await pool.query(`
+      INSERT INTO training_replay_categories (name)
+      SELECT DISTINCT ON (LOWER(TRIM(category))) TRIM(category)
+      FROM training_replays
+      WHERE category IS NOT NULL AND TRIM(category) <> ''
+      ON CONFLICT DO NOTHING
     `);
     await pool.query(`ALTER TABLE training_replays ADD COLUMN IF NOT EXISTS transcript_chapters_generated_at TIMESTAMP`);
     await pool.query(`ALTER TABLE training_replays ADD COLUMN IF NOT EXISTS transcript_processing_status VARCHAR(20) NOT NULL DEFAULT 'idle'`);
