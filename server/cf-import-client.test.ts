@@ -48,6 +48,7 @@ test("extracts lesson content, resources, images, and a YouTube embed", () => {
     kind: "pdf",
   }]);
   assert.match(recovered.content ?? "", /Replay notes/);
+  assert.doesNotMatch(recovered.content ?? "", /Download workbook|workbook\.pdf/);
   assert.doesNotMatch(recovered.content ?? "", /script|alert/);
   assert.equal(recovered.status, "recovered");
 });

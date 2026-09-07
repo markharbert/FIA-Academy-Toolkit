@@ -292,6 +292,10 @@ export function extractCfLessonContent(
       url: href,
       kind: isLikelyDownload(url, anchor) ? "pdf" : "link",
     });
+    // Resource links belong in the replay's resource list, not duplicated in
+    // the lesson body. Remove the entire anchor so both its URL and visible
+    // link text stay out of imported replay content.
+    anchor.remove();
   });
 
   const allowed = new Set([

@@ -84,6 +84,14 @@ Vault imports use the lesson's immediate containing ClickFunnels module as each 
 
 **How to apply:** When descending the selected tree, replace the inherited category at every real module, pass no category through structural roots, and preserve categories admins already edited.
 
+## Replay resource link cleanup
+
+Links promoted from recovered lesson HTML become replay resources and the full anchor is removed from replay content.
+
+**Why:** Keeping both copies makes the replay body cluttered and exposes the same download or resource twice.
+
+**How to apply:** Extract valid resource anchors first, then remove the entire anchor node—including visible link text—before sanitizing and saving the recovered content; leave non-resource and navigation elements alone.
+
 ## Import-only fresh transcript automation
 
 Vault imports automatically queue fresh Vimeo audio transcription and chapter generation; they do not use existing Vimeo caption tracks for this automatic path.
