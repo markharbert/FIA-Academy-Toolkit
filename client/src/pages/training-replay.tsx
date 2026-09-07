@@ -237,7 +237,13 @@ export default function TrainingReplayPage() {
       <div className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
         <div className="mx-auto w-full max-w-[1100px]">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <Button variant="ghost" className="-ml-4" onClick={() => go("/training/library")}>
+            <Button
+              type="button"
+              size="lg"
+              variant="outline"
+              className="border-slate-200 bg-slate-100 font-bold text-slate-700 shadow-sm hover:bg-slate-200 hover:text-slate-900"
+              onClick={() => go("/training/library")}
+            >
               <ArrowLeft className="mr-2 h-4 w-4" />
               Training Library
             </Button>
