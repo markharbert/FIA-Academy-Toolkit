@@ -6736,6 +6736,7 @@ export class DatabaseStorage implements IStorage {
       id: row.id,
       replayId: row.replayId,
       userId: row.userId,
+      parentCommentId: row.parentCommentId,
       body: row.body,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
