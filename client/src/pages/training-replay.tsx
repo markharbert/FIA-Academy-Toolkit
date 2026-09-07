@@ -328,12 +328,12 @@ export default function TrainingReplayPage() {
     const wasEdited = new Date(comment.updatedAt).getTime() > new Date(comment.createdAt).getTime() + 1000;
 
     return (
-      <div key={comment.id} className={cn(depth > 0 && "ml-4 border-l-2 border-violet-100 pl-4 sm:ml-8")}>
+      <div key={comment.id} className={cn(depth > 0 && "relative ml-4 border-l-2 border-violet-100 pl-5 sm:ml-8")}>
         {depth > 0 && (
-          <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-violet-600">
-            <CornerDownRight className="h-3.5 w-3.5" />
-            Thread reply
-          </div>
+          <CornerDownRight
+            className="absolute -left-[2px] top-5 h-5 w-5 bg-slate-50 pr-0.5 text-violet-400"
+            aria-hidden="true"
+          />
         )}
         <article className={cn(
           "flex gap-3 rounded-2xl border p-4 shadow-sm sm:p-5",
