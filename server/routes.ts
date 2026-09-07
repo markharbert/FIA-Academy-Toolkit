@@ -2419,7 +2419,8 @@ export async function registerRoutes(
       const structure = await getCfCourseStructure(
         cfCourseId,
         (msg) => send({ type: "progress", message: msg }),
-        typeof adminUser?.email === "string" ? adminUser.email : undefined,
+        undefined,
+        new Set<string>(),
       );
       send({ type: "done", structure });
     } catch (err: any) {
@@ -2452,8 +2453,44 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Unsupported import destination." });
       }
 
+      const selectedLessonIds = new Set<string>();
+      const collectSelectedLessonIds = (nodes: CfTreeNode[]) => {
+        for (const node of nodes) {
+          if (node.type === "lesson") selectedLessonIds.add(node.cfId);
+          else collectSelectedLessonIds(node.children);
+        }
+      };
+      collectSelectedLessonIds(filteredTree);
+
+      let importTree = filteredTree;
+      if (selectedLessonIds.size > 0) {
+        const recoveredStructure = await getCfCourseStructure(
+          cfCourseId,
+          () => undefined,
+          typeof adminUser?.email === "string" ? adminUser.email : undefined,
+          selectedLessonIds,
+        );
+        const recoveredLessons = new Map<string, CfTreeNode>();
+        const indexRecoveredLessons = (nodes: CfTreeNode[]) => {
+          for (const node of nodes) {
+            if (node.type === "lesson") recoveredLessons.set(node.cfId, node);
+            else indexRecoveredLessons(node.children);
+          }
+        };
+        indexRecoveredLessons(recoveredStructure.roots);
+        const mergeRecoveredLessons = (nodes: CfTreeNode[]): CfTreeNode[] =>
+          nodes.map((node) => {
+            if (node.type === "lesson") {
+              const recovered = recoveredLessons.get(node.cfId);
+              return recovered ? { ...node, ...recovered, children: [] } : node;
+            }
+            return { ...node, children: mergeRecoveredLessons(node.children) };
+          });
+        importTree = mergeRecoveredLessons(filteredTree);
+      }
+
       if (destination.type === "training-library") {
-        const { rows, errors } = collectTrainingReplayRows(filteredTree);
+        const { rows, errors } = collectTrainingReplayRows(importTree);
         if (errors.length > 0) {
           return res.status(400).json({
             message: "The selected lessons could not be imported. Fix the reported rows and try again.",
@@ -2487,7 +2524,7 @@ export async function registerRoutes(
       }
 
       // Apply promotion: lift single root module's children up one level
-      let importRoots: CfTreeNode[] = filteredTree;
+      let importRoots: CfTreeNode[] = importTree;
       let promotedTitle = "";
       if (promote && filteredTree.length === 1 && filteredTree[0].type === "module") {
         promotedTitle = filteredTree[0].title;

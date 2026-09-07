@@ -51,3 +51,11 @@ Recover recognizable lesson HTML into draft content, common video URLs, thumbnai
 **Why:** ClickFunnels API bearer authentication can read course structure while protected learner URLs need Customer Center SSO. Learner URLs use the SSO domain and the complete nested section chain, excluding the structural root section; combining only the course and lesson slugs returns a branded 404 shell.
 
 **How to apply:** Render protected pages through SSO as the admin starting the scan, reject sign-in/404 pages, derive the full ancestor route, classify recovery honestly, and preserve existing admin-entered fields and resources.
+
+## Import performance rule
+
+Load the course outline from the ClickFunnels API without crawling lesson pages; recover protected page content only for lessons selected at import time.
+
+**Why:** The course has hundreds of server-generated lesson pages, each taking several seconds. Crawling every page before showing the selection screen made a 2–3 second outline load take minutes.
+
+**How to apply:** Keep structure discovery and page recovery as separate phases, reuse one short-lived SSO cookie, and fetch selected pages concurrently without loading page assets.

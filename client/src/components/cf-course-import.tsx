@@ -887,8 +887,7 @@ export function CourseImportCard() {
                   {structure.totalLessons} lessons
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {structure.videosFound} Vimeo video{structure.videosFound !== 1 ? "s" : ""} found ·{" "}
-                  {structure.videosUnavailable} unavailable
+                  Content, videos, and resources will be recovered only for the lessons you select.
                 </p>
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
@@ -1222,7 +1221,7 @@ export function CourseImportCard() {
           <div className="flex items-center gap-2.5 text-sm py-2">
             <Loader2 className="h-4 w-4 animate-spin text-violet-500 flex-shrink-0" />
             <span className="text-muted-foreground">
-              Importing {finalCounts.modules} module
+              Recovering content and importing {finalCounts.modules} module
               {finalCounts.modules !== 1 ? "s" : ""} and{" "}
               {finalCounts.lessons} lesson
               {finalCounts.lessons !== 1 ? "s" : ""}...

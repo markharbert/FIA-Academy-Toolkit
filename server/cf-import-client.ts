@@ -4,7 +4,7 @@
  */
 
 import { JSDOM } from "jsdom";
-import puppeteer, { type Browser, type Page } from "puppeteer-core";
+import puppeteer from "puppeteer-core";
 import {
   CF_WORKSPACE_DOMAIN,
   CF_API_TOKEN,
@@ -323,6 +323,7 @@ async function fetchCfLessonPage(
   coursePath: string | null,
   sectionPath: string | null,
   currentPath: string,
+  sessionCookie?: string,
 ): Promise<{ html: string; url: string } | null> {
   if (!CF_SSO_DOMAIN) return null;
   let origin: URL;
@@ -338,7 +339,10 @@ async function fetchCfLessonPage(
   try {
     for (let redirect = 0; redirect < 3; redirect++) {
       const response: Response = await fetch(url.toString(), {
-        headers: { ...authHeaders(), Accept: "text/html,application/xhtml+xml" },
+        headers: {
+          ...(sessionCookie ? { Cookie: sessionCookie } : authHeaders()),
+          Accept: "text/html,application/xhtml+xml",
+        },
         redirect: "manual",
         signal: AbortSignal.timeout(15_000),
       });
@@ -370,12 +374,12 @@ function isUnavailableLessonHtml(html: string): boolean {
     || body.includes("you don't have access to this course");
 }
 
-async function createAuthenticatedRecoveryBrowser(
+async function createAuthenticatedRecoverySession(
   email: string,
   coursePath: string | null,
-): Promise<Browser | null> {
+): Promise<string | null> {
   if (!email || !coursePath || !CF_SSO_DOMAIN) return null;
-  let browser: Browser | null = null;
+  let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
   try {
     const courseUrl = new URL(coursePath, `https://${CF_SSO_DOMAIN}`).toString();
     const ssoUrl = generateCfSsoUrl(email, courseUrl);
@@ -386,8 +390,8 @@ async function createAuthenticatedRecoveryBrowser(
     });
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 900 });
-    await page.goto(ssoUrl, { waitUntil: "networkidle2", timeout: 30_000 });
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    await page.goto(ssoUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
+    await new Promise((resolve) => setTimeout(resolve, 500));
     const finalUrl = new URL(page.url());
     if (finalUrl.hostname !== CF_SSO_DOMAIN) {
       throw new Error("ClickFunnels SSO redirected outside the configured workspace");
@@ -395,47 +399,17 @@ async function createAuthenticatedRecoveryBrowser(
     if (finalUrl.pathname.startsWith("/contacts/sign_in")) {
       throw new Error("the current admin email is not signed in to the ClickFunnels customer center");
     }
-    await page.close();
-    return browser;
+    const cookies = await page.cookies();
+    const sessionCookie = cookies
+      .map((cookie) => `${cookie.name}=${cookie.value}`)
+      .join("; ");
+    if (!sessionCookie) throw new Error("ClickFunnels did not create an authenticated session");
+    return sessionCookie;
   } catch (error) {
     console.warn("[CF Import] Authenticated browser recovery unavailable:", error instanceof Error ? error.message : error);
+    return null;
+  } finally {
     if (browser) await browser.close().catch(() => undefined);
-    return null;
-  }
-}
-
-async function fetchRenderedLessonPage(
-  page: Page,
-  coursePath: string | null,
-  sectionPath: string | null,
-  currentPath: string,
-): Promise<{ html: string; url: string } | null> {
-  const url = lessonPageUrl(coursePath, sectionPath, currentPath);
-  if (!url) return null;
-  try {
-    const response = await page.goto(url.toString(), {
-      waitUntil: "networkidle2",
-      timeout: 20_000,
-    });
-    if (!response?.ok()) return null;
-    await new Promise((resolve) => setTimeout(resolve, 750));
-    const html = await page.content();
-    if (isUnavailableLessonHtml(html)) return null;
-    return { html, url: page.url() };
-  } catch {
-    return null;
-  }
-}
-
-/** The documented single-lesson endpoint can include body content omitted by list responses. */
-async function fetchCfLessonDetail(lessonId: string): Promise<Record<string, unknown> | null> {
-  try {
-    const raw = await cfGet(`/courses/lessons/${encodeURIComponent(lessonId)}`);
-    const lesson = raw?.data ?? raw;
-    return lesson && typeof lesson === "object" ? lesson : null;
-  } catch {
-    // Some older CF lessons have no body or cannot be fetched individually.
-    return null;
   }
 }
 
@@ -443,18 +417,21 @@ async function recoverLessonContent(
   coursePath: string | null,
   sectionPath: string | null,
   lesson: CfLesson,
-  browserPage?: Page,
+  sessionCookie?: string,
 ): Promise<void> {
-  const detail = await fetchCfLessonDetail(lesson.id);
-  lesson.body = typeof detail?.body === "string" ? detail.body : lesson.body;
   let recovered = extractCfLessonContent(lesson.body);
-  if (lesson.current_path) {
-    const page = browserPage
-      ? await fetchRenderedLessonPage(browserPage, coursePath, sectionPath, lesson.current_path)
-      : await fetchCfLessonPage(coursePath, sectionPath, lesson.current_path);
+  if (lesson.current_path && sessionCookie) {
+    const page = await fetchCfLessonPage(
+      coursePath,
+      sectionPath,
+      lesson.current_path,
+      sessionCookie,
+    );
     if (page) {
-      const pageRecovered = extractCfLessonContent(page.html, page.url);
-      if (pageRecovered.status !== "unavailable") recovered = pageRecovered;
+      if (!isUnavailableLessonHtml(page.html)) {
+        const pageRecovered = extractCfLessonContent(page.html, page.url);
+        if (pageRecovered.status !== "unavailable") recovered = pageRecovered;
+      }
       lesson.sourceUrl = page.url;
     }
   }
@@ -564,6 +541,7 @@ export async function getCfCourseStructure(
   cfCourseId: string,
   onProgress: (msg: string) => void,
   recoveryEmail?: string,
+  selectedLessonIds?: ReadonlySet<string>,
 ): Promise<CfCourseStructure> {
   let coursePath: string | null = null;
   try {
@@ -589,9 +567,11 @@ export async function getCfCourseStructure(
     current_path: typeof s.current_path === "string" ? s.current_path : null,
   }));
 
-  onProgress(`Fetching lessons for ${sections.length} sections...`);
+  onProgress(`Fetching lesson lists for ${sections.length} sections...`);
 
-  // 2. Fetch lessons for each section — max 3 concurrent requests
+  // 2. Fetch lesson lists independently from content recovery. Keeping these
+  // API calls separate prevents one section with hundreds of lessons from
+  // serializing all browser work behind a single worker.
   const lessonMap = new Map<string, CfLesson[]>();
   let fetchedSections = 0;
   let videosChecked = 0;
@@ -600,17 +580,10 @@ export async function getCfCourseStructure(
   let contentPartial = 0;
   let contentUnavailable = 0;
 
-  onProgress("Opening an authenticated ClickFunnels recovery session...");
-  const browser = recoveryEmail
-    ? await createAuthenticatedRecoveryBrowser(recoveryEmail, coursePath)
-    : null;
-  if (!browser) onProgress("Authenticated page recovery unavailable; using API content only...");
-
-  const queue = [...sections];
-  const workers = Array.from({ length: 3 }, async () => {
-    const browserPage = browser ? await browser.newPage() : undefined;
+  const sectionQueue = [...sections];
+  const listWorkers = Array.from({ length: Math.min(8, sections.length || 1) }, async () => {
     while (true) {
-      const section = queue.shift();
+      const section = sectionQueue.shift();
       if (!section) break;
       const raw = await paginateAll<any>(`/courses/sections/${section.id}/lessons`);
       const lessons: CfLesson[] = raw.map(l => ({
@@ -621,37 +594,57 @@ export async function getCfCourseStructure(
         body: typeof l.body === "string" ? l.body : null,
         current_path: typeof l.current_path === "string" ? l.current_path : null,
       }));
-
-      for (const lesson of lessons) {
-        await recoverLessonContent(
-          coursePath,
-          sectionRoutePath(section, sections),
-          lesson,
-          browserPage,
-        );
-        if (lesson.videoUrl) videosFound++;
-        if (lesson.recoveryStatus === "recovered") contentRecovered++;
-        else if (lesson.recoveryStatus === "partial") contentPartial++;
-        else contentUnavailable++;
-        videosChecked++;
-        onProgress(`Recovering lesson content (${videosChecked})...`);
-      }
       lessonMap.set(section.id, lessons);
       fetchedSections++;
-      onProgress(`Fetched lessons for ${fetchedSections} of ${sections.length} sections...`);
+      onProgress(`Fetched lesson lists for ${fetchedSections} of ${sections.length} sections...`);
     }
-    if (browserPage) await browserPage.close().catch(() => undefined);
   });
-  try {
-    await Promise.all(workers);
-  } finally {
-    if (browser) await browser.close().catch(() => undefined);
+  await Promise.all(listWorkers);
+
+  const allLessons = sections.flatMap((section) =>
+    (lessonMap.get(section.id) ?? []).map((lesson) => ({ section, lesson })),
+  );
+  const recoveryQueue = selectedLessonIds
+    ? allLessons.filter(({ lesson }) => selectedLessonIds.has(lesson.id))
+    : allLessons;
+  const totalLessons = allLessons.length;
+  const recoveryTotal = recoveryQueue.length;
+  if (recoveryTotal > 0) {
+    onProgress(`Opening an authenticated recovery session for ${recoveryTotal} selected lessons...`);
+  }
+  const sessionCookie = recoveryEmail && recoveryTotal > 0
+    ? await createAuthenticatedRecoverySession(recoveryEmail, coursePath)
+    : null;
+  if (recoveryTotal > 0 && !sessionCookie) {
+    onProgress("Authenticated recovery unavailable; using API content only...");
   }
 
-  const totalLessons = Array.from(lessonMap.values()).reduce((n, ls) => n + ls.length, 0);
+  const recoveryWorkerCount = sessionCookie
+    ? Math.min(24, recoveryTotal || 1)
+    : Math.min(12, recoveryTotal || 1);
+  const recoveryWorkers = Array.from({ length: recoveryWorkerCount }, async () => {
+    while (true) {
+      const item = recoveryQueue.shift();
+      if (!item) break;
+      await recoverLessonContent(
+        coursePath,
+        sectionRoutePath(item.section, sections),
+        item.lesson,
+        sessionCookie ?? undefined,
+      );
+      if (item.lesson.videoUrl) videosFound++;
+      if (item.lesson.recoveryStatus === "recovered") contentRecovered++;
+      else if (item.lesson.recoveryStatus === "partial") contentPartial++;
+      else contentUnavailable++;
+      videosChecked++;
+      onProgress(`Recovering selected lesson content (${videosChecked} of ${recoveryTotal})...`);
+    }
+  });
+  await Promise.all(recoveryWorkers);
+
   onProgress(`Building tree (${sections.length} sections, ${totalLessons} lessons)...`);
 
-  const roots = buildCfTree(sections, lessonMap);
+  const roots = buildCfTree(sections, lessonMap, coursePath);
 
   return {
     cfCourseId,
@@ -672,6 +665,7 @@ export async function getCfCourseStructure(
 function buildCfTree(
   sections: CfSection[],
   lessonMap: Map<string, CfLesson[]>,
+  coursePath: string | null,
 ): CfTreeNode[] {
   const sectionIds = new Set(sections.map(s => s.id));
 
@@ -694,7 +688,11 @@ function buildCfTree(
         thumbnailUrl: l.thumbnailUrl,
         resources: l.resources,
         recoveryStatus: l.recoveryStatus,
-        sourceUrl: l.sourceUrl,
+        sourceUrl: l.sourceUrl ?? (
+          l.current_path
+            ? lessonPageUrl(coursePath, sectionRoutePath(section, sections), l.current_path)?.toString() ?? null
+            : null
+        ),
         children: [],
       }));
 
