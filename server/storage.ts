@@ -60,10 +60,10 @@ import {
   type Course, type InsertCourse, type CourseModule, type InsertCourseModule,
   type CourseLesson, type InsertCourseLesson, type CourseResource, type InsertCourseResource,
   type CourseProgress,
-  trainingReplays, trainingReplayResources, trainingReplayProgress,
+  trainingReplays, trainingReplayResources, trainingReplayProgress, trainingReplayComments,
   type TrainingReplay, type InsertTrainingReplay,
   type TrainingReplayResource, type InsertTrainingReplayResource,
-  type TrainingReplayProgress,
+  type TrainingReplayProgress, type TrainingReplayComment,
 } from "@shared/schema";
 import type { SwipeListResponse } from "./swipe-api";
 import { safeTimezone, todayKeyInTz, addDaysToKey } from "@shared/datetime";
@@ -858,6 +858,10 @@ export interface IStorage {
   getUserTrainingReplayProgress(userId: string): Promise<TrainingReplayProgress[]>;
   getTrainingReplayProgress(userId: string, replayId: string): Promise<TrainingReplayProgress | undefined>;
   upsertTrainingReplayProgress(userId: string, replayId: string, completed: boolean): Promise<TrainingReplayProgress>;
+  getTrainingReplayComments(replayId: string): Promise<Array<TrainingReplayComment & {
+    authorName: string;
+  }>>;
+  createTrainingReplayComment(replayId: string, userId: string, body: string): Promise<TrainingReplayComment>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -6695,6 +6699,42 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return row;
   }
+
+  async getTrainingReplayComments(replayId: string): Promise<Array<TrainingReplayComment & { authorName: string }>> {
+    const rows = await db
+      .select({
+        id: trainingReplayComments.id,
+        replayId: trainingReplayComments.replayId,
+        userId: trainingReplayComments.userId,
+        body: trainingReplayComments.body,
+        createdAt: trainingReplayComments.createdAt,
+        updatedAt: trainingReplayComments.updatedAt,
+        displayName: users.displayName,
+        firstName: users.firstName,
+        lastName: users.lastName,
+      })
+      .from(trainingReplayComments)
+      .leftJoin(users, eq(users.id, trainingReplayComments.userId))
+      .where(eq(trainingReplayComments.replayId, replayId))
+      .orderBy(asc(trainingReplayComments.createdAt));
+
+    return rows.map((row) => ({
+      id: row.id,
+      replayId: row.replayId,
+      userId: row.userId,
+      body: row.body,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      authorName: row.displayName
+        || [row.firstName, row.lastName].filter(Boolean).join(" ")
+        || "Academy member",
+    }));
+  }
+
+  async createTrainingReplayComment(replayId: string, userId: string, body: string): Promise<TrainingReplayComment> {
+    const [row] = await db.insert(trainingReplayComments).values({ replayId, userId, body }).returning();
+    return row;
+  }
 }
 
 export const storage = new DatabaseStorage();
@@ -6967,6 +7007,20 @@ export async function runMigrations(): Promise<void> {
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_training_replay_progress_user_replay
       ON training_replay_progress(user_id, replay_id)
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS training_replay_comments (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        replay_id VARCHAR NOT NULL REFERENCES training_replays(id) ON DELETE CASCADE,
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        body TEXT NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_training_replay_comments_replay_created
+      ON training_replay_comments(replay_id, created_at)
     `);
     console.log("[migration] training library tables ensured");
   } catch (err: any) {

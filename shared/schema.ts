@@ -2346,6 +2346,18 @@ export const trainingReplayProgress = pgTable("training_replay_progress", {
 }));
 export type TrainingReplayProgress = typeof trainingReplayProgress.$inferSelect;
 
+export const trainingReplayComments = pgTable("training_replay_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  replayId: varchar("replay_id").notNull().references(() => trainingReplays.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (t) => ({
+  replayCreatedIdx: index("idx_training_replay_comments_replay_created").on(t.replayId, t.createdAt),
+}));
+export type TrainingReplayComment = typeof trainingReplayComments.$inferSelect;
+
 export const courseProgress = pgTable("course_progress", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
