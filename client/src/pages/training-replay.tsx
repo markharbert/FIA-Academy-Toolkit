@@ -419,7 +419,11 @@ export default function TrainingReplayPage() {
 
             {isConfirmingDelete && !comment.deletedAt && (
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-100 bg-red-50 px-3 py-2.5">
-                <span className="text-xs font-semibold text-red-800">Delete this comment?</span>
+                <span className="text-xs font-semibold text-red-800">
+                  {children.length > 0
+                    ? "Delete this comment and every reply in its thread?"
+                    : "Delete this comment?"}
+                </span>
                 <div className="flex gap-2">
                   <Button type="button" size="sm" variant="ghost" onClick={() => setConfirmDeleteId(null)}>
                     Cancel

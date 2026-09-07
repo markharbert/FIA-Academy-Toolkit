@@ -26,3 +26,4 @@
 - [Member health and commercial reporting](member-health-commercial-reporting.md) — health is explainable; commercial sync is manual, read-only, and stores minimal metadata.
 - [Vault category model](vault-category-model.md) — replay categories stay flexible and replay-derived; filtered views must never alter full-catalog order.
 - [Transcript workflow uniformity](transcript-workflow-uniformity.md) — transcript features and behavior must stay aligned across course lessons and Training Library replays.
+- [Replay discussion ownership](replay-discussion-ownership.md) — authors control their comments; deleting one removes its entire nested reply thread.

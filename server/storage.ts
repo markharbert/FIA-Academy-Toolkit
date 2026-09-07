@@ -6797,9 +6797,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTrainingReplayComment(replayId: string, commentId: string, userId: string): Promise<boolean> {
+    // Replies use ON DELETE CASCADE, so removing a comment also removes every
+    // nested reply below it in the same database operation.
     const [row] = await db
-      .update(trainingReplayComments)
-      .set({ body: "", deletedAt: new Date(), updatedAt: new Date() })
+      .delete(trainingReplayComments)
       .where(and(
         eq(trainingReplayComments.id, commentId),
         eq(trainingReplayComments.replayId, replayId),
