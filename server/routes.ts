@@ -15079,7 +15079,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         resources,
         comments: comments.map((comment) => ({
           ...comment,
-          canEdit: comment.userId === userId,
+          canEdit: !comment.deletedAt && comment.userId === userId,
         })),
         completed: !!progress?.completedAt,
         completedAt: progress?.completedAt ?? null,
@@ -15132,6 +15132,25 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     } catch (error) {
       console.error("[training replay comment edit]", error);
       res.status(500).json({ message: "Failed to edit comment." });
+    }
+  });
+  app.delete("/api/training/replays/:slug/comments/:commentId", requireAdmin, async (req, res) => {
+    try {
+      const userId = req.session.userId as string;
+      const replay = await storage.getPublishedTrainingReplayBySlug(req.params.slug);
+      if (!replay) return res.status(404).json({ message: "Not found" });
+      const deleted = await storage.deleteTrainingReplayComment(replay.id, req.params.commentId, userId);
+      if (!deleted) return res.status(404).json({ message: "Comment not found." });
+      const comments = await storage.getTrainingReplayComments(replay.id);
+      res.json({
+        comments: comments.map((comment) => ({
+          ...comment,
+          canEdit: !comment.deletedAt && comment.userId === userId,
+        })),
+      });
+    } catch (error) {
+      console.error("[training replay comment delete]", error);
+      res.status(500).json({ message: "Failed to delete comment." });
     }
   });
   app.post("/api/training/replays/:slug/progress", requireAdmin, async (req, res) => {

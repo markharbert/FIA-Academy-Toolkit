@@ -874,6 +874,7 @@ export interface IStorage {
     userId: string,
     body: string,
   ): Promise<TrainingReplayComment | undefined>;
+  deleteTrainingReplayComment(replayId: string, commentId: string, userId: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -6721,6 +6722,7 @@ export class DatabaseStorage implements IStorage {
         userId: trainingReplayComments.userId,
         parentCommentId: trainingReplayComments.parentCommentId,
         body: trainingReplayComments.body,
+        deletedAt: trainingReplayComments.deletedAt,
         createdAt: trainingReplayComments.createdAt,
         updatedAt: trainingReplayComments.updatedAt,
         displayName: users.displayName,
@@ -6737,13 +6739,14 @@ export class DatabaseStorage implements IStorage {
       replayId: row.replayId,
       userId: row.userId,
       parentCommentId: row.parentCommentId,
-      body: row.body,
+      body: row.deletedAt ? "" : row.body,
+      deletedAt: row.deletedAt,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
-      authorName: row.displayName
-        || [row.firstName, row.lastName].filter(Boolean).join(" ")
-        || "Academy member",
-      authorAvatarUrl: row.email
+      authorName: row.deletedAt
+        ? "Deleted comment"
+        : row.displayName || [row.firstName, row.lastName].filter(Boolean).join(" ") || "Academy member",
+      authorAvatarUrl: !row.deletedAt && row.email
         ? `https://www.gravatar.com/avatar/${crypto.createHash("md5").update(row.email.trim().toLowerCase()).digest("hex")}?s=80&d=404`
         : null,
     }));
@@ -6787,9 +6790,24 @@ export class DatabaseStorage implements IStorage {
         eq(trainingReplayComments.id, commentId),
         eq(trainingReplayComments.replayId, replayId),
         eq(trainingReplayComments.userId, userId),
+        isNull(trainingReplayComments.deletedAt),
       ))
       .returning();
     return row || undefined;
+  }
+
+  async deleteTrainingReplayComment(replayId: string, commentId: string, userId: string): Promise<boolean> {
+    const [row] = await db
+      .update(trainingReplayComments)
+      .set({ body: "", deletedAt: new Date(), updatedAt: new Date() })
+      .where(and(
+        eq(trainingReplayComments.id, commentId),
+        eq(trainingReplayComments.replayId, replayId),
+        eq(trainingReplayComments.userId, userId),
+        isNull(trainingReplayComments.deletedAt),
+      ))
+      .returning({ id: trainingReplayComments.id });
+    return !!row;
   }
 }
 
@@ -7071,6 +7089,7 @@ export async function runMigrations(): Promise<void> {
         user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         parent_comment_id VARCHAR REFERENCES training_replay_comments(id) ON DELETE CASCADE,
         body TEXT NOT NULL,
+        deleted_at TIMESTAMP,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
@@ -7078,6 +7097,10 @@ export async function runMigrations(): Promise<void> {
     await pool.query(`
       ALTER TABLE training_replay_comments
       ADD COLUMN IF NOT EXISTS parent_comment_id VARCHAR REFERENCES training_replay_comments(id) ON DELETE CASCADE
+    `);
+    await pool.query(`
+      ALTER TABLE training_replay_comments
+      ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP
     `);
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_training_replay_comments_replay_created
