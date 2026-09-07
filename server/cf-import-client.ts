@@ -4,7 +4,16 @@
  */
 
 import { JSDOM } from "jsdom";
-import { CF_WORKSPACE_DOMAIN, CF_API_TOKEN, CF_COURSE_ID, CF_WORKSPACE_ID } from "./clickfunnels";
+import puppeteer, { type Browser, type Page } from "puppeteer-core";
+import {
+  CF_WORKSPACE_DOMAIN,
+  CF_API_TOKEN,
+  CF_COURSE_ID,
+  CF_SSO_DOMAIN,
+  CF_WORKSPACE_ID,
+  generateCfSsoUrl,
+} from "./clickfunnels";
+import { CHROMIUM_LAUNCH_ARGS, getChromiumPath } from "./puppeteerCapture";
 
 const baseUrl = () => `https://${CF_WORKSPACE_DOMAIN}/api/v2`;
 const authHeaders = () => ({
@@ -35,6 +44,23 @@ export interface CfSection {
   parent_id: string | null;
   sort_order: number;
   published_at: string | null;
+  current_path: string | null;
+}
+
+function sectionRoutePath(section: CfSection, allSections: CfSection[]): string | null {
+  const byId = new Map(allSections.map((item) => [item.id, item]));
+  const chain: string[] = [];
+  const visited = new Set<string>();
+  let current: CfSection | undefined = section;
+  while (current && !visited.has(current.id)) {
+    visited.add(current.id);
+    // ClickFunnels' root course section is structural and is not part of learner URLs.
+    if (current.parent_id && current.current_path) {
+      chain.unshift(...current.current_path.split("/").filter(Boolean));
+    }
+    current = current.parent_id ? byId.get(current.parent_id) : undefined;
+  }
+  return chain.length ? `/${chain.join("/")}` : null;
 }
 
 export interface CfLesson {
@@ -211,9 +237,18 @@ export function extractCfLessonContent(
     return { content: null, videoUrl: null, thumbnailUrl: null, resources: [], status: "unavailable" };
   }
   const document = new JSDOM(source).window.document;
-  const root = document.querySelector(
+  const explicitRoot = document.querySelector(
     "[data-lesson-content], .course-lesson-content, .lesson-content, article, main",
-  ) ?? document.body;
+  );
+  const mediaElement = document.querySelector(
+    "iframe[src*='vimeo'], iframe[src*='youtube'], iframe[src*='wistia'], video",
+  );
+  // ClickFunnels course lessons are commonly rendered inside page-builder
+  // containers rather than semantic <main>/<article> elements. Anchor the
+  // extraction to the container holding the lesson media so global course
+  // navigation and the lesson sidebar are not imported as replay content.
+  const mediaRoot = mediaElement?.closest(".containerInnerV2, .containerInner");
+  const root = explicitRoot ?? mediaRoot ?? document.body;
   root.querySelectorAll("script,style,noscript,nav,header,footer,form").forEach((node) => node.remove());
 
   const videoUrl = extractVideoUrl(source);
@@ -262,13 +297,18 @@ export function extractCfLessonContent(
   };
 }
 
-function lessonPageUrl(coursePath: string | null, currentPath: string): URL | null {
-  if (!CF_WORKSPACE_DOMAIN || !currentPath) return null;
+function lessonPageUrl(
+  coursePath: string | null,
+  sectionPath: string | null,
+  currentPath: string,
+): URL | null {
+  if (!CF_SSO_DOMAIN || !currentPath) return null;
   try {
-    const origin = new URL(`https://${CF_WORKSPACE_DOMAIN}`);
-    const path = currentPath.startsWith("/") ? currentPath : `/${currentPath}`;
-    const basePath = coursePath?.startsWith("/") ? coursePath.replace(/\/$/, "") : "";
-    const url = new URL(`${basePath}${path}`, origin);
+    const origin = new URL(`https://${CF_SSO_DOMAIN}`);
+    const segments = [coursePath, sectionPath, currentPath]
+      .filter((path): path is string => !!path)
+      .flatMap((path) => path.split("/").filter(Boolean));
+    const url = new URL(`/${segments.join("/")}`, origin);
     return url.origin === origin.origin ? url : null;
   } catch {
     return null;
@@ -279,15 +319,19 @@ function lessonPageUrl(coursePath: string | null, currentPath: string): URL | nu
  * Fetches a lesson page only from the configured ClickFunnels domain. Redirects
  * are followed manually and never allowed to leave that domain.
  */
-async function fetchCfLessonPage(coursePath: string | null, currentPath: string): Promise<{ html: string; url: string } | null> {
-  if (!CF_WORKSPACE_DOMAIN) return null;
+async function fetchCfLessonPage(
+  coursePath: string | null,
+  sectionPath: string | null,
+  currentPath: string,
+): Promise<{ html: string; url: string } | null> {
+  if (!CF_SSO_DOMAIN) return null;
   let origin: URL;
   try {
-    origin = new URL(`https://${CF_WORKSPACE_DOMAIN}`);
+    origin = new URL(`https://${CF_SSO_DOMAIN}`);
   } catch {
     return null;
   }
-  const initialUrl = lessonPageUrl(coursePath, currentPath);
+  const initialUrl = lessonPageUrl(coursePath, sectionPath, currentPath);
   if (!initialUrl) return null;
   let url: URL = initialUrl;
 
@@ -317,6 +361,72 @@ async function fetchCfLessonPage(coursePath: string | null, currentPath: string)
   return null;
 }
 
+function isUnavailableLessonHtml(html: string): boolean {
+  const document = new JSDOM(html).window.document;
+  const title = cleanText(document.title).toLowerCase();
+  const body = cleanText(document.body?.textContent).toLowerCase();
+  return title.includes("page not found")
+    || body.includes("course theme - page not found")
+    || body.includes("you don't have access to this course");
+}
+
+async function createAuthenticatedRecoveryBrowser(
+  email: string,
+  coursePath: string | null,
+): Promise<Browser | null> {
+  if (!email || !coursePath || !CF_SSO_DOMAIN) return null;
+  let browser: Browser | null = null;
+  try {
+    const courseUrl = new URL(coursePath, `https://${CF_SSO_DOMAIN}`).toString();
+    const ssoUrl = generateCfSsoUrl(email, courseUrl);
+    browser = await puppeteer.launch({
+      executablePath: getChromiumPath(),
+      args: CHROMIUM_LAUNCH_ARGS,
+      headless: true,
+    });
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 900 });
+    await page.goto(ssoUrl, { waitUntil: "networkidle2", timeout: 30_000 });
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    const finalUrl = new URL(page.url());
+    if (finalUrl.hostname !== CF_SSO_DOMAIN) {
+      throw new Error("ClickFunnels SSO redirected outside the configured workspace");
+    }
+    if (finalUrl.pathname.startsWith("/contacts/sign_in")) {
+      throw new Error("the current admin email is not signed in to the ClickFunnels customer center");
+    }
+    await page.close();
+    return browser;
+  } catch (error) {
+    console.warn("[CF Import] Authenticated browser recovery unavailable:", error instanceof Error ? error.message : error);
+    if (browser) await browser.close().catch(() => undefined);
+    return null;
+  }
+}
+
+async function fetchRenderedLessonPage(
+  page: Page,
+  coursePath: string | null,
+  sectionPath: string | null,
+  currentPath: string,
+): Promise<{ html: string; url: string } | null> {
+  const url = lessonPageUrl(coursePath, sectionPath, currentPath);
+  if (!url) return null;
+  try {
+    const response = await page.goto(url.toString(), {
+      waitUntil: "networkidle2",
+      timeout: 20_000,
+    });
+    if (!response?.ok()) return null;
+    await new Promise((resolve) => setTimeout(resolve, 750));
+    const html = await page.content();
+    if (isUnavailableLessonHtml(html)) return null;
+    return { html, url: page.url() };
+  } catch {
+    return null;
+  }
+}
+
 /** The documented single-lesson endpoint can include body content omitted by list responses. */
 async function fetchCfLessonDetail(lessonId: string): Promise<Record<string, unknown> | null> {
   try {
@@ -331,13 +441,17 @@ async function fetchCfLessonDetail(lessonId: string): Promise<Record<string, unk
 
 async function recoverLessonContent(
   coursePath: string | null,
+  sectionPath: string | null,
   lesson: CfLesson,
+  browserPage?: Page,
 ): Promise<void> {
   const detail = await fetchCfLessonDetail(lesson.id);
   lesson.body = typeof detail?.body === "string" ? detail.body : lesson.body;
   let recovered = extractCfLessonContent(lesson.body);
   if (lesson.current_path) {
-    const page = await fetchCfLessonPage(coursePath, lesson.current_path);
+    const page = browserPage
+      ? await fetchRenderedLessonPage(browserPage, coursePath, sectionPath, lesson.current_path)
+      : await fetchCfLessonPage(coursePath, sectionPath, lesson.current_path);
     if (page) {
       const pageRecovered = extractCfLessonContent(page.html, page.url);
       if (pageRecovered.status !== "unavailable") recovered = pageRecovered;
@@ -449,6 +563,7 @@ export async function listCfDownloads(): Promise<CfDownload[]> {
 export async function getCfCourseStructure(
   cfCourseId: string,
   onProgress: (msg: string) => void,
+  recoveryEmail?: string,
 ): Promise<CfCourseStructure> {
   let coursePath: string | null = null;
   try {
@@ -471,6 +586,7 @@ export async function getCfCourseStructure(
     parent_id: s.parent_id ? String(s.parent_id) : null,
     sort_order: s.sort_order ?? 0,
     published_at: s.published_at ?? null,
+    current_path: typeof s.current_path === "string" ? s.current_path : null,
   }));
 
   onProgress(`Fetching lessons for ${sections.length} sections...`);
@@ -484,8 +600,15 @@ export async function getCfCourseStructure(
   let contentPartial = 0;
   let contentUnavailable = 0;
 
+  onProgress("Opening an authenticated ClickFunnels recovery session...");
+  const browser = recoveryEmail
+    ? await createAuthenticatedRecoveryBrowser(recoveryEmail, coursePath)
+    : null;
+  if (!browser) onProgress("Authenticated page recovery unavailable; using API content only...");
+
   const queue = [...sections];
   const workers = Array.from({ length: 3 }, async () => {
+    const browserPage = browser ? await browser.newPage() : undefined;
     while (true) {
       const section = queue.shift();
       if (!section) break;
@@ -500,7 +623,12 @@ export async function getCfCourseStructure(
       }));
 
       for (const lesson of lessons) {
-        await recoverLessonContent(coursePath, lesson);
+        await recoverLessonContent(
+          coursePath,
+          sectionRoutePath(section, sections),
+          lesson,
+          browserPage,
+        );
         if (lesson.videoUrl) videosFound++;
         if (lesson.recoveryStatus === "recovered") contentRecovered++;
         else if (lesson.recoveryStatus === "partial") contentPartial++;
@@ -512,8 +640,13 @@ export async function getCfCourseStructure(
       fetchedSections++;
       onProgress(`Fetched lessons for ${fetchedSections} of ${sections.length} sections...`);
     }
+    if (browserPage) await browserPage.close().catch(() => undefined);
   });
-  await Promise.all(workers);
+  try {
+    await Promise.all(workers);
+  } finally {
+    if (browser) await browser.close().catch(() => undefined);
+  }
 
   const totalLessons = Array.from(lessonMap.values()).reduce((n, ls) => n + ls.length, 0);
   onProgress(`Building tree (${sections.length} sections, ${totalLessons} lessons)...`);

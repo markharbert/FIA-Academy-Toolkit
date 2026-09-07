@@ -3,7 +3,7 @@ import { execSync } from "child_process";
 
 let cachedChromiumPath: string | null = null;
 
-function getChromiumPath(): string {
+export function getChromiumPath(): string {
   if (cachedChromiumPath) return cachedChromiumPath;
   if (process.env.CHROMIUM_PATH) {
     cachedChromiumPath = process.env.CHROMIUM_PATH;
@@ -20,7 +20,7 @@ function getChromiumPath(): string {
   );
 }
 
-const LAUNCH_ARGS = [
+export const CHROMIUM_LAUNCH_ARGS = [
   "--no-sandbox",
   "--disable-setuid-sandbox",
   "--disable-dev-shm-usage",
@@ -44,7 +44,7 @@ export async function captureFullPage(url: string, timeoutMs = 30_000): Promise<
 
   const browser = await puppeteer.launch({
     executablePath,
-    args: LAUNCH_ARGS,
+    args: CHROMIUM_LAUNCH_ARGS,
     headless: true,
   });
 

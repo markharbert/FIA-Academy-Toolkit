@@ -48,6 +48,6 @@ A 4-step import UI at `/admin/clickfunnels` (CourseImportCard) backed by 3 serve
 
 Recover recognizable lesson HTML into draft content, common video URLs, thumbnails, and resources, but only fill fields that are still empty on re-import.
 
-**Why:** ClickFunnels API bearer authentication can read course structure while protected learner URLs return a branded 404 shell. Treating that shell as lesson HTML would create convincing but incorrect imports and could overwrite manual cleanup.
+**Why:** ClickFunnels API bearer authentication can read course structure while protected learner URLs need Customer Center SSO. Learner URLs use the SSO domain and the complete nested section chain, excluding the structural root section; combining only the course and lesson slugs returns a branded 404 shell.
 
-**How to apply:** Reject non-2xx lesson pages, classify lessons as recovered/partial/unavailable, preserve existing admin-entered fields and resources, and use a separately authenticated learner-browser flow for protected pages.
+**How to apply:** Render protected pages through SSO as the admin starting the scan, reject sign-in/404 pages, derive the full ancestor route, classify recovery honestly, and preserve existing admin-entered fields and resources.

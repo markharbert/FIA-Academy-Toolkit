@@ -2405,6 +2405,7 @@ export async function registerRoutes(
    */
   app.get("/api/admin/cf/import/courses/:cfCourseId/structure", requireAdmin, async (req: Request, res: Response) => {
     const { cfCourseId } = req.params;
+    const adminUser = (req as any).adminUser;
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
@@ -2415,7 +2416,11 @@ export async function registerRoutes(
     const send = (data: object) => { if (!closed) res.write(`data: ${JSON.stringify(data)}\n\n`); };
 
     try {
-      const structure = await getCfCourseStructure(cfCourseId, (msg) => send({ type: "progress", message: msg }));
+      const structure = await getCfCourseStructure(
+        cfCourseId,
+        (msg) => send({ type: "progress", message: msg }),
+        typeof adminUser?.email === "string" ? adminUser.email : undefined,
+      );
       send({ type: "done", structure });
     } catch (err: any) {
       console.error("[CF Import] structure fetch:", err?.message);
