@@ -11,7 +11,7 @@ import {
   getVimeoVideoThumbnail,
   syncVimeoChapters,
 } from "./vimeo";
-import { generateLessonChapters, transcribeAudioWithTimestamps } from "./ai";
+import { generateLessonChapters, generateReplayDescription, transcribeAudioWithTimestamps } from "./ai";
 import { formatTranscriptParagraphs } from "@shared/transcript-format";
 
 const VIDEO_CONCURRENCY = 2;
@@ -139,8 +139,10 @@ async function processReplay(replayId: string): Promise<void> {
       throw new Error("No timestamped speech was found in the Vimeo video.");
     }
     const transcriptChapters = await generateLessonChapters(transcriptCues);
+    const refreshedDescription = await generateReplayDescription(replay.title, transcriptText);
     const generatedAt = new Date();
     await storage.updateTrainingReplay(replay.id, {
+      description: refreshedDescription,
       transcriptText,
       transcriptLanguage: transcriptLanguage || null,
       transcriptSource: "Fresh transcription created automatically during ClickFunnels import",
