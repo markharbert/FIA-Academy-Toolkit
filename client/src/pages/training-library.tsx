@@ -20,7 +20,7 @@ export default function TrainingLibraryPage() {
   const categories = data?.facets?.categories || [];
   const availableTags = data?.facets?.tags || [];
   const active = Boolean(q || category !== "all" || tags.length);
-  const heading = useMemo(() => active ? `${items.length} replay${items.length === 1 ? "" : "s"} found` : "The replay vault", [active, items.length]);
+  const heading = useMemo(() => active ? `${items.length} replay${items.length === 1 ? "" : "s"} found` : "The Replay Vault", [active, items.length]);
   const toggle = (tag: string) => setTags((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag]);
   const clear = () => { setQ(""); setCategory("all"); setTags([]); };
   return <main className="min-h-[calc(100dvh-3rem)] bg-[radial-gradient(circle_at_88%_0%,hsl(254_74%_91%),transparent_30rem)] px-4 py-8 sm:px-8">
