@@ -1099,6 +1099,12 @@ function formatForTeleprompter(text: string): string {
   return paragraphs.join('\n\n');
 }
 
+function formatTeleprompterTitle(title: string): string {
+  const trimmed = title.trim() || "Untitled script";
+  if (trimmed.length <= 120) return trimmed;
+  return `${trimmed.slice(0, 117).trimEnd()}...`;
+}
+
 function hasScriptChanged(original: ScriptJson | null, edited: ScriptJson | null): boolean {
   if (!original || !edited) return false;
   
@@ -1211,9 +1217,13 @@ export default function TopicPulseScriptPage() {
     onSuccess: async (data) => {
       if (data?.id) {
         setSavedTeleprompterScriptId(data.id);
-        await apiRequest("PATCH", `/api/topic-pulse/scripts/${scriptId}`, {
-          teleprompterScriptId: data.id,
-        });
+        try {
+          await apiRequest("PATCH", `/api/topic-pulse/scripts/${scriptId}`, {
+            teleprompterScriptId: data.id,
+          });
+        } catch (err) {
+          console.error("Failed to link Teleprompter script to generated script:", err);
+        }
         queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/scripts", scriptId] });
       }
       queryClient.invalidateQueries({ queryKey: ["/api/teleprompter/scripts"] });
@@ -1573,9 +1583,10 @@ export default function TopicPulseScriptPage() {
 
   const buildTeleprompterContent = () => {
     if (!script) return null;
+    const title = formatTeleprompterTitle(script.title);
     // In full-script view, use the AI-generated expanded script if available
     if (scriptView === "full" && editedScriptJson?.expandedScript) {
-      return { title: script.title, content: editedScriptJson.expandedScript };
+      return { title, content: editedScriptJson.expandedScript };
     }
     if (!editedScriptJson?.fullScript) return null;
     const fs = editedScriptJson.fullScript;
@@ -1588,7 +1599,7 @@ export default function TopicPulseScriptPage() {
       if (s.content) parts.push(s.content);
     });
     if (fs.finalCTA.text)    parts.push(fs.finalCTA.text);
-    return { title: script.title, content: parts.join("\n\n") };
+    return { title, content: parts.join("\n\n") };
   };
 
   const handleSaveToTeleprompter = () => {
@@ -1616,7 +1627,7 @@ export default function TopicPulseScriptPage() {
 
   const handleSaveAndGoToTeleprompter = () => {
     if (savedTeleprompterScriptId) {
-      navigate(`/teleprompter?script=${savedTeleprompterScriptId}`);
+      navigate(`/video-studio/record?script=${savedTeleprompterScriptId}`);
       return;
     }
     if (!editedScriptJson?.fullScript || !script) return;
@@ -1625,8 +1636,8 @@ export default function TopicPulseScriptPage() {
     saveToTeleprompterMutation.mutate(payload, {
       onSuccess: (data: any) => {
         const id = data?.id ?? null;
-        if (id) navigate(`/teleprompter?script=${id}`);
-        else navigate("/teleprompter");
+        if (id) navigate(`/video-studio/record?script=${id}`);
+        else navigate("/video-studio/record");
       },
     });
   };
@@ -2078,7 +2089,7 @@ export default function TopicPulseScriptPage() {
                     <div className="shrink-0">
                       {savedTeleprompterScriptId ? (
                         <Button
-                          onClick={() => navigate(`/teleprompter?script=${savedTeleprompterScriptId}`)}
+                          onClick={() => navigate(`/video-studio/record?script=${savedTeleprompterScriptId}`)}
                           className="bg-emerald-600 hover:bg-emerald-700 text-white border-0 font-semibold"
                           data-testid="button-open-teleprompter"
                         >
