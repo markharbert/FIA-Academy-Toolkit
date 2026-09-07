@@ -4,7 +4,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { transcribeAudio, transcribeAudioWhisper, transcribeAudioWithTimestamps, scoreTranscript, generateTitle, generateDmoSummary, generateBulletPoints, generateLessonChapters, generateReplayDescription, generateReplayMetadata } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio, extractRemoteAudioSegments, probeVideo, faststartMp4, prepareTeleprompterMp4, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
-import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema, insertProjectTemplateSchema, insertProjectTemplateTaskSchema, updateProjectTemplateTaskSchema, insertProjectColumnSchema, insertCannedResponseSchema, insertAnnouncementSchema, insertAffiliateLinkSchema } from "@shared/schema";
+import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, type TrainingReplay, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema, insertProjectTemplateSchema, insertProjectTemplateTaskSchema, updateProjectTemplateTaskSchema, insertProjectColumnSchema, insertCannedResponseSchema, insertAnnouncementSchema, insertAffiliateLinkSchema } from "@shared/schema";
 import { safeTimezone, todayKeyInTz, dueHasTime } from "@shared/datetime";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
@@ -15014,24 +15014,40 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       category: z.string().trim().max(200).optional(),
       tag: z.string().trim().max(100).optional(),
       tags: z.string().trim().max(1_000).optional(),
+      page: z.coerce.number().int().min(1).max(10_000).default(1),
     }).safeParse(req.query);
     if (!parsed.success) return replayValidationError(res, parsed.error);
     try {
       const userId = req.session.userId as string;
-      const all = await storage.getPublishedTrainingReplays();
-      const progress = await storage.getUserTrainingReplayProgress(userId);
+      const pageSize = 21;
+      const [facetRows, progress] = await Promise.all([
+        storage.getPublishedTrainingReplayFacets(),
+        storage.getUserTrainingReplayProgress(userId),
+      ]);
       const completedAtByReplay = new Map(progress.map((item) => [item.replayId, item.completedAt]));
       const selectedTags = (parsed.data.tags ? parsed.data.tags.split(",") : parsed.data.tag ? [parsed.data.tag] : [])
         .map((tag) => tag.trim()).filter(Boolean);
       if (selectedTags.length > 30 || selectedTags.some((tag) => tag.length > 100)) {
         return res.status(400).json({ message: "Choose no more than 30 valid tags" });
       }
-      const replays = (await storage.searchPublishedTrainingReplays({
-        q: parsed.data.q,
-        category: parsed.data.category,
-      })).filter((replay) => selectedTags.every((tag) => (replay.tags || []).includes(tag)));
-      const categories = [...new Set(all.map((replay) => replay.category).filter((item): item is string => !!item))].sort();
-      const tags = [...new Set(all.flatMap((replay) => replay.tags || []))].sort();
+      const hasFilters = Boolean(parsed.data.q || parsed.data.category || selectedTags.length);
+      let total = 0;
+      let replays;
+      if (hasFilters) {
+        const matches = (await storage.searchPublishedTrainingReplays({
+          q: parsed.data.q,
+          category: parsed.data.category,
+        })).filter((replay) => selectedTags.every((tag) => (replay.tags || []).includes(tag)));
+        total = matches.length;
+        const offset = (parsed.data.page - 1) * pageSize;
+        replays = matches.slice(offset, offset + pageSize);
+      } else {
+        const result = await storage.getPublishedTrainingReplayPage(parsed.data.page, pageSize);
+        total = result.total;
+        replays = result.items;
+      }
+      const categories = [...new Set(facetRows.map((replay) => replay.category).filter((item): item is string => !!item))].sort();
+      const tags = [...new Set(facetRows.flatMap((replay) => replay.tags || []))].sort();
       const items = await Promise.all(replays.map(async (replay) => {
         let thumbnailUrl = replay.thumbnailUrl;
         if (!thumbnailUrl && replay.videoUrl) {
@@ -15050,17 +15066,29 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
           }
         }
         return {
-          ...replay,
+          id: replay.id,
+          slug: replay.slug,
+          title: replay.title,
+          description: replay.description,
+          category: replay.category,
+          tags: replay.tags,
+          durationMinutes: replay.durationMinutes,
           thumbnailUrl,
           completed: !!completedAtByReplay.get(replay.id),
           completedAt: completedAtByReplay.get(replay.id) ?? null,
-          transcriptMatches: transcriptMatchSnippets(replay, parsed.data.q),
+          transcriptMatches: parsed.data.q ? transcriptMatchSnippets(replay as TrainingReplay, parsed.data.q) : [],
         };
       }));
       res.json({
         items,
         replays: items,
         facets: { categories, tags },
+        pagination: {
+          page: parsed.data.page,
+          pageSize,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / pageSize)),
+        },
       });
     } catch { res.status(500).json({ message: "Failed to load replays" }); }
   });

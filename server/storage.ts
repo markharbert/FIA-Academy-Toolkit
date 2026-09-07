@@ -113,6 +113,10 @@ export type TrainingReplayImportResult = {
   videosSkipped: number;
   videosUnavailable: number;
 };
+export type TrainingReplayListItem = Pick<TrainingReplay,
+  "id" | "slug" | "title" | "description" | "videoUrl" | "thumbnailUrl"
+  | "durationMinutes" | "category" | "tags" | "sortOrder" | "createdAt"
+>;
 
 type CourseNavigationLesson = Pick<
   CourseLesson,
@@ -853,6 +857,8 @@ export interface IStorage {
   updateTrainingReplayResource(id: string, updates: Partial<TrainingReplayResource>): Promise<TrainingReplayResource | undefined>;
   deleteTrainingReplayResource(id: string): Promise<boolean>;
   getPublishedTrainingReplays(): Promise<TrainingReplay[]>;
+  getPublishedTrainingReplayPage(page: number, pageSize: number): Promise<{ items: TrainingReplayListItem[]; total: number }>;
+  getPublishedTrainingReplayFacets(): Promise<Array<Pick<TrainingReplay, "category" | "tags">>>;
   getPublishedTrainingReplayBySlug(slug: string): Promise<TrainingReplay | undefined>;
   searchPublishedTrainingReplays(filters: { q?: string; category?: string; tag?: string }): Promise<TrainingReplay[]>;
   getUserTrainingReplayProgress(userId: string): Promise<TrainingReplayProgress[]>;
@@ -6652,6 +6658,42 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(trainingReplays)
       .where(eq(trainingReplays.status, "published"))
       .orderBy(trainingReplays.sortOrder, trainingReplays.createdAt);
+  }
+
+  async getPublishedTrainingReplayPage(page: number, pageSize: number): Promise<{ items: TrainingReplayListItem[]; total: number }> {
+    const where = eq(trainingReplays.status, "published");
+    const offset = (page - 1) * pageSize;
+    const [items, totals] = await Promise.all([
+      db.select({
+        id: trainingReplays.id,
+        slug: trainingReplays.slug,
+        title: trainingReplays.title,
+        description: trainingReplays.description,
+        videoUrl: trainingReplays.videoUrl,
+        thumbnailUrl: trainingReplays.thumbnailUrl,
+        durationMinutes: trainingReplays.durationMinutes,
+        category: trainingReplays.category,
+        tags: trainingReplays.tags,
+        sortOrder: trainingReplays.sortOrder,
+        createdAt: trainingReplays.createdAt,
+      })
+        .from(trainingReplays)
+        .where(where)
+        .orderBy(trainingReplays.sortOrder, trainingReplays.createdAt)
+        .limit(pageSize)
+        .offset(offset),
+      db.select({ value: count() }).from(trainingReplays).where(where),
+    ]);
+    return { items, total: Number(totals[0]?.value ?? 0) };
+  }
+
+  async getPublishedTrainingReplayFacets(): Promise<Array<Pick<TrainingReplay, "category" | "tags">>> {
+    return db.select({
+      category: trainingReplays.category,
+      tags: trainingReplays.tags,
+    })
+      .from(trainingReplays)
+      .where(eq(trainingReplays.status, "published"));
   }
 
   async getPublishedTrainingReplayBySlug(slug: string): Promise<TrainingReplay | undefined> {

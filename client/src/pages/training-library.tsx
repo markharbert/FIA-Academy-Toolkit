@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { CheckCircle2, Clock, Library, Search, Tag, X } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Clock, Library, Search, Tag, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,22 +13,40 @@ const stamp = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.fl
 export default function TrainingLibraryPage() {
   const [, go] = useLocation();
   const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
   const [category, setCategory] = useState("all");
   const [tags, setTags] = useState<string[]>([]);
-  const { data, isLoading, isError, refetch } = useQuery<{ items?: Item[]; replays?: Item[]; facets?: { categories: string[]; tags: string[] } }>({ queryKey: ["/api/training/library", q, category, tags], queryFn: () => api(`/api/training/library?q=${encodeURIComponent(q)}&category=${encodeURIComponent(category === "all" ? "" : category)}&tags=${encodeURIComponent(tags.join(","))}`) });
+  const [page, setPage] = useState(1);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQ(q), 300);
+    return () => window.clearTimeout(timer);
+  }, [q]);
+  const { data, isLoading, isError, refetch } = useQuery<{
+    items?: Item[];
+    replays?: Item[];
+    facets?: { categories: string[]; tags: string[] };
+    pagination?: { page: number; pageSize: number; total: number; totalPages: number };
+  }>({
+    queryKey: ["/api/training/library", debouncedQ, category, tags, page],
+    queryFn: () => api(`/api/training/library?q=${encodeURIComponent(debouncedQ)}&category=${encodeURIComponent(category === "all" ? "" : category)}&tags=${encodeURIComponent(tags.join(","))}&page=${page}`),
+  });
   const items = data?.items || data?.replays || [];
   const categories = data?.facets?.categories || [];
   const availableTags = data?.facets?.tags || [];
+  const pagination = data?.pagination;
   const active = Boolean(q || category !== "all" || tags.length);
-  const heading = useMemo(() => active ? `${items.length} replay${items.length === 1 ? "" : "s"} found` : "The Replay Vault", [active, items.length]);
-  const toggle = (tag: string) => setTags((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag]);
-  const clear = () => { setQ(""); setCategory("all"); setTags([]); };
+  const heading = useMemo(() => active ? `${pagination?.total ?? items.length} replay${(pagination?.total ?? items.length) === 1 ? "" : "s"} found` : "The Replay Vault", [active, items.length, pagination?.total]);
+  const toggle = (tag: string) => {
+    setPage(1);
+    setTags((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag]);
+  };
+  const clear = () => { setQ(""); setDebouncedQ(""); setCategory("all"); setTags([]); setPage(1); };
   return <main className="min-h-[calc(100dvh-3rem)] bg-[radial-gradient(circle_at_88%_0%,hsl(254_74%_91%),transparent_30rem)] px-4 py-8 sm:px-8">
     <div className="mx-auto max-w-7xl">
       <header className="mb-8 max-w-3xl"><div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-violet-700"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-700 text-white"><Library className="h-4 w-4" /></span> Fearless Influencer Academy</div><h1 className="text-4xl font-extrabold tracking-tight text-slate-950 sm:text-5xl">{heading}</h1><p className="mt-3 max-w-2xl text-base text-slate-600">Practical sessions, sharp ideas, and the context to put them to work.</p></header>
       <section className="mb-8 rounded-2xl border border-violet-100 bg-white/90 p-4 shadow-[0_14px_35px_-28px_rgba(46,16,101,.42)]">
-        <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-violet-600" /><Input className="h-11 border-violet-100 pl-10" placeholder="Search titles, topics, and transcripts" value={q} onChange={(event) => setQ(event.target.value)} /></div>
-        <div className="mt-4 flex flex-wrap items-center gap-2"><span className="mr-1 text-xs font-bold uppercase tracking-wider text-slate-500">Browse</span><Button size="sm" variant={category === "all" ? "default" : "outline"} onClick={() => setCategory("all")}>All sessions</Button>{categories.map((item) => <Button key={item} size="sm" variant={category === item ? "default" : "outline"} onClick={() => setCategory(item)}>{item}</Button>)}</div>
+        <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-violet-600" /><Input className="h-11 border-violet-100 pl-10" placeholder="Search titles, topics, and transcripts" value={q} onChange={(event) => { setQ(event.target.value); setPage(1); }} /></div>
+        <div className="mt-4 flex flex-wrap items-center gap-2"><span className="mr-1 text-xs font-bold uppercase tracking-wider text-slate-500">Browse</span><Button size="sm" variant={category === "all" ? "default" : "outline"} onClick={() => { setCategory("all"); setPage(1); }}>All sessions</Button>{categories.map((item) => <Button key={item} size="sm" variant={category === item ? "default" : "outline"} onClick={() => { setCategory(item); setPage(1); }}>{item}</Button>)}</div>
         {availableTags.length > 0 && <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-violet-50 pt-3"><span className="mr-1 flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-slate-500"><Tag className="h-3.5 w-3.5" />Topics</span>{availableTags.map((item) => <Button key={item} size="sm" variant={tags.includes(item) ? "default" : "ghost"} className={tags.includes(item) ? "" : "text-slate-600"} onClick={() => toggle(item)}>{item}</Button>)}{active && <Button size="sm" variant="ghost" className="ml-auto text-slate-500" onClick={clear}><X className="mr-1 h-3.5 w-3.5" />Clear</Button>}</div>}
       </section>
       {isLoading ? (
@@ -48,6 +66,7 @@ export default function TrainingLibraryPage() {
           {active && <Button className="mt-4" variant="outline" onClick={clear}>Clear filters</Button>}
         </div>
       ) : (
+        <>
         <div className="grid items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((item) => {
             const match = item.transcriptMatches?.[0];
@@ -84,6 +103,25 @@ export default function TrainingLibraryPage() {
             );
           })}
         </div>
+        {pagination && pagination.totalPages > 1 && (
+          <nav className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-violet-100 bg-white px-4 py-3 shadow-sm" aria-label="Replay Vault pages">
+            <p className="text-sm font-medium text-slate-600">
+              Showing {(pagination.page - 1) * pagination.pageSize + 1}–{Math.min(pagination.page * pagination.pageSize, pagination.total)} of {pagination.total}
+            </p>
+            <div className="flex items-center gap-3">
+              <Button variant="outline" size="sm" disabled={pagination.page <= 1} onClick={() => { setPage((current) => Math.max(1, current - 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
+                <ChevronLeft className="mr-1 h-4 w-4" />
+                Previous
+              </Button>
+              <span className="text-sm font-bold text-slate-700">Page {pagination.page} of {pagination.totalPages}</span>
+              <Button variant="outline" size="sm" disabled={pagination.page >= pagination.totalPages} onClick={() => { setPage((current) => current + 1); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
+                Next
+                <ChevronRight className="ml-1 h-4 w-4" />
+              </Button>
+            </div>
+          </nav>
+        )}
+        </>
       )}
     </div>
   </main>;
