@@ -2305,6 +2305,15 @@ export const trainingReplays = pgTable("training_replays", {
   transcriptCues: jsonb("transcript_cues").$type<LessonTranscriptCue[]>(),
   transcriptChapters: jsonb("transcript_chapters").$type<LessonChapter[]>(),
   transcriptChaptersGeneratedAt: timestamp("transcript_chapters_generated_at"),
+  transcriptProcessingStatus: varchar("transcript_processing_status", { length: 20 })
+    .notNull()
+    .default("idle")
+    .$type<"idle" | "queued" | "processing" | "complete" | "failed">(),
+  transcriptProcessingError: text("transcript_processing_error"),
+  transcriptProcessingAttempts: integer("transcript_processing_attempts").notNull().default(0),
+  transcriptProcessingQueuedAt: timestamp("transcript_processing_queued_at"),
+  transcriptProcessingStartedAt: timestamp("transcript_processing_started_at"),
+  transcriptProcessingNextAttemptAt: timestamp("transcript_processing_next_attempt_at"),
   durationMinutes: integer("duration_minutes"),
   category: text("category"),
   tags: jsonb("tags").$type<string[]>(),

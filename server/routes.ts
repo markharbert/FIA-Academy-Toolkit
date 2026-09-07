@@ -55,6 +55,7 @@ import { listCfCourses, listCfDownloads, getCfCourseStructure, extractVideoUrl, 
 import { runCfMembershipReconciliation } from "./cfMembershipReconciliation";
 import { listVimeoProjects, listVimeoVideos, searchVimeoVideos, extractVimeoVideoId, listVimeoTextTracks, fetchVimeoTranscript, getVimeoVideoDurationMinutes, getVimeoVideoThumbnail, getVimeoVideoDownload, syncVimeoChapters, type VimeoChapterInput } from "./vimeo";
 import { FIA_EVENT_CALENDAR_ID, FIA_EVENT_CALENDAR_NAME, FIA_EVENT_CALENDAR_SUBSCRIBE_URL, FIA_EVENT_CALENDAR_TIMEZONE, GoogleCalendarError, getTrainingCalendarEvents } from "./googleCalendar";
+import { enqueueImportedReplayTranscripts } from "./trainingReplayTranscriptWorker";
 
 const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
@@ -2521,12 +2522,23 @@ export async function registerRoutes(
         // The storage method validates and writes the complete batch in one
         // transaction. A failed row therefore cannot leave a partial archive.
         const importResult = await storage.importTrainingReplays(rows);
+        const importedExternalIds = new Set(rows.map((row) => row.externalId));
+        const importedReplayIds = (await storage.getTrainingReplays())
+          .filter((replay) =>
+            !!replay.externalId
+            && importedExternalIds.has(replay.externalId)
+            && !!replay.videoUrl
+            && !!extractVimeoVideoId(replay.videoUrl),
+          )
+          .map((replay) => replay.id);
+        const transcriptionsQueued = await enqueueImportedReplayTranscripts(importedReplayIds);
         await storage.createAuditLog({
           adminUserId: adminUser.id,
           action: "cf_training_replay_import",
           metadataJson: {
             sourceCourseId: typeof cfCourseId === "string" ? cfCourseId : null,
             replayCount: rows.length,
+            transcriptionsQueued,
             ...importResult,
           } as any,
           ip: req.ip || null,
@@ -2536,7 +2548,8 @@ export async function registerRoutes(
           destination: "training-library",
           ...importResult,
           replayCount: rows.length,
-          message: `Imported ${rows.length} replay${rows.length === 1 ? "" : "s"} as drafts.`,
+          transcriptionsQueued,
+          message: `Imported ${rows.length} replay${rows.length === 1 ? "" : "s"} as drafts and queued ${transcriptionsQueued} fresh transcript${transcriptionsQueued === 1 ? "" : "s"}.`,
         });
       }
 

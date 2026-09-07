@@ -22,7 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 
 type Resource = { id: string; name: string; url: string; subtitle: string | null; kind: "link" | "pdf" };
 type ReplayChapter = { startSeconds: number; title: string };
-type Replay = { id: string; title: string; description: string | null; category: string | null; tags: string[]; durationMinutes: number | null; videoUrl: string | null; content: string | null; status: "draft" | "published"; resources: Resource[]; transcriptText: string | null; transcriptLanguage: string | null; transcriptSource: string | null; transcriptUpdatedAt: string | null; transcriptChapters: ReplayChapter[] | null; transcriptChaptersGeneratedAt: string | null; vimeoChaptersSynced?: boolean; vimeoChapterCount?: number; vimeoChapterSyncMessage?: string };
+type Replay = { id: string; title: string; description: string | null; category: string | null; tags: string[]; durationMinutes: number | null; videoUrl: string | null; content: string | null; status: "draft" | "published"; resources: Resource[]; transcriptText: string | null; transcriptLanguage: string | null; transcriptSource: string | null; transcriptUpdatedAt: string | null; transcriptChapters: ReplayChapter[] | null; transcriptChaptersGeneratedAt: string | null; transcriptProcessingStatus: "idle" | "queued" | "processing" | "complete" | "failed"; transcriptProcessingError: string | null; vimeoChaptersSynced?: boolean; vimeoChapterCount?: number; vimeoChapterSyncMessage?: string };
 type VimeoFolder = { id: string; name: string; parentId?: string; path: string[] };
 type VimeoVideo = { id: string; name: string; url: string; thumbnailUrl?: string; durationMinutes?: number };
 type VimeoVideoPage = { videos: VimeoVideo[]; hasMore: boolean };
@@ -173,6 +173,10 @@ export default function AdminTrainingReplayEditorPage() {
   const replayQuery = useQuery<Replay>({
     queryKey: ["/api/admin/training-replays", replayId],
     queryFn: () => api(`/api/admin/training-replays/${replayId}`),
+    refetchInterval: (query) => {
+      const status = query.state.data?.transcriptProcessingStatus;
+      return status === "queued" || status === "processing" ? 4_000 : false;
+    },
   });
   const catalogQuery = useQuery<Replay[]>({
     queryKey: ["/api/admin/training-replays"],
@@ -206,6 +210,28 @@ export default function AdminTrainingReplayEditorPage() {
       const next = { ...replayQuery.data, tags: (replayQuery.data.tags || []).join(", ") };
       setForm(next); formRef.current = next;
     }
+  }, [replayQuery.data]);
+  useEffect(() => {
+    if (!replayQuery.data || !formRef.current) return;
+    const current = formRef.current;
+    if (
+      current.transcriptProcessingStatus === replayQuery.data.transcriptProcessingStatus
+      && current.transcriptUpdatedAt === replayQuery.data.transcriptUpdatedAt
+      && current.transcriptProcessingError === replayQuery.data.transcriptProcessingError
+    ) return;
+    const next = {
+      ...current,
+      transcriptText: replayQuery.data.transcriptText,
+      transcriptLanguage: replayQuery.data.transcriptLanguage,
+      transcriptSource: replayQuery.data.transcriptSource,
+      transcriptUpdatedAt: replayQuery.data.transcriptUpdatedAt,
+      transcriptChapters: replayQuery.data.transcriptChapters,
+      transcriptChaptersGeneratedAt: replayQuery.data.transcriptChaptersGeneratedAt,
+      transcriptProcessingStatus: replayQuery.data.transcriptProcessingStatus,
+      transcriptProcessingError: replayQuery.data.transcriptProcessingError,
+    };
+    formRef.current = next;
+    setForm(next);
   }, [replayQuery.data]);
 
   const saveMutation = useMutation({
@@ -681,6 +707,29 @@ export default function AdminTrainingReplayEditorPage() {
          <VideoPreview url={form.videoUrl || ""} />
          {videoProvider === "vimeo" && (
            <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+              {(form.transcriptProcessingStatus === "queued" || form.transcriptProcessingStatus === "processing") && (
+                <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 p-3 text-blue-900 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-100">
+                  <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
+                  <div>
+                    <p className="text-sm font-medium">
+                      {form.transcriptProcessingStatus === "queued"
+                        ? "Fresh transcript queued"
+                        : "Creating fresh transcript and chapters"}
+                    </p>
+                    <p className="text-xs opacity-80">
+                      This started automatically from the ClickFunnels import. You can leave this page while it finishes.
+                    </p>
+                  </div>
+                </div>
+              )}
+              {form.transcriptProcessingStatus === "failed" && (
+                <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950/30 dark:text-red-100">
+                  <p className="font-medium">Automatic fresh transcript needs attention</p>
+                  <p className="mt-1 text-xs opacity-80">
+                    {form.transcriptProcessingError || "The imported video could not be transcribed automatically."}
+                  </p>
+                </div>
+              )}
              <div className="flex flex-wrap items-center justify-between gap-2">
                <div>
                  <p className="text-sm font-medium">Transcript</p>

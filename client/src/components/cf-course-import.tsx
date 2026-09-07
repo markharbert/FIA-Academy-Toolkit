@@ -102,6 +102,7 @@ interface ImportResult {
   descriptionsImported?: number;
   descriptionsSkipped?: number;
   resourcesImported?: number;
+  transcriptionsQueued?: number;
 }
 
 interface ImportError {
@@ -1299,12 +1300,19 @@ export function CourseImportCard() {
                   )}
                 </p>
                 {importResult.destination === "training-library" && (
-                  <p className="text-xs text-muted-foreground">
-                    Page content: <span className="font-medium">{importResult.contentImported ?? 0}</span> imported
-                    {(importResult.contentSkipped ?? 0) > 0 && <> · <span className="font-medium">{importResult.contentSkipped}</span> kept existing</>}
-                    {" · "}Descriptions: <span className="font-medium">{importResult.descriptionsImported ?? 0}</span> imported
-                    {" · "}<span className="font-medium">{importResult.resourcesImported ?? 0}</span> resources added
-                  </p>
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      Page content: <span className="font-medium">{importResult.contentImported ?? 0}</span> imported
+                      {(importResult.contentSkipped ?? 0) > 0 && <> · <span className="font-medium">{importResult.contentSkipped}</span> kept existing</>}
+                      {" · "}Descriptions: <span className="font-medium">{importResult.descriptionsImported ?? 0}</span> imported
+                      {" · "}<span className="font-medium">{importResult.resourcesImported ?? 0}</span> resources added
+                    </p>
+                    {(importResult.transcriptionsQueued ?? 0) > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium">{importResult.transcriptionsQueued}</span> fresh transcript{importResult.transcriptionsQueued === 1 ? "" : "s"} and chapters queued automatically
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             </div>

@@ -83,3 +83,11 @@ Vault imports use the first real ClickFunnels module beneath the structural cour
 **Why:** ClickFunnels exposes a synthetic root such as “Primary module”; using it would collapse all replays into one meaningless category instead of VAULT, LAUNCH, CORE, or TOOLS.
 
 **How to apply:** Mark structural roots in the imported tree, skip them during category inheritance, assign the first real module title, and preserve categories admins already edited.
+
+## Import-only fresh transcript automation
+
+Vault imports automatically queue fresh Vimeo audio transcription and chapter generation; they do not use existing Vimeo caption tracks for this automatic path.
+
+**Why:** Fresh audio transcription is preferred for accuracy, but processing many imported videos inside the import request would cause timeouts and quota bursts.
+
+**How to apply:** Save imported replay fields first, queue only imported Vimeo replays in persistent database state, process at most two videos and three Gemini segments concurrently, retry transient failures, and leave manual transcript controls unchanged for non-import workflows.

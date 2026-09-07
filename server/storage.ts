@@ -7125,6 +7125,12 @@ export async function runMigrations(): Promise<void> {
         transcript_cues JSONB,
         transcript_chapters JSONB,
         transcript_chapters_generated_at TIMESTAMP,
+        transcript_processing_status VARCHAR(20) NOT NULL DEFAULT 'idle',
+        transcript_processing_error TEXT,
+        transcript_processing_attempts INTEGER NOT NULL DEFAULT 0,
+        transcript_processing_queued_at TIMESTAMP,
+        transcript_processing_started_at TIMESTAMP,
+        transcript_processing_next_attempt_at TIMESTAMP,
         duration_minutes INTEGER,
         category TEXT,
         tags JSONB DEFAULT '[]'::jsonb,
@@ -7136,6 +7142,23 @@ export async function runMigrations(): Promise<void> {
       )
     `);
     await pool.query(`ALTER TABLE training_replays ADD COLUMN IF NOT EXISTS transcript_chapters_generated_at TIMESTAMP`);
+    await pool.query(`ALTER TABLE training_replays ADD COLUMN IF NOT EXISTS transcript_processing_status VARCHAR(20) NOT NULL DEFAULT 'idle'`);
+    await pool.query(`ALTER TABLE training_replays ADD COLUMN IF NOT EXISTS transcript_processing_error TEXT`);
+    await pool.query(`ALTER TABLE training_replays ADD COLUMN IF NOT EXISTS transcript_processing_attempts INTEGER NOT NULL DEFAULT 0`);
+    await pool.query(`ALTER TABLE training_replays ADD COLUMN IF NOT EXISTS transcript_processing_queued_at TIMESTAMP`);
+    await pool.query(`ALTER TABLE training_replays ADD COLUMN IF NOT EXISTS transcript_processing_started_at TIMESTAMP`);
+    await pool.query(`ALTER TABLE training_replays ADD COLUMN IF NOT EXISTS transcript_processing_next_attempt_at TIMESTAMP`);
+    await pool.query(`
+      UPDATE training_replays
+      SET transcript_processing_status = 'queued',
+          transcript_processing_started_at = NULL,
+          transcript_processing_next_attempt_at = CURRENT_TIMESTAMP
+      WHERE transcript_processing_status = 'processing'
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_training_replays_transcript_queue
+      ON training_replays(transcript_processing_status, transcript_processing_next_attempt_at, transcript_processing_queued_at)
+    `);
     await pool.query(`
       UPDATE training_replays
       SET transcript_chapters_generated_at = updated_at

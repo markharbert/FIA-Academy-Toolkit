@@ -9,6 +9,7 @@ import { startNotificationScheduler } from "./notificationScheduler";
 import { configureEmailSender } from "./email-sendgrid";
 import { startYouTubeAnalyticsScheduler } from "./youtubeAnalyticsScheduler";
 import { startCfMembershipReconciliationScheduler } from "./cfMembershipReconciliation";
+import { startTrainingReplayTranscriptWorker } from "./trainingReplayTranscriptWorker";
 import { db, pool } from "./db";
 import { sql, eq, and } from "drizzle-orm";
 import { teleprompterScripts, teleprompterRecordings } from "@shared/schema";
@@ -1116,6 +1117,7 @@ async function runStartupMigrations() {
           startNotificationScheduler();
           startYouTubeAnalyticsScheduler();
           startCfMembershipReconciliationScheduler();
+          startTrainingReplayTranscriptWorker();
 
           // Backfill DMO streak cache for existing users who have never had it
           // computed. It stays detached so it cannot block a healthy server.
