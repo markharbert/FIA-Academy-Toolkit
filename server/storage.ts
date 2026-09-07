@@ -103,6 +103,7 @@ type CourseNavigationModule = Pick<
 export type TrainingReplayImportRow = {
   externalId: string;
   title: string;
+  category: string | null;
   videoUrl: string | null;
   content: string | null;
   description: string | null;
@@ -6587,6 +6588,7 @@ export class DatabaseStorage implements IStorage {
           const videoUrl = current.videoUrl || row.videoUrl || null;
           const content = current.content || row.content || null;
           const description = current.description || row.description || null;
+          const category = current.category || row.category || null;
           const thumbnailUrl = current.thumbnailUrl || row.thumbnailUrl || null;
           await tx.update(trainingReplays).set({
             title: row.title,
@@ -6594,6 +6596,7 @@ export class DatabaseStorage implements IStorage {
             videoUrl,
             content,
             description,
+            category,
             thumbnailUrl,
             sortOrder: baseIndex + imported.length,
             updatedAt: new Date(),
@@ -6619,11 +6622,11 @@ export class DatabaseStorage implements IStorage {
             title: row.title,
             slug,
             description: row.description,
+            category: row.category,
             videoUrl: row.videoUrl || null,
             thumbnailUrl: row.thumbnailUrl,
             content: row.content,
             durationMinutes: null,
-            category: null,
             tags: [],
             status: "draft",
             sortOrder: baseIndex + imported.length,

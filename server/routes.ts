@@ -2176,6 +2176,7 @@ export async function registerRoutes(
   type TrainingReplayImportRow = {
     externalId: string;
     title: string;
+    category: string | null;
     videoUrl: string | null;
     content: string | null;
     description: string | null;
@@ -2197,7 +2198,7 @@ export async function registerRoutes(
     const seenIds = new Set<string>();
     let lessonNumber = 0;
 
-    const visit = (value: unknown) => {
+    const visit = (value: unknown, topLevelCategory: string | null) => {
       if (!value || typeof value !== "object") {
         errors.push({ row: lessonNumber || 1, message: "Each tree item must be an object." });
         return;
@@ -2227,7 +2228,9 @@ export async function registerRoutes(
           errors.push({ row: lessonNumber || 1, message: `Section "${cfId}" has no valid children list.` });
           return;
         }
-        node.children.forEach(visit);
+        const moduleTitle = typeof node.title === "string" ? node.title.trim() : "";
+        const category = topLevelCategory || moduleTitle || null;
+        node.children.forEach((child) => visit(child, category));
         return;
       }
 
@@ -2274,10 +2277,19 @@ export async function registerRoutes(
             }
           })
         : [];
-      rows.push({ externalId: `cf-lesson-${cfId}`, title, videoUrl, content, description, thumbnailUrl, resources });
+      rows.push({
+        externalId: `cf-lesson-${cfId}`,
+        title,
+        category: topLevelCategory,
+        videoUrl,
+        content,
+        description,
+        thumbnailUrl,
+        resources,
+      });
     };
 
-    nodes.forEach(visit);
+    nodes.forEach((node) => visit(node, null));
     if (rows.length > 500) {
       errors.push({ row: 0, message: "Select no more than 500 lessons per import." });
     }
