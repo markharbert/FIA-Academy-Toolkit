@@ -26,6 +26,7 @@ test("extracts lesson content, resources, images, and a YouTube embed", () => {
   const recovered = extractCfLessonContent(`
     <main class="lesson-content">
       <h2>Replay notes</h2>
+      <meta name="description" content="A focused replay about building a practical weekly plan.">
       <p>These are useful notes for the replay lesson.</p>
       <iframe src="https://www.youtube.com/embed/abcDEF123"></iframe>
       <img src="/images/replay.jpg" alt="Replay cover">
@@ -34,6 +35,7 @@ test("extracts lesson content, resources, images, and a YouTube embed", () => {
     </main>
   `, "https://courses.example.com/replays/example");
   assert.equal(recovered.videoUrl, "https://www.youtube.com/embed/abcDEF123");
+  assert.equal(recovered.description, "A focused replay about building a practical weekly plan.");
   assert.equal(recovered.thumbnailUrl, "https://courses.example.com/images/replay.jpg");
   assert.deepEqual(recovered.resources, [{
     name: "Download workbook",
@@ -43,6 +45,32 @@ test("extracts lesson content, resources, images, and a YouTube embed", () => {
   assert.match(recovered.content ?? "", /Replay notes/);
   assert.doesNotMatch(recovered.content ?? "", /script|alert/);
   assert.equal(recovered.status, "recovered");
+});
+
+test("replaces the generic ClickFunnels site description with replay-specific page text", () => {
+  const recovered = extractCfLessonContent(`
+    <head>
+      <meta name="description" content="The Fearless Marketing Lab is your go-to hub for proven trainings and tools to grow your brand, generate leads, and boost sales—without the overwhelm.">
+    </head>
+    <main class="lesson-content"><p>Replay-specific lesson notes belong here.</p></main>
+  `);
+  assert.equal(recovered.description, "Replay-specific lesson notes belong here.");
+});
+
+test("uses a replay-specific introductory paragraph when page metadata is generic", () => {
+  const recovered = extractCfLessonContent(`
+    <head>
+      <meta name="description" content="The Fearless Marketing Lab is your go-to hub for proven trainings and tools.">
+    </head>
+    <main class="lesson-content">
+      <h1>Replay title</h1>
+      <p>Learn how to build a practical weekly plan that keeps the most important work moving.</p>
+    </main>
+  `);
+  assert.equal(
+    recovered.description,
+    "Learn how to build a practical weekly plan that keeps the most important work moving.",
+  );
 });
 
 test("recognizes Wistia and direct HTML5 video URLs", () => {

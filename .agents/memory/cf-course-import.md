@@ -59,3 +59,11 @@ Load the course outline from the ClickFunnels API without crawling lesson pages;
 **Why:** The course has hundreds of server-generated lesson pages, each taking several seconds. Crawling every page before showing the selection screen made a 2–3 second outline load take minutes.
 
 **How to apply:** Keep structure discovery and page recovery as separate phases, reuse one short-lived SSO cookie, and fetch selected pages concurrently without loading page assets.
+
+## Replay prefill source priority
+
+Recovered ClickFunnels data must populate the editable Vault replay record, not remain only in the import preview.
+
+**Why:** ClickFunnels often uses one generic site meta description across lessons, while replay-specific text may exist in the lesson body or Vimeo metadata.
+
+**How to apply:** Persist video URL, body content, description, thumbnail, and resources; prefer specific page metadata, then visible intro text, then Vimeo metadata, and never overwrite admin edits.

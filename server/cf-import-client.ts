@@ -14,6 +14,7 @@ import {
   generateCfSsoUrl,
 } from "./clickfunnels";
 import { CHROMIUM_LAUNCH_ARGS, getChromiumPath } from "./puppeteerCapture";
+import { extractVimeoVideoId, getVimeoVideoMetadata } from "./vimeo";
 
 const baseUrl = () => `https://${CF_WORKSPACE_DOMAIN}/api/v2`;
 const authHeaders = () => ({
@@ -236,13 +237,17 @@ export function extractCfLessonContent(
   status: CfContentRecoveryStatus;
 } {
   if (typeof source !== "string" || !source.trim()) {
-    return { content: null, videoUrl: null, thumbnailUrl: null, resources: [], status: "unavailable" };
+    return { content: null, videoUrl: null, description: null, thumbnailUrl: null, resources: [], status: "unavailable" };
   }
   const document = new JSDOM(source).window.document;
-  const description = cleanText(
+  const rawDescription = cleanText(
     document.querySelector('meta[name="description"], meta[property="og:description"]')?.getAttribute("content")
       || "",
-  ).slice(0, 2_000) || null;
+  ).slice(0, 2_000);
+  const metadataDescription = rawDescription
+    && !/fearless marketing lab is your go-to hub/i.test(rawDescription)
+    ? rawDescription
+    : null;
   const explicitRoot = document.querySelector(
     "[data-lesson-content], .course-lesson-content, .lesson-content, article, main",
   );
@@ -255,6 +260,14 @@ export function extractCfLessonContent(
   // navigation and the lesson sidebar are not imported as replay content.
   const mediaRoot = mediaElement?.closest(".containerInnerV2, .containerInner");
   const root = explicitRoot ?? mediaRoot ?? document.body;
+  const visibleDescription = [...root.querySelectorAll("p")]
+    .map((paragraph) => cleanText(paragraph.textContent))
+    .find((text) =>
+      text.length >= 30
+      && !/click here to|download|fearless marketing lab is your go-to hub/i.test(text),
+    )
+    ?.slice(0, 2_000) ?? null;
+  const description = metadataDescription ?? visibleDescription;
   root.querySelectorAll("script,style,noscript,nav,header,footer,form").forEach((node) => node.remove());
 
   const videoUrl = extractVideoUrl(source);
@@ -446,6 +459,16 @@ async function recoverLessonContent(
   lesson.content = recovered.content;
   lesson.description = recovered.description;
   lesson.thumbnailUrl = recovered.thumbnailUrl;
+  const vimeoId = lesson.videoUrl ? extractVimeoVideoId(lesson.videoUrl) : null;
+  if (vimeoId && (!lesson.description || !lesson.thumbnailUrl)) {
+    try {
+      const metadata = await getVimeoVideoMetadata(vimeoId);
+      lesson.description ||= metadata.description;
+      lesson.thumbnailUrl ||= metadata.thumbnailUrl;
+    } catch {
+      // Page recovery remains useful even when Vimeo metadata is unavailable.
+    }
+  }
   lesson.resources = recovered.resources;
   lesson.recoveryStatus = recovered.status;
 }

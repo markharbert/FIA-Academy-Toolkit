@@ -66,6 +66,13 @@ export interface VimeoVideo {
   durationMinutes?: number;
 }
 
+export interface VimeoVideoMetadata {
+  name: string | null;
+  description: string | null;
+  thumbnailUrl: string | null;
+  durationMinutes: number | null;
+}
+
 export interface VimeoVideoPage {
   videos: VimeoVideo[];
   hasMore: boolean;
@@ -279,6 +286,27 @@ export async function getVimeoVideoThumbnail(videoId: string): Promise<string | 
   const pictures = Array.isArray(payload?.pictures?.sizes) ? payload.pictures.sizes : [];
   const thumbnail = pictures.at(-1)?.link;
   return typeof thumbnail === "string" && thumbnail ? thumbnail : null;
+}
+
+export async function getVimeoVideoMetadata(videoId: string): Promise<VimeoVideoMetadata> {
+  if (!VIMEO_ACCESS_TOKEN) throw new Error("Vimeo access is not configured");
+  const payload = await cachedVimeoValue(
+    `video-metadata:${videoId}`,
+    () => vimeoGet(`/videos/${encodeURIComponent(videoId)}?fields=name,description,duration,pictures`),
+  );
+  const pictures = Array.isArray(payload?.pictures?.sizes) ? payload.pictures.sizes : [];
+  const thumbnail = pictures.at(-1)?.link;
+  const durationSeconds = Number(payload?.duration);
+  return {
+    name: typeof payload?.name === "string" && payload.name.trim() ? payload.name.trim() : null,
+    description: typeof payload?.description === "string" && payload.description.trim()
+      ? payload.description.trim().slice(0, 2_000)
+      : null,
+    thumbnailUrl: typeof thumbnail === "string" && thumbnail ? thumbnail : null,
+    durationMinutes: Number.isFinite(durationSeconds) && durationSeconds > 0
+      ? Math.max(1, Math.ceil(durationSeconds / 60))
+      : null,
+  };
 }
 
 export async function getVimeoVideoDownload(videoId: string): Promise<VimeoVideoDownload> {
