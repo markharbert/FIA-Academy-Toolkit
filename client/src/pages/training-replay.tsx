@@ -17,12 +17,15 @@ type Chapter = { startSeconds: number; title: string };
 type Cue = { startSeconds: number; text: string };
 type ReplayComment = {
   id: string;
+  replayId: string;
   userId: string;
+  parentCommentId?: string | null;
   body: string;
   authorName: string;
   authorAvatarUrl?: string | null;
   createdAt: string;
   updatedAt: string;
+  canEdit?: boolean;
 };
 type Replay = {
   id: string;
@@ -117,6 +120,10 @@ export default function TrainingReplayPage() {
     refetchOnWindowFocus: true,
   });
   const [commentBody, setCommentBody] = useState("");
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [replyBody, setReplyBody] = useState("");
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editBody, setEditBody] = useState("");
   const completionMutation = useMutation({
     mutationFn: (completed: boolean) => api(`/api/training/replays/${slug}/progress`, {
       method: "POST",
@@ -143,19 +150,44 @@ export default function TrainingReplayPage() {
     },
   });
   const commentMutation = useMutation({
-    mutationFn: (): Promise<ReplayComment> => api(`/api/training/replays/${slug}/comments`, {
+    mutationFn: (input: { body: string; parentCommentId?: string | null }): Promise<ReplayComment> => api(`/api/training/replays/${slug}/comments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ body: commentBody }),
+      body: JSON.stringify(input),
     }),
-    onSuccess: (comment) => {
+    onSuccess: (comment, input) => {
       queryClient.setQueryData<Replay>(["/api/training/replays", slug], (current) =>
         current ? { ...current, comments: [...(current.comments || []), comment] } : current,
       );
-      setCommentBody("");
+      if (input.parentCommentId) {
+        setReplyBody("");
+        setReplyingTo(null);
+      } else {
+        setCommentBody("");
+      }
     },
     onError: (error: Error) => {
       toast({ title: "Couldn’t post comment", description: error.message, variant: "destructive" });
+    },
+  });
+  const editCommentMutation = useMutation({
+    mutationFn: (input: { commentId: string; body: string }): Promise<ReplayComment> =>
+      api(`/api/training/replays/${slug}/comments/${input.commentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: input.body }),
+      }),
+    onSuccess: (comment) => {
+      queryClient.setQueryData<Replay>(["/api/training/replays", slug], (current) =>
+        current
+          ? { ...current, comments: (current.comments || []).map((item) => item.id === comment.id ? comment : item) }
+          : current,
+      );
+      setEditingCommentId(null);
+      setEditBody("");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Couldn’t edit comment", description: error.message, variant: "destructive" });
     },
   });
   const [transcriptOpen, setTranscriptOpen] = useState(false);
@@ -245,6 +277,10 @@ export default function TrainingReplayPage() {
     setTranscriptTab("chapters");
     setVideoCurrentTime(0);
     setCommentBody("");
+    setReplyingTo(null);
+    setReplyBody("");
+    setEditingCommentId(null);
+    setEditBody("");
     lastScrolledWordRef.current = null;
   }, [slug]);
 

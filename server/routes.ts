@@ -15077,7 +15077,10 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       res.json({
         ...replay,
         resources,
-        comments,
+        comments: comments.map((comment) => ({
+          ...comment,
+          canEdit: comment.userId === userId,
+        })),
         completed: !!progress?.completedAt,
         completedAt: progress?.completedAt ?? null,
       });
@@ -15101,10 +15104,34 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       );
       const comments = await storage.getTrainingReplayComments(replay.id);
       const comment = comments.find((item) => item.id === created.id);
-      res.status(201).json(comment || created);
+      res.status(201).json(comment ? { ...comment, canEdit: true } : { ...created, canEdit: true });
     } catch (error) {
       console.error("[training replay comment]", error);
       res.status(500).json({ message: "Failed to post comment." });
+    }
+  });
+  app.patch("/api/training/replays/:slug/comments/:commentId", requireAdmin, async (req, res) => {
+    const parsed = z.object({
+      body: z.string().trim().min(1, "Comment cannot be empty.").max(2_000, "Comments must be 2,000 characters or fewer."),
+    }).safeParse(req.body);
+    if (!parsed.success) return replayValidationError(res, parsed.error);
+    try {
+      const userId = req.session.userId as string;
+      const replay = await storage.getPublishedTrainingReplayBySlug(req.params.slug);
+      if (!replay) return res.status(404).json({ message: "Not found" });
+      const updated = await storage.updateTrainingReplayComment(
+        replay.id,
+        req.params.commentId,
+        userId,
+        parsed.data.body,
+      );
+      if (!updated) return res.status(404).json({ message: "Comment not found." });
+      const comments = await storage.getTrainingReplayComments(replay.id);
+      const comment = comments.find((item) => item.id === updated.id);
+      res.json(comment ? { ...comment, canEdit: true } : { ...updated, canEdit: true });
+    } catch (error) {
+      console.error("[training replay comment edit]", error);
+      res.status(500).json({ message: "Failed to edit comment." });
     }
   });
   app.post("/api/training/replays/:slug/progress", requireAdmin, async (req, res) => {

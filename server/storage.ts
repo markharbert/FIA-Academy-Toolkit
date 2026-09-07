@@ -868,6 +868,12 @@ export interface IStorage {
     body: string,
     parentCommentId?: string | null,
   ): Promise<TrainingReplayComment>;
+  updateTrainingReplayComment(
+    replayId: string,
+    commentId: string,
+    userId: string,
+    body: string,
+  ): Promise<TrainingReplayComment | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -6765,6 +6771,24 @@ export class DatabaseStorage implements IStorage {
       body,
     }).returning();
     return row;
+  }
+
+  async updateTrainingReplayComment(
+    replayId: string,
+    commentId: string,
+    userId: string,
+    body: string,
+  ): Promise<TrainingReplayComment | undefined> {
+    const [row] = await db
+      .update(trainingReplayComments)
+      .set({ body, updatedAt: new Date() })
+      .where(and(
+        eq(trainingReplayComments.id, commentId),
+        eq(trainingReplayComments.replayId, replayId),
+        eq(trainingReplayComments.userId, userId),
+      ))
+      .returning();
+    return row || undefined;
   }
 }
 
