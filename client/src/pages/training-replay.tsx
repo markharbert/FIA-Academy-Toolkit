@@ -290,6 +290,133 @@ export default function TrainingReplayPage() {
     vimeoPlayerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
+  const commentsByParent = new Map<string, ReplayComment[]>();
+  const rootComments: ReplayComment[] = [];
+  for (const comment of replay?.comments ?? []) {
+    if (comment.parentCommentId) {
+      const children = commentsByParent.get(comment.parentCommentId) ?? [];
+      children.push(comment);
+      commentsByParent.set(comment.parentCommentId, children);
+    } else {
+      rootComments.push(comment);
+    }
+  }
+
+  const renderComment = (comment: ReplayComment, depth = 0): JSX.Element => {
+    const children = commentsByParent.get(comment.id) ?? [];
+    const isEditing = editingCommentId === comment.id;
+    const isReplying = replyingTo === comment.id;
+    const wasEdited = new Date(comment.updatedAt).getTime() > new Date(comment.createdAt).getTime() + 1000;
+
+    return (
+      <div key={comment.id} className={cn(depth > 0 && "ml-4 border-l-2 border-violet-100 pl-4 sm:ml-8")}>
+        <article className="flex gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <Avatar className="h-10 w-10 shrink-0">
+            {comment.authorAvatarUrl && <AvatarImage src={comment.authorAvatarUrl} alt="" />}
+            <AvatarFallback className="bg-violet-700 text-sm font-extrabold uppercase text-white">
+              {comment.authorName.trim().charAt(0) || "M"}
+            </AvatarFallback>
+          </Avatar>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <h3 className="font-bold text-slate-950">{comment.authorName}</h3>
+              <time className="text-xs font-medium text-slate-400" dateTime={comment.createdAt}>
+                {formatCommentDate(comment.createdAt)}
+              </time>
+            </div>
+
+            {isEditing ? (
+              <div className="mt-3">
+                <Textarea
+                  value={editBody}
+                  onChange={(event) => setEditBody(event.target.value)}
+                  maxLength={2000}
+                  rows={3}
+                  autoFocus
+                  className="resize-y border-slate-200 bg-slate-50 text-slate-900 focus-visible:ring-violet-600"
+                  disabled={editCommentMutation.isPending}
+                />
+                <div className="mt-2 flex justify-end gap-2">
+                  <Button type="button" size="sm" variant="ghost" onClick={() => { setEditingCommentId(null); setEditBody(""); }}>
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="bg-violet-700 text-white hover:bg-violet-800"
+                    disabled={!editBody.trim() || editCommentMutation.isPending}
+                    onClick={() => editCommentMutation.mutate({ commentId: comment.id, body: editBody })}
+                  >
+                    {editCommentMutation.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+                    Save Edit
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{comment.body}</p>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    className="text-xs font-bold text-violet-700 hover:text-violet-900"
+                    onClick={() => { setReplyingTo(comment.id); setReplyBody(""); setEditingCommentId(null); }}
+                  >
+                    Reply
+                  </button>
+                  {comment.canEdit && (
+                    <button
+                      type="button"
+                      className="text-xs font-bold text-slate-500 hover:text-slate-800"
+                      onClick={() => { setEditingCommentId(comment.id); setEditBody(comment.body); setReplyingTo(null); }}
+                    >
+                      Edit
+                    </button>
+                  )}
+                  {wasEdited && <span className="text-xs text-slate-400">Edited</span>}
+                </div>
+              </>
+            )}
+
+            {isReplying && !isEditing && (
+              <div className="mt-4 rounded-xl border border-violet-100 bg-violet-50/50 p-3">
+                <Textarea
+                  value={replyBody}
+                  onChange={(event) => setReplyBody(event.target.value)}
+                  maxLength={2000}
+                  rows={3}
+                  autoFocus
+                  placeholder={`Reply to ${comment.authorName}…`}
+                  className="resize-y border-violet-100 bg-white text-slate-900 focus-visible:ring-violet-600"
+                  disabled={commentMutation.isPending}
+                />
+                <div className="mt-2 flex justify-end gap-2">
+                  <Button type="button" size="sm" variant="ghost" onClick={() => { setReplyingTo(null); setReplyBody(""); }}>
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="bg-violet-700 text-white hover:bg-violet-800"
+                    disabled={!replyBody.trim() || commentMutation.isPending}
+                    onClick={() => commentMutation.mutate({ body: replyBody, parentCommentId: comment.id })}
+                  >
+                    {commentMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-2 h-3.5 w-3.5" />}
+                    Post Reply
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </article>
+        {children.length > 0 && (
+          <div className="mt-4 space-y-4">
+            {children.map((child) => renderComment(child, Math.min(depth + 1, 4)))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   if (isLoading) {
     return (
       <main className="mx-auto max-w-[1400px] space-y-5 px-4 py-8 sm:px-8">
@@ -542,7 +669,7 @@ export default function TrainingReplayPage() {
               onSubmit={(event) => {
                 event.preventDefault();
                 if (!commentBody.trim() || commentMutation.isPending) return;
-                commentMutation.mutate();
+                commentMutation.mutate({ body: commentBody });
               }}
             >
               <Textarea
@@ -568,26 +695,8 @@ export default function TrainingReplayPage() {
             </form>
 
             <div className="mt-6 space-y-4">
-              {(replay.comments || []).length ? (
-                replay.comments!.map((comment) => (
-                  <article key={comment.id} className="flex gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-                    <Avatar className="h-10 w-10 shrink-0">
-                      {comment.authorAvatarUrl && <AvatarImage src={comment.authorAvatarUrl} alt="" />}
-                      <AvatarFallback className="bg-violet-700 text-sm font-extrabold uppercase text-white">
-                        {comment.authorName.trim().charAt(0) || "M"}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                        <h3 className="font-bold text-slate-950">{comment.authorName}</h3>
-                        <time className="text-xs font-medium text-slate-400" dateTime={comment.createdAt}>
-                          {formatCommentDate(comment.createdAt)}
-                        </time>
-                      </div>
-                      <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{comment.body}</p>
-                    </div>
-                  </article>
-                ))
+              {rootComments.length ? (
+                rootComments.map((comment) => renderComment(comment))
               ) : (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center">
                   <MessageCircle className="mx-auto h-7 w-7 text-slate-300" />
