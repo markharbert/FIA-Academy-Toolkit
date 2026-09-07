@@ -78,11 +78,11 @@ Direct ClickFunnels lesson-page fetches must send the authenticated browser's co
 
 ## Vault category inheritance
 
-Vault imports use the first real ClickFunnels module beneath the structural course wrapper as each replay's category.
+Vault imports use the lesson's immediate containing ClickFunnels module as each replay's category, including nested submodules.
 
-**Why:** ClickFunnels exposes a synthetic root such as “Primary module”; using it would collapse all replays into one meaningless category instead of VAULT, LAUNCH, CORE, or TOOLS.
+**Why:** A nested lesson belongs to its closest module, not the top-level branch; synthetic roots such as “Primary module” are containers only and should never become categories.
 
-**How to apply:** Mark structural roots in the imported tree, skip them during category inheritance, assign the first real module title, and preserve categories admins already edited.
+**How to apply:** When descending the selected tree, replace the inherited category at every real module, pass no category through structural roots, and preserve categories admins already edited.
 
 ## Import-only fresh transcript automation
 

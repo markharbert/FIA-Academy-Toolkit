@@ -2199,7 +2199,7 @@ export async function registerRoutes(
     const seenIds = new Set<string>();
     let lessonNumber = 0;
 
-    const visit = (value: unknown, topLevelCategory: string | null) => {
+    const visit = (value: unknown, parentModuleCategory: string | null) => {
       if (!value || typeof value !== "object") {
         errors.push({ row: lessonNumber || 1, message: "Each tree item must be an object." });
         return;
@@ -2230,9 +2230,11 @@ export async function registerRoutes(
           return;
         }
         const moduleTitle = typeof node.title === "string" ? node.title.trim() : "";
-        const category = topLevelCategory
-          || (node.isStructuralRoot === true ? null : moduleTitle || null);
-        node.children.forEach((child) => visit(child, category));
+        // A Vault category is the lesson's immediate containing module. Do not
+        // carry an ancestor category through nested ClickFunnels submodules.
+        // Structural roots (for example "Primary module") are containers only.
+        const childCategory = node.isStructuralRoot === true ? null : moduleTitle || null;
+        node.children.forEach((child) => visit(child, childCategory));
         return;
       }
 
@@ -2282,7 +2284,7 @@ export async function registerRoutes(
       rows.push({
         externalId: `cf-lesson-${cfId}`,
         title,
-        category: topLevelCategory,
+        category: parentModuleCategory,
         videoUrl,
         content,
         description,
