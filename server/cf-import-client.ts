@@ -92,6 +92,7 @@ export interface CfTreeNode {
   type: "module" | "lesson";
   cfId: string;
   title: string;
+  isStructuralRoot?: boolean;
   published: boolean;
   sortOrder: number;
   videoUrl?: string;
@@ -755,6 +756,7 @@ function buildCfTree(
       type: "module",
       cfId: section.id,
       title: section.title,
+      isStructuralRoot: !section.parent_id || !sectionIds.has(section.parent_id),
       published: section.published_at !== null,
       sortOrder: section.sort_order,
       children,

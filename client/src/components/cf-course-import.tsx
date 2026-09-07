@@ -55,6 +55,7 @@ interface CfTreeNode {
   type: "module" | "lesson";
   cfId: string;
   title: string;
+  isStructuralRoot?: boolean;
   published: boolean;
   sortOrder: number;
   videoUrl?: string;

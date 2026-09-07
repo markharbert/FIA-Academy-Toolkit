@@ -75,3 +75,11 @@ Direct ClickFunnels lesson-page fetches must send the authenticated browser's co
 **Why:** Sending only the valid SSO cookie makes the ClickFunnels Cloudflare worker return HTTP 500, which looks like an unavailable lesson and produces an empty import.
 
 **How to apply:** Capture all three values during the SSO browser handoff and preserve them on every concurrent protected-page request.
+
+## Vault category inheritance
+
+Vault imports use the first real ClickFunnels module beneath the structural course wrapper as each replay's category.
+
+**Why:** ClickFunnels exposes a synthetic root such as “Primary module”; using it would collapse all replays into one meaningless category instead of VAULT, LAUNCH, CORE, or TOOLS.
+
+**How to apply:** Mark structural roots in the imported tree, skip them during category inheritance, assign the first real module title, and preserve categories admins already edited.

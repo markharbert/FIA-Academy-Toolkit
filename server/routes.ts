@@ -2229,7 +2229,8 @@ export async function registerRoutes(
           return;
         }
         const moduleTitle = typeof node.title === "string" ? node.title.trim() : "";
-        const category = topLevelCategory || moduleTitle || null;
+        const category = topLevelCategory
+          || (node.isStructuralRoot === true ? null : moduleTitle || null);
         node.children.forEach((child) => visit(child, category));
         return;
       }
