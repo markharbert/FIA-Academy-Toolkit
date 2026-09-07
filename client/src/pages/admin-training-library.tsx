@@ -24,6 +24,8 @@ export default function AdminTrainingLibraryPage() {
   const [category, setCategory] = useState("all");
   const [search, setSearch] = useState("");
   const [remove, setRemove] = useState<Replay | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Replay | null>(null);
+  const [deleteText, setDeleteText] = useState("");
   const { data: allReplays = [], isLoading, isError, refetch } = useQuery<Replay[]>({ queryKey: ["/api/admin/training-replays"], queryFn: () => api("/api/admin/training-replays") });
   const categories = useMemo(() => [...new Set(allReplays.map((replay) => replay.category?.trim()).filter(Boolean) as string[])].sort(), [allReplays]);
   const visible = useMemo(() => {
@@ -43,7 +45,15 @@ export default function AdminTrainingLibraryPage() {
       return api("/api/admin/training-replays/reorder", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderedIds: ordered.map((item) => item.id) }) });
     }, onSuccess: refresh, onError: (error: Error) => toast({ title: "Couldn’t reorder", description: error.message, variant: "destructive" }),
   });
-  const del = useMutation({ mutationFn: (id: string) => api(`/api/admin/training-replays/${id}`, { method: "DELETE" }), onSuccess: () => { setRemove(null); refresh(); }, onError: (error: Error) => toast({ title: "Delete failed", description: error.message, variant: "destructive" }) });
+  const del = useMutation({
+    mutationFn: (id: string) => api(`/api/admin/training-replays/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      setConfirmDelete(null);
+      setDeleteText("");
+      refresh();
+    },
+    onError: (error: Error) => toast({ title: "Delete failed", description: error.message, variant: "destructive" }),
+  });
   const published = allReplays.filter((replay) => replay.status === "published").length;
 
   return <main className="min-h-[calc(100dvh-3rem)] bg-[radial-gradient(circle_at_18%_0%,hsl(254_74%_94%),transparent_28rem)] px-4 py-6 sm:px-8">
@@ -70,6 +80,73 @@ export default function AdminTrainingLibraryPage() {
           <div className="flex shrink-0 items-start gap-0.5"><Button variant="ghost" size="icon" aria-label={`Edit ${replay.title}`} onClick={() => setLocation(`/admin/training-library/${replay.id}`)}><Pencil className="h-4 w-4" /></Button><Button variant="ghost" size="icon" aria-label={replay.status === "published" ? "Unpublish replay" : "Publish replay"} onClick={() => update.mutate({ id: replay.id, body: { status: replay.status === "published" ? "draft" : "published" } })}>{replay.status === "published" ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</Button><Button variant="ghost" size="icon" className="text-destructive" aria-label={`Delete ${replay.title}`} onClick={() => setRemove(replay)}><Trash2 className="h-4 w-4" /></Button></div>
         </article>)}</div>}
     </div>
-    <AlertDialog open={!!remove} onOpenChange={(open) => !open && setRemove(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete replay?</AlertDialogTitle><AlertDialogDescription>This permanently removes “{remove?.title}”, including its resources and transcript.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction className="bg-destructive" onClick={() => remove && del.mutate(remove.id)}>Delete replay</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+    <AlertDialog open={!!remove} onOpenChange={(open) => !open && setRemove(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete replay?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This permanently removes “{remove?.title}”, including its resources and transcript.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive"
+            onClick={() => {
+              if (!remove) return;
+              setConfirmDelete(remove);
+              setDeleteText("");
+              setRemove(null);
+            }}
+          >
+            Yes, continue
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    <AlertDialog
+      open={!!confirmDelete}
+      onOpenChange={(open) => {
+        if (!open) {
+          setConfirmDelete(null);
+          setDeleteText("");
+        }
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Type DELETE to confirm</AlertDialogTitle>
+          <AlertDialogDescription>
+            This is the final confirmation. Type <strong>DELETE</strong> below to permanently remove “{confirmDelete?.title}”.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <Input
+          value={deleteText}
+          onChange={(event) => setDeleteText(event.target.value)}
+          placeholder="DELETE"
+          autoFocus
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && deleteText === "DELETE" && confirmDelete && !del.isPending) {
+              del.mutate(confirmDelete.id);
+            }
+          }}
+        />
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={del.isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive"
+            disabled={deleteText !== "DELETE" || del.isPending}
+            onClick={(event) => {
+              event.preventDefault();
+              if (confirmDelete && deleteText === "DELETE" && !del.isPending) {
+                del.mutate(confirmDelete.id);
+              }
+            }}
+          >
+            {del.isPending ? "Deleting…" : "Delete permanently"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </main>;
 }
