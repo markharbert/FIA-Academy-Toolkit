@@ -72,6 +72,7 @@ export interface CfLesson {
   current_path: string | null;
   videoUrl?: string;
   content?: string | null;
+  description?: string | null;
   thumbnailUrl?: string | null;
   resources?: CfRecoveredResource[];
   recoveryStatus?: CfContentRecoveryStatus;
@@ -230,6 +231,7 @@ export function extractCfLessonContent(
   content: string | null;
   videoUrl: string | null;
   thumbnailUrl: string | null;
+  description: string | null;
   resources: CfRecoveredResource[];
   status: CfContentRecoveryStatus;
 } {
@@ -237,6 +239,10 @@ export function extractCfLessonContent(
     return { content: null, videoUrl: null, thumbnailUrl: null, resources: [], status: "unavailable" };
   }
   const document = new JSDOM(source).window.document;
+  const description = cleanText(
+    document.querySelector('meta[name="description"], meta[property="og:description"]')?.getAttribute("content")
+      || "",
+  ).slice(0, 2_000) || null;
   const explicitRoot = document.querySelector(
     "[data-lesson-content], .course-lesson-content, .lesson-content, article, main",
   );
@@ -291,6 +297,7 @@ export function extractCfLessonContent(
   return {
     content,
     videoUrl,
+    description,
     thumbnailUrl,
     resources: resources.slice(0, 50),
     status: pieces >= 2 ? "recovered" : pieces === 1 ? "partial" : "unavailable",
@@ -437,6 +444,7 @@ async function recoverLessonContent(
   }
   lesson.videoUrl = recovered.videoUrl ?? undefined;
   lesson.content = recovered.content;
+  lesson.description = recovered.description;
   lesson.thumbnailUrl = recovered.thumbnailUrl;
   lesson.resources = recovered.resources;
   lesson.recoveryStatus = recovered.status;
@@ -685,6 +693,7 @@ function buildCfTree(
         sortOrder: l.sort_order,
         videoUrl: l.videoUrl,
         content: l.content,
+        description: l.description,
         thumbnailUrl: l.thumbnailUrl,
         resources: l.resources,
         recoveryStatus: l.recoveryStatus,

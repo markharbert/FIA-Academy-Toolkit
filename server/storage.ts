@@ -105,6 +105,7 @@ export type TrainingReplayImportRow = {
   title: string;
   videoUrl: string | null;
   content: string | null;
+  description: string | null;
   thumbnailUrl: string | null;
   resources: Array<{ name: string; url: string; kind: "link" | "pdf" }>;
 };
@@ -117,6 +118,8 @@ export type TrainingReplayImportResult = {
   videosUnavailable: number;
   contentImported: number;
   contentSkipped: number;
+  descriptionsImported: number;
+  descriptionsSkipped: number;
   resourcesImported: number;
 };
 export type TrainingReplayListItem = Pick<TrainingReplay,
@@ -6528,7 +6531,7 @@ export class DatabaseStorage implements IStorage {
 
   async importTrainingReplays(rows: TrainingReplayImportRow[]): Promise<TrainingReplayImportResult> {
     if (rows.length === 0) {
-      return { created: 0, updated: 0, videosImported: 0, videosSkipped: 0, videosUnavailable: 0, contentImported: 0, contentSkipped: 0, resourcesImported: 0 };
+      return { created: 0, updated: 0, videosImported: 0, videosSkipped: 0, videosUnavailable: 0, contentImported: 0, contentSkipped: 0, descriptionsImported: 0, descriptionsSkipped: 0, resourcesImported: 0 };
     }
 
     return db.transaction(async (tx) => {
@@ -6565,6 +6568,8 @@ export class DatabaseStorage implements IStorage {
       let videosUnavailable = 0;
       let contentImported = 0;
       let contentSkipped = 0;
+      let descriptionsImported = 0;
+      let descriptionsSkipped = 0;
       let resourcesImported = 0;
 
       for (const row of rows) {
@@ -6581,12 +6586,14 @@ export class DatabaseStorage implements IStorage {
         if (current) {
           const videoUrl = current.videoUrl || row.videoUrl || null;
           const content = current.content || row.content || null;
+          const description = current.description || row.description || null;
           const thumbnailUrl = current.thumbnailUrl || row.thumbnailUrl || null;
           await tx.update(trainingReplays).set({
             title: row.title,
             slug,
             videoUrl,
             content,
+            description,
             thumbnailUrl,
             sortOrder: baseIndex + imported.length,
             updatedAt: new Date(),
@@ -6605,11 +6612,13 @@ export class DatabaseStorage implements IStorage {
           else videosUnavailable++;
           if (row.content && current.content) contentSkipped++;
           else if (row.content) contentImported++;
+          if (row.description && current.description) descriptionsSkipped++;
+          else if (row.description) descriptionsImported++;
         } else {
           const [createdReplay] = await tx.insert(trainingReplays).values({
             title: row.title,
             slug,
-            description: null,
+            description: row.description,
             videoUrl: row.videoUrl || null,
             thumbnailUrl: row.thumbnailUrl,
             content: row.content,
@@ -6625,6 +6634,7 @@ export class DatabaseStorage implements IStorage {
           if (row.videoUrl) videosImported++;
           else videosUnavailable++;
           if (row.content) contentImported++;
+          if (row.description) descriptionsImported++;
         }
         const replay = imported[imported.length - 1];
         const existingResources = await tx.select({ url: trainingReplayResources.url })
@@ -6666,7 +6676,7 @@ export class DatabaseStorage implements IStorage {
           .where(eq(trainingReplays.id, replayId));
       }
 
-      return { created, updated, videosImported, videosSkipped, videosUnavailable, contentImported, contentSkipped, resourcesImported };
+      return { created, updated, videosImported, videosSkipped, videosUnavailable, contentImported, contentSkipped, descriptionsImported, descriptionsSkipped, resourcesImported };
     });
   }
 

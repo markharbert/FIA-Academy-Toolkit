@@ -59,6 +59,7 @@ interface CfTreeNode {
   sortOrder: number;
   videoUrl?: string;
   content?: string | null;
+  description?: string | null;
   thumbnailUrl?: string | null;
   resources?: Array<{ name: string; url: string; kind: "link" | "pdf" }>;
   recoveryStatus?: "recovered" | "partial" | "unavailable";
@@ -97,6 +98,8 @@ interface ImportResult {
   videosUnavailable: number;
   contentImported?: number;
   contentSkipped?: number;
+  descriptionsImported?: number;
+  descriptionsSkipped?: number;
   resourcesImported?: number;
 }
 
@@ -1298,6 +1301,7 @@ export function CourseImportCard() {
                   <p className="text-xs text-muted-foreground">
                     Page content: <span className="font-medium">{importResult.contentImported ?? 0}</span> imported
                     {(importResult.contentSkipped ?? 0) > 0 && <> · <span className="font-medium">{importResult.contentSkipped}</span> kept existing</>}
+                    {" · "}Descriptions: <span className="font-medium">{importResult.descriptionsImported ?? 0}</span> imported
                     {" · "}<span className="font-medium">{importResult.resourcesImported ?? 0}</span> resources added
                   </p>
                 )}

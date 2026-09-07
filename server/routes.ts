@@ -2178,6 +2178,7 @@ export async function registerRoutes(
     title: string;
     videoUrl: string | null;
     content: string | null;
+    description: string | null;
     thumbnailUrl: string | null;
     resources: Array<{ name: string; url: string; kind: "link" | "pdf" }>;
   };
@@ -2255,6 +2256,9 @@ export async function registerRoutes(
       }
 
       const content = typeof node.content === "string" && node.content.trim() ? node.content : null;
+      const description = typeof node.description === "string" && node.description.trim()
+        ? node.description.trim().slice(0, 2_000)
+        : null;
       const thumbnailUrl = typeof node.thumbnailUrl === "string" ? node.thumbnailUrl : null;
       const resources = Array.isArray(node.resources)
         ? node.resources.flatMap((resource) => {
@@ -2270,7 +2274,7 @@ export async function registerRoutes(
             }
           })
         : [];
-      rows.push({ externalId: `cf-lesson-${cfId}`, title, videoUrl, content, thumbnailUrl, resources });
+      rows.push({ externalId: `cf-lesson-${cfId}`, title, videoUrl, content, description, thumbnailUrl, resources });
     };
 
     nodes.forEach(visit);
