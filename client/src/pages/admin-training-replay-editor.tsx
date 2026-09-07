@@ -612,10 +612,20 @@ export default function AdminTrainingReplayEditorPage() {
       </div>
       <div className="mt-6 min-w-0">
         <p className="mb-1 text-xs font-bold uppercase tracking-[0.16em] text-violet-700">Academy vault / replay</p>
-        <Input
+        <Textarea
           value={form.title}
           onChange={(e) => change("title", e.target.value)}
-          className="h-auto border-0 bg-transparent px-0 py-1 !text-3xl font-extrabold leading-tight shadow-none focus-visible:ring-0 sm:!text-4xl"
+          onInput={(event) => {
+            event.currentTarget.style.height = "0px";
+            event.currentTarget.style.height = `${event.currentTarget.scrollHeight}px`;
+          }}
+          ref={(element) => {
+            if (!element) return;
+            element.style.height = "0px";
+            element.style.height = `${element.scrollHeight}px`;
+          }}
+          rows={1}
+          className="min-h-0 w-full resize-none overflow-hidden border-0 bg-transparent px-0 py-1 !text-2xl font-extrabold leading-tight shadow-none focus-visible:ring-0 sm:!text-[27px]"
         />
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {form.status === "published"
