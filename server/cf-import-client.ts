@@ -3,6 +3,7 @@
  * Handles cursor pagination (after=<last_id>), concurrency, and retry with backoff.
  */
 
+import { JSDOM } from "jsdom";
 import { CF_WORKSPACE_DOMAIN, CF_API_TOKEN, CF_COURSE_ID, CF_WORKSPACE_ID } from "./clickfunnels";
 
 const baseUrl = () => `https://${CF_WORKSPACE_DOMAIN}/api/v2`;
@@ -44,6 +45,19 @@ export interface CfLesson {
   body: string | null;
   current_path: string | null;
   videoUrl?: string;
+  content?: string | null;
+  thumbnailUrl?: string | null;
+  resources?: CfRecoveredResource[];
+  recoveryStatus?: CfContentRecoveryStatus;
+  sourceUrl?: string | null;
+}
+
+export type CfContentRecoveryStatus = "recovered" | "partial" | "unavailable";
+
+export interface CfRecoveredResource {
+  name: string;
+  url: string;
+  kind: "link" | "pdf";
 }
 
 export interface CfTreeNode {
@@ -53,6 +67,11 @@ export interface CfTreeNode {
   published: boolean;
   sortOrder: number;
   videoUrl?: string;
+  content?: string | null;
+  thumbnailUrl?: string | null;
+  resources?: CfRecoveredResource[];
+  recoveryStatus?: CfContentRecoveryStatus;
+  sourceUrl?: string | null;
   children: CfTreeNode[];
 }
 
@@ -64,6 +83,9 @@ export interface CfCourseStructure {
   totalLessons: number;
   videosFound: number;
   videosUnavailable: number;
+  contentRecovered: number;
+  contentPartial: number;
+  contentUnavailable: number;
 }
 
 // ─── Core fetch with retry on 429 / 5xx ─────────────────────────────────────
@@ -109,15 +131,144 @@ export function extractVimeoUrl(content: unknown): string | null {
   return `https://player.vimeo.com/video/${videoId}${query}`;
 }
 
-function lessonPageUrl(courseId: string, currentPath: string): URL | null {
+export function extractVideoUrl(content: unknown): string | null {
+  if (typeof content !== "string" || !content) return null;
+  const normalized = content
+    .replace(/\\u002F/gi, "/")
+    .replace(/\\\//g, "/")
+    .replace(/&amp;/gi, "&")
+    .replace(/&#x2F;/gi, "/");
+  const vimeo = extractVimeoUrl(normalized);
+  if (vimeo) return vimeo;
+  const candidates = [
+    /(?:https?:)?\/\/(?:www\.)?(?:youtube\.com\/(?:watch\?[^"'<>\s]*v=|embed\/|shorts\/)|youtu\.be\/)[A-Za-z0-9_-]{6,}(?:\?[^"'<>\s\\]*)?/i,
+    /(?:https?:)?\/\/(?:fast\.)?wistia\.(?:net|com)\/(?:embed\/iframe\/|medias\/)[A-Za-z0-9_-]+(?:\?[^"'<>\s\\]*)?/i,
+    /https?:\/\/[^"'<>\s\\]+\.(?:mp4|m3u8)(?:\?[^"'<>\s\\]*)?/i,
+  ];
+  for (const pattern of candidates) {
+    const match = normalized.match(pattern);
+    if (match) return match[0].startsWith("//") ? `https:${match[0]}` : match[0];
+  }
+  return null;
+}
+
+function safeHttpUrl(value: string | null | undefined, baseUrl?: string): string | null {
+  if (!value) return null;
+  try {
+    const parsed = baseUrl ? new URL(value, baseUrl) : new URL(value);
+    return ["http:", "https:"].includes(parsed.protocol) ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function cleanText(value: string | null | undefined): string {
+  return (value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function isLikelyDownload(url: URL, anchor: HTMLAnchorElement): boolean {
+  return anchor.hasAttribute("download")
+    || /\.(?:pdf|docx?|xlsx?|pptx?|zip|csv|txt)(?:$|\?)/i.test(url.toString())
+    || /download|worksheet|workbook|guide|resource|template/i.test(cleanText(anchor.textContent));
+}
+
+function resourceName(anchor: HTMLAnchorElement, url: URL): string {
+  const label = cleanText(anchor.textContent);
+  if (label && label.length <= 160) return label;
+  return decodeURIComponent(url.pathname.split("/").filter(Boolean).pop() ?? "") || url.hostname;
+}
+
+function sanitizeRecoveredElement(element: Element, baseUrl?: string) {
+  for (const attribute of [...element.attributes]) {
+    const name = attribute.name.toLowerCase();
+    if (name.startsWith("on") || ["id", "class", "style", "srcset", "data-src"].includes(name)) {
+      element.removeAttribute(attribute.name);
+    }
+  }
+  for (const name of ["href", "src"]) {
+    if (!element.hasAttribute(name)) continue;
+    const safe = safeHttpUrl(element.getAttribute(name), baseUrl);
+    if (safe) element.setAttribute(name, safe);
+    else element.removeAttribute(name);
+  }
+  if (element.tagName === "A" && element.hasAttribute("href")) {
+    element.setAttribute("target", "_blank");
+    element.setAttribute("rel", "noopener noreferrer");
+  }
+}
+
+export function extractCfLessonContent(
+  source: unknown,
+  sourceUrl?: string,
+): {
+  content: string | null;
+  videoUrl: string | null;
+  thumbnailUrl: string | null;
+  resources: CfRecoveredResource[];
+  status: CfContentRecoveryStatus;
+} {
+  if (typeof source !== "string" || !source.trim()) {
+    return { content: null, videoUrl: null, thumbnailUrl: null, resources: [], status: "unavailable" };
+  }
+  const document = new JSDOM(source).window.document;
+  const root = document.querySelector(
+    "[data-lesson-content], .course-lesson-content, .lesson-content, article, main",
+  ) ?? document.body;
+  root.querySelectorAll("script,style,noscript,nav,header,footer,form").forEach((node) => node.remove());
+
+  const videoUrl = extractVideoUrl(source);
+  const thumbnailUrl = [...root.querySelectorAll("img")]
+    .map((image) => safeHttpUrl(image.getAttribute("src") || image.getAttribute("data-src"), sourceUrl))
+    .find((url): url is string => !!url) ?? null;
+  const resources: CfRecoveredResource[] = [];
+  const seen = new Set<string>();
+  root.querySelectorAll("a[href]").forEach((node) => {
+    const anchor = node as HTMLAnchorElement;
+    const href = safeHttpUrl(anchor.getAttribute("href"), sourceUrl);
+    if (!href || href === videoUrl || seen.has(href)) return;
+    const url = new URL(href);
+    if (sourceUrl) {
+      const sourceLocation = new URL(sourceUrl);
+      if (url.origin === sourceLocation.origin && url.pathname === sourceLocation.pathname) return;
+    }
+    seen.add(href);
+    resources.push({
+      name: resourceName(anchor, url),
+      url: href,
+      kind: isLikelyDownload(url, anchor) ? "pdf" : "link",
+    });
+  });
+
+  const allowed = new Set([
+    "P", "BR", "B", "I", "EM", "STRONG", "UL", "OL", "LI", "A",
+    "H1", "H2", "H3", "H4", "BLOCKQUOTE", "CODE", "PRE", "HR", "IMG", "SPAN",
+  ]);
+  root.querySelectorAll("*").forEach((element) => {
+    if (!allowed.has(element.tagName)) {
+      element.replaceWith(...Array.from(element.childNodes));
+      return;
+    }
+    sanitizeRecoveredElement(element, sourceUrl);
+  });
+  const meaningfulText = cleanText(root.textContent);
+  const content = meaningfulText.length >= 20 ? root.innerHTML.trim() : null;
+  const pieces = Number(!!content) + Number(!!videoUrl) + Number(!!thumbnailUrl) + Number(resources.length > 0);
+  return {
+    content,
+    videoUrl,
+    thumbnailUrl,
+    resources: resources.slice(0, 50),
+    status: pieces >= 2 ? "recovered" : pieces === 1 ? "partial" : "unavailable",
+  };
+}
+
+function lessonPageUrl(coursePath: string | null, currentPath: string): URL | null {
   if (!CF_WORKSPACE_DOMAIN || !currentPath) return null;
   try {
     const origin = new URL(`https://${CF_WORKSPACE_DOMAIN}`);
     const path = currentPath.startsWith("/") ? currentPath : `/${currentPath}`;
-    const url = new URL(
-      `/courses/${encodeURIComponent(courseId.toLowerCase())}${path}`,
-      origin,
-    );
+    const basePath = coursePath?.startsWith("/") ? coursePath.replace(/\/$/, "") : "";
+    const url = new URL(`${basePath}${path}`, origin);
     return url.origin === origin.origin ? url : null;
   } catch {
     return null;
@@ -128,7 +279,7 @@ function lessonPageUrl(courseId: string, currentPath: string): URL | null {
  * Fetches a lesson page only from the configured ClickFunnels domain. Redirects
  * are followed manually and never allowed to leave that domain.
  */
-async function fetchCfLessonPage(courseId: string, currentPath: string): Promise<string | null> {
+async function fetchCfLessonPage(coursePath: string | null, currentPath: string): Promise<{ html: string; url: string } | null> {
   if (!CF_WORKSPACE_DOMAIN) return null;
   let origin: URL;
   try {
@@ -136,7 +287,7 @@ async function fetchCfLessonPage(courseId: string, currentPath: string): Promise
   } catch {
     return null;
   }
-  const initialUrl = lessonPageUrl(courseId, currentPath);
+  const initialUrl = lessonPageUrl(coursePath, currentPath);
   if (!initialUrl) return null;
   let url: URL = initialUrl;
 
@@ -158,7 +309,7 @@ async function fetchCfLessonPage(courseId: string, currentPath: string): Promise
       if (!response.ok || !response.headers.get("content-type")?.includes("text/html")) {
         return null;
       }
-      return await response.text();
+      return { html: await response.text(), url: url.toString() };
     }
   } catch {
     // A protected or unavailable lesson should never stop the rest of an import.
@@ -167,31 +318,37 @@ async function fetchCfLessonPage(courseId: string, currentPath: string): Promise
 }
 
 /** The documented single-lesson endpoint can include body content omitted by list responses. */
-async function fetchCfLessonBody(lessonId: string): Promise<string | null> {
+async function fetchCfLessonDetail(lessonId: string): Promise<Record<string, unknown> | null> {
   try {
     const raw = await cfGet(`/courses/lessons/${encodeURIComponent(lessonId)}`);
     const lesson = raw?.data ?? raw;
-    return typeof lesson?.body === "string" ? lesson.body : null;
+    return lesson && typeof lesson === "object" ? lesson : null;
   } catch {
     // Some older CF lessons have no body or cannot be fetched individually.
     return null;
   }
 }
 
-async function findLessonVimeoUrl(
-  courseId: string,
+async function recoverLessonContent(
+  coursePath: string | null,
   lesson: CfLesson,
-): Promise<string | null> {
-  const fromBody = extractVimeoUrl(lesson.body);
-  if (fromBody) return fromBody;
-
-  const detailBody = await fetchCfLessonBody(lesson.id);
-  const fromDetail = extractVimeoUrl(detailBody);
-  if (fromDetail) return fromDetail;
-
-  if (!lesson.current_path) return null;
-  const page = await fetchCfLessonPage(courseId, lesson.current_path);
-  return extractVimeoUrl(page);
+): Promise<void> {
+  const detail = await fetchCfLessonDetail(lesson.id);
+  lesson.body = typeof detail?.body === "string" ? detail.body : lesson.body;
+  let recovered = extractCfLessonContent(lesson.body);
+  if (lesson.current_path) {
+    const page = await fetchCfLessonPage(coursePath, lesson.current_path);
+    if (page) {
+      const pageRecovered = extractCfLessonContent(page.html, page.url);
+      if (pageRecovered.status !== "unavailable") recovered = pageRecovered;
+      lesson.sourceUrl = page.url;
+    }
+  }
+  lesson.videoUrl = recovered.videoUrl ?? undefined;
+  lesson.content = recovered.content;
+  lesson.thumbnailUrl = recovered.thumbnailUrl;
+  lesson.resources = recovered.resources;
+  lesson.recoveryStatus = recovered.status;
 }
 
 // ─── Pagination — loops until a page returns < 20 items ──────────────────────
@@ -293,6 +450,14 @@ export async function getCfCourseStructure(
   cfCourseId: string,
   onProgress: (msg: string) => void,
 ): Promise<CfCourseStructure> {
+  let coursePath: string | null = null;
+  try {
+    const rawCourse = await cfGet(`/courses/${encodeURIComponent(cfCourseId)}`);
+    const course = rawCourse?.data ?? rawCourse;
+    coursePath = typeof course?.current_path === "string" ? course.current_path : null;
+  } catch {
+    // Structure import still works when course metadata is unavailable.
+  }
   // 1. Fetch ALL sections with pagination
   onProgress("Fetching sections...");
   const rawSections = await paginateAll<any>(
@@ -315,6 +480,9 @@ export async function getCfCourseStructure(
   let fetchedSections = 0;
   let videosChecked = 0;
   let videosFound = 0;
+  let contentRecovered = 0;
+  let contentPartial = 0;
+  let contentUnavailable = 0;
 
   const queue = [...sections];
   const workers = Array.from({ length: 3 }, async () => {
@@ -332,13 +500,13 @@ export async function getCfCourseStructure(
       }));
 
       for (const lesson of lessons) {
-        const videoUrl = await findLessonVimeoUrl(cfCourseId, lesson);
-        if (videoUrl) {
-          lesson.videoUrl = videoUrl;
-          videosFound++;
-        }
+        await recoverLessonContent(coursePath, lesson);
+        if (lesson.videoUrl) videosFound++;
+        if (lesson.recoveryStatus === "recovered") contentRecovered++;
+        else if (lesson.recoveryStatus === "partial") contentPartial++;
+        else contentUnavailable++;
         videosChecked++;
-        onProgress(`Checking lesson videos (${videosChecked})...`);
+        onProgress(`Recovering lesson content (${videosChecked})...`);
       }
       lessonMap.set(section.id, lessons);
       fetchedSections++;
@@ -360,6 +528,9 @@ export async function getCfCourseStructure(
     totalLessons,
     videosFound,
     videosUnavailable: totalLessons - videosFound,
+    contentRecovered,
+    contentPartial,
+    contentUnavailable,
   };
 }
 
@@ -386,6 +557,11 @@ function buildCfTree(
         published: l.published_at !== null,
         sortOrder: l.sort_order,
         videoUrl: l.videoUrl,
+        content: l.content,
+        thumbnailUrl: l.thumbnailUrl,
+        resources: l.resources,
+        recoveryStatus: l.recoveryStatus,
+        sourceUrl: l.sourceUrl,
         children: [],
       }));
 

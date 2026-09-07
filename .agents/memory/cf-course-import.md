@@ -43,3 +43,11 @@ A 4-step import UI at `/admin/clickfunnels` (CourseImportCard) backed by 3 serve
 - CF API field names assumed: `id`, `title`, `parent_id`, `sort_order`, `published_at` for sections; `id`, `title`, `sort_order`, `published_at` for lessons; `id`, `name`/`title` for courses. If CF changes its shape, the normalisation in `cf-import-client.ts` will need updating.
 - The execute route is synchronous — for very large courses it could hit a 30s timeout in some proxy configurations. If this becomes an issue, consider SSE for the execute step too.
 - ClickFunnels documents a single-lesson endpoint with a `body` field, but it has no dedicated course-video resource. Vimeo extraction therefore checks that documented content first, then only same-domain lesson-page HTML. A protected legacy video element that appears in neither cannot be imported automatically; surface it as unavailable rather than guessing a URL.
+
+## Content recovery rule
+
+Recover recognizable lesson HTML into draft content, common video URLs, thumbnails, and resources, but only fill fields that are still empty on re-import.
+
+**Why:** ClickFunnels API bearer authentication can read course structure while protected learner URLs return a branded 404 shell. Treating that shell as lesson HTML would create convincing but incorrect imports and could overwrite manual cleanup.
+
+**How to apply:** Reject non-2xx lesson pages, classify lessons as recovered/partial/unavailable, preserve existing admin-entered fields and resources, and use a separately authenticated learner-browser flow for protected pages.

@@ -51,7 +51,7 @@ import {
   CF_COURSE_ID,
   type CfContactInfo,
 } from "./clickfunnels";
-import { listCfCourses, listCfDownloads, getCfCourseStructure, extractVimeoUrl, type CfTreeNode } from "./cf-import-client";
+import { listCfCourses, listCfDownloads, getCfCourseStructure, extractVideoUrl, extractVimeoUrl, type CfTreeNode } from "./cf-import-client";
 import { runCfMembershipReconciliation } from "./cfMembershipReconciliation";
 import { listVimeoProjects, listVimeoVideos, searchVimeoVideos, extractVimeoVideoId, listVimeoTextTracks, fetchVimeoTranscript, getVimeoVideoDurationMinutes, getVimeoVideoThumbnail, getVimeoVideoDownload, syncVimeoChapters, type VimeoChapterInput } from "./vimeo";
 import { FIA_EVENT_CALENDAR_ID, FIA_EVENT_CALENDAR_NAME, FIA_EVENT_CALENDAR_SUBSCRIBE_URL, FIA_EVENT_CALENDAR_TIMEZONE, GoogleCalendarError, getTrainingCalendarEvents } from "./googleCalendar";
@@ -2177,6 +2177,9 @@ export async function registerRoutes(
     externalId: string;
     title: string;
     videoUrl: string | null;
+    content: string | null;
+    thumbnailUrl: string | null;
+    resources: Array<{ name: string; url: string; kind: "link" | "pdf" }>;
   };
 
   /**
@@ -2241,17 +2244,33 @@ export async function registerRoutes(
       let videoUrl: string | null = null;
       if (node.videoUrl !== undefined && node.videoUrl !== null && node.videoUrl !== "") {
         if (typeof node.videoUrl !== "string") {
-          errors.push({ row: lessonNumber, message: "Video URL must be a Vimeo URL." });
+          errors.push({ row: lessonNumber, message: "Video URL must be a supported video URL." });
           return;
         }
-        videoUrl = extractVimeoUrl(node.videoUrl);
+        videoUrl = extractVideoUrl(node.videoUrl);
         if (!videoUrl) {
-          errors.push({ row: lessonNumber, message: "Video URL must be a valid Vimeo URL." });
+          errors.push({ row: lessonNumber, message: "Video URL must be a valid Vimeo, YouTube, Wistia, or direct video URL." });
           return;
         }
       }
 
-      rows.push({ externalId: `cf-lesson-${cfId}`, title, videoUrl });
+      const content = typeof node.content === "string" && node.content.trim() ? node.content : null;
+      const thumbnailUrl = typeof node.thumbnailUrl === "string" ? node.thumbnailUrl : null;
+      const resources = Array.isArray(node.resources)
+        ? node.resources.flatMap((resource) => {
+            if (!resource || typeof resource !== "object") return [];
+            const item = resource as Record<string, unknown>;
+            if (typeof item.name !== "string" || typeof item.url !== "string") return [];
+            try {
+              const url = new URL(item.url);
+              if (!["http:", "https:"].includes(url.protocol)) return [];
+              return [{ name: item.name.slice(0, 300), url: url.toString(), kind: item.kind === "pdf" ? "pdf" as const : "link" as const }];
+            } catch {
+              return [];
+            }
+          })
+        : [];
+      rows.push({ externalId: `cf-lesson-${cfId}`, title, videoUrl, content, thumbnailUrl, resources });
     };
 
     nodes.forEach(visit);
@@ -2315,7 +2334,7 @@ export async function registerRoutes(
     const existing = await storage.getCourseLessonByExternalId(courseId, extId);
     const videoUrl = node.videoUrl ? extractVimeoUrl(node.videoUrl) : null;
     if (existing) {
-      const updates: { title?: string; slug?: string; videoUrl?: string } = {};
+      const updates: { title?: string; slug?: string; videoUrl?: string; content?: string; } = {};
       if (existing.title !== node.title) {
         updates.title = node.title;
         updates.slug = await uniqueLessonSlug(moduleId, node.title, existing.id);
@@ -2330,6 +2349,7 @@ export async function registerRoutes(
       } else {
         result.videosUnavailable++;
       }
+      if (node.content && !existing.content) updates.content = node.content;
       if (Object.keys(updates).length) await storage.updateCourseLesson(existing.id, updates as any);
       result.updated++;
     } else {
@@ -2342,6 +2362,7 @@ export async function registerRoutes(
         sortOrder,
         externalId: extId,
         videoUrl,
+        content: node.content || null,
       } as any);
       if (videoUrl) result.videosImported++;
       else result.videosUnavailable++;

@@ -104,6 +104,9 @@ export type TrainingReplayImportRow = {
   externalId: string;
   title: string;
   videoUrl: string | null;
+  content: string | null;
+  thumbnailUrl: string | null;
+  resources: Array<{ name: string; url: string; kind: "link" | "pdf" }>;
 };
 
 export type TrainingReplayImportResult = {
@@ -112,6 +115,9 @@ export type TrainingReplayImportResult = {
   videosImported: number;
   videosSkipped: number;
   videosUnavailable: number;
+  contentImported: number;
+  contentSkipped: number;
+  resourcesImported: number;
 };
 export type TrainingReplayListItem = Pick<TrainingReplay,
   "id" | "slug" | "title" | "description" | "videoUrl" | "thumbnailUrl"
@@ -6522,7 +6528,7 @@ export class DatabaseStorage implements IStorage {
 
   async importTrainingReplays(rows: TrainingReplayImportRow[]): Promise<TrainingReplayImportResult> {
     if (rows.length === 0) {
-      return { created: 0, updated: 0, videosImported: 0, videosSkipped: 0, videosUnavailable: 0 };
+      return { created: 0, updated: 0, videosImported: 0, videosSkipped: 0, videosUnavailable: 0, contentImported: 0, contentSkipped: 0, resourcesImported: 0 };
     }
 
     return db.transaction(async (tx) => {
@@ -6557,6 +6563,9 @@ export class DatabaseStorage implements IStorage {
       let videosImported = 0;
       let videosSkipped = 0;
       let videosUnavailable = 0;
+      let contentImported = 0;
+      let contentSkipped = 0;
+      let resourcesImported = 0;
 
       for (const row of rows) {
         const current = existingByExternalId.get(row.externalId);
@@ -6571,10 +6580,14 @@ export class DatabaseStorage implements IStorage {
 
         if (current) {
           const videoUrl = current.videoUrl || row.videoUrl || null;
+          const content = current.content || row.content || null;
+          const thumbnailUrl = current.thumbnailUrl || row.thumbnailUrl || null;
           await tx.update(trainingReplays).set({
             title: row.title,
             slug,
             videoUrl,
+            content,
+            thumbnailUrl,
             sortOrder: baseIndex + imported.length,
             updatedAt: new Date(),
           }).where(eq(trainingReplays.id, current.id));
@@ -6590,14 +6603,16 @@ export class DatabaseStorage implements IStorage {
           if (row.videoUrl && current.videoUrl) videosSkipped++;
           else if (row.videoUrl) videosImported++;
           else videosUnavailable++;
+          if (row.content && current.content) contentSkipped++;
+          else if (row.content) contentImported++;
         } else {
           const [createdReplay] = await tx.insert(trainingReplays).values({
             title: row.title,
             slug,
             description: null,
             videoUrl: row.videoUrl || null,
-            thumbnailUrl: null,
-            content: null,
+            thumbnailUrl: row.thumbnailUrl,
+            content: row.content,
             durationMinutes: null,
             category: null,
             tags: [],
@@ -6609,6 +6624,26 @@ export class DatabaseStorage implements IStorage {
           created++;
           if (row.videoUrl) videosImported++;
           else videosUnavailable++;
+          if (row.content) contentImported++;
+        }
+        const replay = imported[imported.length - 1];
+        const existingResources = await tx.select({ url: trainingReplayResources.url })
+          .from(trainingReplayResources)
+          .where(eq(trainingReplayResources.replayId, replay.id));
+        const resourceUrls = new Set(existingResources.map((resource) => resource.url));
+        let nextResourceOrder = existingResources.length;
+        for (const resource of row.resources) {
+          if (resourceUrls.has(resource.url)) continue;
+          await tx.insert(trainingReplayResources).values({
+            replayId: replay.id,
+            name: resource.name,
+            url: resource.url,
+            subtitle: null,
+            kind: resource.kind,
+            sortOrder: nextResourceOrder++,
+          });
+          resourceUrls.add(resource.url);
+          resourcesImported++;
         }
       }
 
@@ -6631,7 +6666,7 @@ export class DatabaseStorage implements IStorage {
           .where(eq(trainingReplays.id, replayId));
       }
 
-      return { created, updated, videosImported, videosSkipped, videosUnavailable };
+      return { created, updated, videosImported, videosSkipped, videosUnavailable, contentImported, contentSkipped, resourcesImported };
     });
   }
 

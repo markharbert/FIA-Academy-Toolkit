@@ -58,6 +58,11 @@ interface CfTreeNode {
   published: boolean;
   sortOrder: number;
   videoUrl?: string;
+  content?: string | null;
+  thumbnailUrl?: string | null;
+  resources?: Array<{ name: string; url: string; kind: "link" | "pdf" }>;
+  recoveryStatus?: "recovered" | "partial" | "unavailable";
+  sourceUrl?: string | null;
   children: CfTreeNode[];
 }
 
@@ -69,6 +74,9 @@ interface CfCourseStructure {
   totalLessons: number;
   videosFound: number;
   videosUnavailable: number;
+  contentRecovered: number;
+  contentPartial: number;
+  contentUnavailable: number;
 }
 
 interface FinalTreeNode extends CfTreeNode {
@@ -87,6 +95,9 @@ interface ImportResult {
   videosImported: number;
   videosSkipped: number;
   videosUnavailable: number;
+  contentImported?: number;
+  contentSkipped?: number;
+  resourcesImported?: number;
 }
 
 interface ImportError {
@@ -254,6 +265,20 @@ function countLessonVideos(nodes: CfTreeNode[]): {
   };
   nodes.forEach(walk);
   return { found, unavailable };
+}
+
+function countRecoveredContent(nodes: CfTreeNode[]) {
+  const counts = { recovered: 0, partial: 0, unavailable: 0, resources: 0 };
+  const walk = (node: CfTreeNode) => {
+    if (node.type === "lesson") {
+      counts[node.recoveryStatus ?? "unavailable"]++;
+      counts.resources += node.resources?.length ?? 0;
+      return;
+    }
+    node.children.forEach(walk);
+  };
+  nodes.forEach(walk);
+  return counts;
 }
 
 function countSelectedNodes(
@@ -725,6 +750,7 @@ export function CourseImportCard() {
   })();
   const finalCounts = countFinalNodes(finalTree);
   const selectedVideoCounts = countLessonVideos(filteredTree);
+  const selectedContentCounts = countRecoveredContent(filteredTree);
   const selCounts = structure
     ? countSelectedNodes(selectedIds, structure.roots)
     : { modules: 0, lessons: 0 };
@@ -916,7 +942,10 @@ export function CourseImportCard() {
                 <span className="font-semibold text-foreground">
                   {selectedVideoCounts.found}
                 </span>{" "}
-                Vimeo video{selectedVideoCounts.found !== 1 ? "s" : ""} ready
+                video{selectedVideoCounts.found !== 1 ? "s" : ""} ready ·{" "}
+                <span className="font-semibold text-foreground">{selectedContentCounts.recovered}</span>{" "}
+                full and <span className="font-semibold text-foreground">{selectedContentCounts.partial}</span>{" "}
+                partial content recoveries
             </p>
 
             {/* Tree */}
@@ -1147,7 +1176,8 @@ export function CourseImportCard() {
                 <span className="font-medium text-foreground">
                   {selectedVideoCounts.found}
                 </span>{" "}
-                Vimeo video{selectedVideoCounts.found !== 1 ? "s" : ""} ready
+                video{selectedVideoCounts.found !== 1 ? "s" : ""} ready ·{" "}
+                {selectedContentCounts.recovered} full / {selectedContentCounts.partial} partial content recoveries
                  {destination.type === "training-library"
                    ? " → training library (drafts)"
                    : destination.type === "new"
@@ -1250,7 +1280,7 @@ export function CourseImportCard() {
                    )}
                  </p>
                 <p className="text-xs text-muted-foreground">
-                  Vimeo videos:{" "}
+                  Videos:{" "}
                   <span className="font-medium">{importResult.videosImported}</span> imported
                   {importResult.videosSkipped > 0 && (
                     <>
@@ -1265,6 +1295,13 @@ export function CourseImportCard() {
                     </>
                   )}
                 </p>
+                {importResult.destination === "training-library" && (
+                  <p className="text-xs text-muted-foreground">
+                    Page content: <span className="font-medium">{importResult.contentImported ?? 0}</span> imported
+                    {(importResult.contentSkipped ?? 0) > 0 && <> · <span className="font-medium">{importResult.contentSkipped}</span> kept existing</>}
+                    {" · "}<span className="font-medium">{importResult.resourcesImported ?? 0}</span> resources added
+                  </p>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2">
