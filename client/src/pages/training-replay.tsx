@@ -3,8 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import Player from "@vimeo/player";
 import DOMPurify from "dompurify";
-import { ArrowLeft, CheckCircle2, ChevronDown, Clock, ExternalLink, FileText, Loader2, Play } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ChevronDown, Clock, ExternalLink, FileText, Loader2, MessageCircle, Play, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { TrainingResourceIcon } from "@/components/training-resource-icon";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -13,6 +14,14 @@ import { formatTranscriptParagraphs } from "@shared/transcript-format";
 type Resource = { id: string; name: string; url: string; subtitle?: string | null; kind?: string };
 type Chapter = { startSeconds: number; title: string };
 type Cue = { startSeconds: number; text: string };
+type ReplayComment = {
+  id: string;
+  userId: string;
+  body: string;
+  authorName: string;
+  createdAt: string;
+  updatedAt: string;
+};
 type Replay = {
   id: string;
   title: string;
@@ -25,6 +34,7 @@ type Replay = {
   transcriptText?: string | null;
   transcriptCues?: Cue[];
   transcriptChapters?: Chapter[];
+  comments?: ReplayComment[];
   completed?: boolean;
   completedAt?: string | null;
 };
@@ -55,6 +65,16 @@ function formatTimestamp(seconds: number) {
   return hours
     ? `${hours}:${String(minutes).padStart(2, "0")}:${remaining}`
     : `${minutes}:${remaining}`;
+}
+
+function formatCommentDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+  }).format(date);
 }
 
 function getEmbedUrl(videoUrl?: string | null) {
@@ -94,6 +114,7 @@ export default function TrainingReplayPage() {
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
   });
+  const [commentBody, setCommentBody] = useState("");
   const completionMutation = useMutation({
     mutationFn: (completed: boolean) => api(`/api/training/replays/${slug}/progress`, {
       method: "POST",
@@ -117,6 +138,22 @@ export default function TrainingReplayPage() {
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ["/api/training/replays", slug] });
       void queryClient.invalidateQueries({ queryKey: ["/api/training/library"] });
+    },
+  });
+  const commentMutation = useMutation({
+    mutationFn: (): Promise<ReplayComment> => api(`/api/training/replays/${slug}/comments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ body: commentBody }),
+    }),
+    onSuccess: (comment) => {
+      queryClient.setQueryData<Replay>(["/api/training/replays", slug], (current) =>
+        current ? { ...current, comments: [...(current.comments || []), comment] } : current,
+      );
+      setCommentBody("");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Couldn’t post comment", description: error.message, variant: "destructive" });
     },
   });
   const [transcriptOpen, setTranscriptOpen] = useState(false);
@@ -205,6 +242,7 @@ export default function TrainingReplayPage() {
     setTranscriptOpen(false);
     setTranscriptTab("chapters");
     setVideoCurrentTime(0);
+    setCommentBody("");
     lastScrolledWordRef.current = null;
   }, [slug]);
 
@@ -449,6 +487,75 @@ export default function TrainingReplayPage() {
               </div>
             </section>
           ) : null}
+
+          <section className="mb-12 border-t border-slate-200 pt-8">
+            <div className="mb-5 flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
+                <MessageCircle className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-xl font-bold text-slate-950">Member Discussion</h2>
+                <p className="text-sm text-slate-500">Share what stood out or how you plan to use it.</p>
+              </div>
+            </div>
+
+            <form
+              className="rounded-2xl border border-violet-100 bg-white p-4 shadow-sm sm:p-5"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!commentBody.trim() || commentMutation.isPending) return;
+                commentMutation.mutate();
+              }}
+            >
+              <Textarea
+                value={commentBody}
+                onChange={(event) => setCommentBody(event.target.value)}
+                maxLength={2000}
+                rows={4}
+                placeholder="Add your comment about this training…"
+                className="min-h-[110px] resize-y border-slate-200 bg-slate-50 text-slate-900 focus-visible:ring-violet-600"
+                disabled={commentMutation.isPending}
+              />
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <span className="text-xs text-slate-400">{commentBody.length}/2,000</span>
+                <Button
+                  type="submit"
+                  className="bg-violet-700 font-bold text-white hover:bg-violet-800"
+                  disabled={!commentBody.trim() || commentMutation.isPending}
+                >
+                  {commentMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                  Post Comment
+                </Button>
+              </div>
+            </form>
+
+            <div className="mt-6 space-y-4">
+              {(replay.comments || []).length ? (
+                replay.comments!.map((comment) => (
+                  <article key={comment.id} className="flex gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-700 text-sm font-extrabold uppercase text-white">
+                      {comment.authorName.trim().charAt(0) || "M"}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                        <h3 className="font-bold text-slate-950">{comment.authorName}</h3>
+                        <time className="text-xs font-medium text-slate-400" dateTime={comment.createdAt}>
+                          {formatCommentDate(comment.createdAt)}
+                        </time>
+                      </div>
+                      <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{comment.body}</p>
+                    </div>
+                  </article>
+                ))
+              ) : (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center">
+                  <MessageCircle className="mx-auto h-7 w-7 text-slate-300" />
+                  <p className="mt-2 font-semibold text-slate-700">Start the conversation</p>
+                  <p className="mt-1 text-sm text-slate-500">Be the first member to comment on this training.</p>
+                </div>
+              )}
+            </div>
+          </section>
         </div>
       </div>
     </main>
