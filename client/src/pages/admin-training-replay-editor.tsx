@@ -603,9 +603,23 @@ export default function AdminTrainingReplayEditorPage() {
             <Save className="mr-1 h-4 w-4" />
             Save
           </Button>
-          <Button size="sm" variant={form.status === "published" ? "outline" : "default"} onClick={() => change("status", form.status === "published" ? "draft" : "published")}>
+          <Button
+            size="sm"
+            variant={form.status === "published" ? "default" : "default"}
+            className={form.status === "published" ? "group bg-emerald-600 text-white hover:bg-emerald-700" : ""}
+            onClick={() => change("status", form.status === "published" ? "draft" : "published")}
+          >
             {form.status === "published"
-              ? <><EyeOff className="mr-1 h-4 w-4" />Unpublish</>
+              ? <>
+                  <span className="flex items-center group-hover:hidden">
+                    <Check className="mr-1 h-4 w-4" />
+                    Published
+                  </span>
+                  <span className="hidden items-center group-hover:flex">
+                    <EyeOff className="mr-1 h-4 w-4" />
+                    Unpublish
+                  </span>
+                </>
               : <><Eye className="mr-1 h-4 w-4" />Publish</>}
           </Button>
         </div>
