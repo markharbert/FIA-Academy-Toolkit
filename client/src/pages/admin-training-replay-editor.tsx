@@ -605,8 +605,10 @@ export default function AdminTrainingReplayEditorPage() {
           </Button>
           <Button
             size="sm"
-            variant={form.status === "published" ? "default" : "default"}
-            className={form.status === "published" ? "group bg-emerald-600 text-white hover:bg-emerald-700" : ""}
+            variant="default"
+            className={form.status === "published"
+              ? "group border-transparent bg-emerald-600 text-white hover:border-transparent hover:bg-red-600 hover:text-white focus-visible:ring-0 focus-visible:ring-offset-0"
+              : ""}
             onClick={() => change("status", form.status === "published" ? "draft" : "published")}
           >
             {form.status === "published"
