@@ -15086,13 +15086,19 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   app.post("/api/training/replays/:slug/comments", requireAdmin, async (req, res) => {
     const parsed = z.object({
       body: z.string().trim().min(1, "Comment cannot be empty.").max(2_000, "Comments must be 2,000 characters or fewer."),
+      parentCommentId: z.string().uuid().nullable().optional(),
     }).safeParse(req.body);
     if (!parsed.success) return replayValidationError(res, parsed.error);
     try {
       const userId = req.session.userId as string;
       const replay = await storage.getPublishedTrainingReplayBySlug(req.params.slug);
       if (!replay) return res.status(404).json({ message: "Not found" });
-      const created = await storage.createTrainingReplayComment(replay.id, userId, parsed.data.body);
+      const created = await storage.createTrainingReplayComment(
+        replay.id,
+        userId,
+        parsed.data.body,
+        parsed.data.parentCommentId,
+      );
       const comments = await storage.getTrainingReplayComments(replay.id);
       const comment = comments.find((item) => item.id === created.id);
       res.status(201).json(comment || created);

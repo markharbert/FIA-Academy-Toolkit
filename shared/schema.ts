@@ -2350,6 +2350,7 @@ export const trainingReplayComments = pgTable("training_replay_comments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   replayId: varchar("replay_id").notNull().references(() => trainingReplays.id, { onDelete: "cascade" }),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  parentCommentId: varchar("parent_comment_id").references(() => trainingReplayComments.id, { onDelete: "cascade" }),
   body: text("body").notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),

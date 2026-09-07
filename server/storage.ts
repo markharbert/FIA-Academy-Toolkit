@@ -862,7 +862,12 @@ export interface IStorage {
     authorName: string;
     authorAvatarUrl: string | null;
   }>>;
-  createTrainingReplayComment(replayId: string, userId: string, body: string): Promise<TrainingReplayComment>;
+  createTrainingReplayComment(
+    replayId: string,
+    userId: string,
+    body: string,
+    parentCommentId?: string | null,
+  ): Promise<TrainingReplayComment>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -6708,6 +6713,7 @@ export class DatabaseStorage implements IStorage {
         id: trainingReplayComments.id,
         replayId: trainingReplayComments.replayId,
         userId: trainingReplayComments.userId,
+        parentCommentId: trainingReplayComments.parentCommentId,
         body: trainingReplayComments.body,
         createdAt: trainingReplayComments.createdAt,
         updatedAt: trainingReplayComments.updatedAt,
@@ -6736,8 +6742,28 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async createTrainingReplayComment(replayId: string, userId: string, body: string): Promise<TrainingReplayComment> {
-    const [row] = await db.insert(trainingReplayComments).values({ replayId, userId, body }).returning();
+  async createTrainingReplayComment(
+    replayId: string,
+    userId: string,
+    body: string,
+    parentCommentId?: string | null,
+  ): Promise<TrainingReplayComment> {
+    if (parentCommentId) {
+      const [parent] = await db
+        .select({ id: trainingReplayComments.id })
+        .from(trainingReplayComments)
+        .where(and(
+          eq(trainingReplayComments.id, parentCommentId),
+          eq(trainingReplayComments.replayId, replayId),
+        ));
+      if (!parent) throw new Error("Parent comment not found.");
+    }
+    const [row] = await db.insert(trainingReplayComments).values({
+      replayId,
+      userId,
+      parentCommentId: parentCommentId || null,
+      body,
+    }).returning();
     return row;
   }
 }
@@ -7018,10 +7044,15 @@ export async function runMigrations(): Promise<void> {
         id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
         replay_id VARCHAR NOT NULL REFERENCES training_replays(id) ON DELETE CASCADE,
         user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        parent_comment_id VARCHAR REFERENCES training_replay_comments(id) ON DELETE CASCADE,
         body TEXT NOT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+    await pool.query(`
+      ALTER TABLE training_replay_comments
+      ADD COLUMN IF NOT EXISTS parent_comment_id VARCHAR REFERENCES training_replay_comments(id) ON DELETE CASCADE
     `);
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_training_replay_comments_replay_created
