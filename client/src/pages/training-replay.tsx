@@ -1,18 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import Player from "@vimeo/player";
 import DOMPurify from "dompurify";
-import { ArrowLeft, ChevronDown, Clock, ExternalLink, FileText, Play } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ChevronDown, Clock, ExternalLink, FileText, Loader2, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TrainingResourceIcon } from "@/components/training-resource-icon";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 import { formatTranscriptParagraphs } from "@shared/transcript-format";
 
 type Resource = { id: string; name: string; url: string; subtitle?: string | null; kind?: string };
 type Chapter = { startSeconds: number; title: string };
 type Cue = { startSeconds: number; text: string };
 type Replay = {
+  id: string;
   title: string;
   description?: string | null;
   category?: string | null;
@@ -23,11 +25,16 @@ type Replay = {
   transcriptText?: string | null;
   transcriptCues?: Cue[];
   transcriptChapters?: Chapter[];
+  completed?: boolean;
+  completedAt?: string | null;
 };
 
-async function api(url: string) {
-  const response = await fetch(url, { credentials: "include" });
-  if (!response.ok) throw new Error("This replay is not available.");
+async function api(url: string, init?: RequestInit) {
+  const response = await fetch(url, { credentials: "include", ...init });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { message?: string } | null;
+    throw new Error(payload?.message || "This replay is not available.");
+  }
   return response.json();
 }
 
@@ -78,12 +85,39 @@ function getEmbedUrl(videoUrl?: string | null) {
 export default function TrainingReplayPage() {
   const { slug } = useParams<{ slug: string }>();
   const [, go] = useLocation();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const { data: replay, isLoading, isError } = useQuery<Replay>({
     queryKey: ["/api/training/replays", slug],
     queryFn: () => api(`/api/training/replays/${slug}`),
     staleTime: 0,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
+  });
+  const completionMutation = useMutation({
+    mutationFn: (completed: boolean) => api(`/api/training/replays/${slug}/progress`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ completed }),
+    }),
+    onMutate: async (completed: boolean) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/training/replays", slug] });
+      const previous = queryClient.getQueryData<Replay>(["/api/training/replays", slug]);
+      queryClient.setQueryData<Replay>(["/api/training/replays", slug], (current) =>
+        current ? { ...current, completed, completedAt: completed ? new Date().toISOString() : null } : current,
+      );
+      return { previous };
+    },
+    onError: (error: Error, _completed, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["/api/training/replays", slug], context.previous);
+      }
+      toast({ title: "Couldn’t update completion", description: error.message, variant: "destructive" });
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["/api/training/replays", slug] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/training/library"] });
+    },
   });
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [transcriptTab, setTranscriptTab] = useState<"chapters" | "transcript">("chapters");
@@ -202,10 +236,30 @@ export default function TrainingReplayPage() {
     <main className="min-h-[calc(100vh-3rem)] bg-slate-50">
       <div className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
         <div className="mx-auto w-full max-w-[1100px]">
-          <Button variant="ghost" className="-ml-4 mb-5" onClick={() => go("/training/library")}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Training Library
-          </Button>
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <Button variant="ghost" className="-ml-4" onClick={() => go("/training/library")}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Training Library
+            </Button>
+            <Button
+              type="button"
+              size="lg"
+              variant={replay.completed ? "default" : "outline"}
+              className={cn(
+                "min-w-[190px] font-bold shadow-sm",
+                replay.completed && "border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700",
+              )}
+              disabled={completionMutation.isPending}
+              onClick={() => completionMutation.mutate(!replay.completed)}
+            >
+              {completionMutation.isPending ? (
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              ) : (
+                <CheckCircle2 className={cn("mr-2 h-5 w-5", replay.completed && "text-white")} />
+              )}
+              {replay.completed ? "Training Completed" : "Mark Training Complete"}
+            </Button>
+          </div>
 
           <div className="mb-4 flex flex-wrap items-center gap-2">
             {replay.category && (

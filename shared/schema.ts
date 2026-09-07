@@ -2334,6 +2334,18 @@ export type TrainingReplayResource = typeof trainingReplayResources.$inferSelect
 export type InsertTrainingReplayResource = typeof trainingReplayResources.$inferInsert;
 export const insertTrainingReplayResourceSchema = createInsertSchema(trainingReplayResources).omit({ id: true });
 
+export const trainingReplayProgress = pgTable("training_replay_progress", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  replayId: varchar("replay_id").notNull().references(() => trainingReplays.id, { onDelete: "cascade" }),
+  completedAt: timestamp("completed_at"),
+  lastAccessedAt: timestamp("last_accessed_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (t) => ({
+  userReplayIdx: index("idx_training_replay_progress_user_replay").on(t.userId, t.replayId),
+  userReplayUnique: unique("training_replay_progress_user_replay_unique").on(t.userId, t.replayId),
+}));
+export type TrainingReplayProgress = typeof trainingReplayProgress.$inferSelect;
+
 export const courseProgress = pgTable("course_progress", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),

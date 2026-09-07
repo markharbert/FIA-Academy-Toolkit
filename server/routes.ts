@@ -15017,7 +15017,10 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }).safeParse(req.query);
     if (!parsed.success) return replayValidationError(res, parsed.error);
     try {
+      const userId = req.session.userId as string;
       const all = await storage.getPublishedTrainingReplays();
+      const progress = await storage.getUserTrainingReplayProgress(userId);
+      const completedAtByReplay = new Map(progress.map((item) => [item.replayId, item.completedAt]));
       const selectedTags = (parsed.data.tags ? parsed.data.tags.split(",") : parsed.data.tag ? [parsed.data.tag] : [])
         .map((tag) => tag.trim()).filter(Boolean);
       if (selectedTags.length > 30 || selectedTags.some((tag) => tag.length > 100)) {
@@ -15049,6 +15052,8 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         return {
           ...replay,
           thumbnailUrl,
+          completed: !!completedAtByReplay.get(replay.id),
+          completedAt: completedAtByReplay.get(replay.id) ?? null,
           transcriptMatches: transcriptMatchSnippets(replay, parsed.data.q),
         };
       }));
@@ -15061,10 +15066,37 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   });
   app.get(["/api/training/library/:slug", "/api/training/replays/:slug"], requireAdmin, async (req, res) => {
     try {
+      const userId = req.session.userId as string;
       const replay = await storage.getPublishedTrainingReplayBySlug(req.params.slug);
       if (!replay) return res.status(404).json({ message: "Not found" });
-      res.json({ ...replay, resources: await storage.getTrainingReplayResources(replay.id) });
+      const [resources, progress] = await Promise.all([
+        storage.getTrainingReplayResources(replay.id),
+        storage.getTrainingReplayProgress(userId, replay.id),
+      ]);
+      res.json({
+        ...replay,
+        resources,
+        completed: !!progress?.completedAt,
+        completedAt: progress?.completedAt ?? null,
+      });
     } catch { res.status(500).json({ message: "Failed to load replay" }); }
+  });
+  app.post("/api/training/replays/:slug/progress", requireAdmin, async (req, res) => {
+    const parsed = z.object({ completed: z.boolean() }).safeParse(req.body);
+    if (!parsed.success) return replayValidationError(res, parsed.error);
+    try {
+      const userId = req.session.userId as string;
+      const replay = await storage.getPublishedTrainingReplayBySlug(req.params.slug);
+      if (!replay) return res.status(404).json({ message: "Not found" });
+      const progress = await storage.upsertTrainingReplayProgress(userId, replay.id, parsed.data.completed);
+      res.json({
+        completed: !!progress.completedAt,
+        completedAt: progress.completedAt,
+      });
+    } catch (error) {
+      console.error("[training replay progress]", error);
+      res.status(500).json({ message: "Failed to update replay completion." });
+    }
   });
 
   // ─── Training Schedule (admin-only until public rollout) ─────────────────────

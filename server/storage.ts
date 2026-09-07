@@ -60,9 +60,10 @@ import {
   type Course, type InsertCourse, type CourseModule, type InsertCourseModule,
   type CourseLesson, type InsertCourseLesson, type CourseResource, type InsertCourseResource,
   type CourseProgress,
-  trainingReplays, trainingReplayResources,
+  trainingReplays, trainingReplayResources, trainingReplayProgress,
   type TrainingReplay, type InsertTrainingReplay,
   type TrainingReplayResource, type InsertTrainingReplayResource,
+  type TrainingReplayProgress,
 } from "@shared/schema";
 import type { SwipeListResponse } from "./swipe-api";
 import { safeTimezone, todayKeyInTz, addDaysToKey } from "@shared/datetime";
@@ -854,6 +855,9 @@ export interface IStorage {
   getPublishedTrainingReplays(): Promise<TrainingReplay[]>;
   getPublishedTrainingReplayBySlug(slug: string): Promise<TrainingReplay | undefined>;
   searchPublishedTrainingReplays(filters: { q?: string; category?: string; tag?: string }): Promise<TrainingReplay[]>;
+  getUserTrainingReplayProgress(userId: string): Promise<TrainingReplayProgress[]>;
+  getTrainingReplayProgress(userId: string, replayId: string): Promise<TrainingReplayProgress | undefined>;
+  upsertTrainingReplayProgress(userId: string, replayId: string, completed: boolean): Promise<TrainingReplayProgress>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -6657,6 +6661,40 @@ export class DatabaseStorage implements IStorage {
       return searchable.includes(q);
     });
   }
+
+  async getUserTrainingReplayProgress(userId: string): Promise<TrainingReplayProgress[]> {
+    return db.select().from(trainingReplayProgress).where(eq(trainingReplayProgress.userId, userId));
+  }
+
+  async getTrainingReplayProgress(userId: string, replayId: string): Promise<TrainingReplayProgress | undefined> {
+    const [row] = await db.select().from(trainingReplayProgress).where(and(
+      eq(trainingReplayProgress.userId, userId),
+      eq(trainingReplayProgress.replayId, replayId),
+    ));
+    return row || undefined;
+  }
+
+  async upsertTrainingReplayProgress(
+    userId: string,
+    replayId: string,
+    completed: boolean,
+  ): Promise<TrainingReplayProgress> {
+    const now = new Date();
+    const [row] = await db
+      .insert(trainingReplayProgress)
+      .values({ userId, replayId, completedAt: completed ? now : null, lastAccessedAt: now })
+      .onConflictDoUpdate({
+        target: [trainingReplayProgress.userId, trainingReplayProgress.replayId],
+        set: {
+          completedAt: completed
+            ? sql`COALESCE(training_replay_progress.completed_at, EXCLUDED.completed_at)`
+            : null,
+          lastAccessedAt: now,
+        },
+      })
+      .returning();
+    return row;
+  }
 }
 
 export const storage = new DatabaseStorage();
@@ -6909,12 +6947,26 @@ export async function runMigrations(): Promise<void> {
       )
     `);
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS training_replay_progress (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        replay_id VARCHAR NOT NULL REFERENCES training_replays(id) ON DELETE CASCADE,
+        completed_at TIMESTAMP,
+        last_accessed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (user_id, replay_id)
+      )
+    `);
+    await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_training_replays_status_order
       ON training_replays(status, sort_order)
     `);
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_training_replay_resources_replay_order
       ON training_replay_resources(replay_id, sort_order)
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_training_replay_progress_user_replay
+      ON training_replay_progress(user_id, replay_id)
     `);
     console.log("[migration] training library tables ensured");
   } catch (err: any) {
