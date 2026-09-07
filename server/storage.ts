@@ -860,6 +860,7 @@ export interface IStorage {
   upsertTrainingReplayProgress(userId: string, replayId: string, completed: boolean): Promise<TrainingReplayProgress>;
   getTrainingReplayComments(replayId: string): Promise<Array<TrainingReplayComment & {
     authorName: string;
+    authorAvatarUrl: string | null;
   }>>;
   createTrainingReplayComment(replayId: string, userId: string, body: string): Promise<TrainingReplayComment>;
 }
@@ -2009,6 +2010,7 @@ export class DatabaseStorage implements IStorage {
         displayName: users.displayName,
         firstName: users.firstName,
         lastName: users.lastName,
+        email: users.email,
         email: users.email,
       })
       .from(userActionLog)
@@ -6728,6 +6730,9 @@ export class DatabaseStorage implements IStorage {
       authorName: row.displayName
         || [row.firstName, row.lastName].filter(Boolean).join(" ")
         || "Academy member",
+      authorAvatarUrl: row.email
+        ? `https://www.gravatar.com/avatar/${crypto.createHash("md5").update(row.email.trim().toLowerCase()).digest("hex")}?s=80&d=404`
+        : null,
     }));
   }
 

@@ -6,6 +6,7 @@ import DOMPurify from "dompurify";
 import { ArrowLeft, CheckCircle2, ChevronDown, Clock, ExternalLink, FileText, Loader2, MessageCircle, Play, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { TrainingResourceIcon } from "@/components/training-resource-icon";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -19,6 +20,7 @@ type ReplayComment = {
   userId: string;
   body: string;
   authorName: string;
+  authorAvatarUrl?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -533,9 +535,12 @@ export default function TrainingReplayPage() {
               {(replay.comments || []).length ? (
                 replay.comments!.map((comment) => (
                   <article key={comment.id} className="flex gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-700 text-sm font-extrabold uppercase text-white">
-                      {comment.authorName.trim().charAt(0) || "M"}
-                    </div>
+                    <Avatar className="h-10 w-10 shrink-0">
+                      {comment.authorAvatarUrl && <AvatarImage src={comment.authorAvatarUrl} alt="" />}
+                      <AvatarFallback className="bg-violet-700 text-sm font-extrabold uppercase text-white">
+                        {comment.authorName.trim().charAt(0) || "M"}
+                      </AvatarFallback>
+                    </Avatar>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                         <h3 className="font-bold text-slate-950">{comment.authorName}</h3>
