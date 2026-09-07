@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import Player from "@vimeo/player";
 import DOMPurify from "dompurify";
-import { ArrowLeft, CheckCircle2, ChevronDown, Clock, ExternalLink, FileText, Loader2, MessageCircle, Play, Send } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ChevronDown, Clock, CornerDownRight, ExternalLink, FileText, Loader2, MessageCircle, Play, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -310,7 +310,16 @@ export default function TrainingReplayPage() {
 
     return (
       <div key={comment.id} className={cn(depth > 0 && "ml-4 border-l-2 border-violet-100 pl-4 sm:ml-8")}>
-        <article className="flex gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        {depth > 0 && (
+          <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-violet-600">
+            <CornerDownRight className="h-3.5 w-3.5" />
+            Thread reply
+          </div>
+        )}
+        <article className={cn(
+          "flex gap-3 rounded-2xl border p-4 shadow-sm sm:p-5",
+          depth > 0 ? "border-violet-100 bg-violet-50/40" : "border-slate-200 bg-white",
+        )}>
           <Avatar className="h-10 w-10 shrink-0">
             {comment.authorAvatarUrl && <AvatarImage src={comment.authorAvatarUrl} alt="" />}
             <AvatarFallback className="bg-violet-700 text-sm font-extrabold uppercase text-white">
