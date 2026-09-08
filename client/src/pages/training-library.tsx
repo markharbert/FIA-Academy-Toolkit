@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import Player from "@vimeo/player";
-import { Captions, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, FileSearch, Library, Play, Search, Tag, X } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, FileSearch, Library, Play, Search, Tag, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -148,11 +148,11 @@ function TranscriptVideoDialog({ active, onWatchFull }: {
         )}
         <div className="mt-4 flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-950">
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white" aria-hidden="true">
-            <Captions className="h-4 w-4" />
+            <FileSearch className="h-4 w-4" />
           </span>
           <p className="leading-5">
             <span className="font-bold">Want to follow the transcript?</span>{" "}
-            Click the <span className="inline-flex items-center gap-1 rounded border border-blue-300 bg-white px-1.5 py-0.5 align-middle text-xs font-extrabold tracking-wide text-blue-800"><Captions className="h-3.5 w-3.5" />CC</span> button in the video player to open it.
+            Click the <span className="inline-flex items-center gap-1 rounded border border-blue-300 bg-white px-1.5 py-0.5 align-middle text-xs font-extrabold tracking-wide text-blue-800"><FileSearch className="h-3.5 w-3.5" />Transcript</span> button in the video player to open it.
           </p>
         </div>
         <Button className="mt-4 w-full" onClick={onWatchFull}>
