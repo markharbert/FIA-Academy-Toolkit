@@ -206,6 +206,12 @@ export default function TrainingLibraryPage() {
   const availableTags = data?.facets?.tags || [];
   const pagination = data?.pagination;
   const active = Boolean(q || category !== "all" || tags.length);
+  const clearQuery = () => {
+    setQ("");
+    setDebouncedQ("");
+    setPage(1);
+    if (mode === "qa") qaMutation.reset();
+  };
   const heading = useMemo(() => mode === "qa"
     ? "Ask the Replay Vault"
     : active
@@ -242,11 +248,21 @@ export default function TrainingLibraryPage() {
           <div className="relative min-w-0 flex-1">
             {mode === "qa" ? <MessageCircleQuestion className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-violet-600" /> : <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-violet-600" />}
             <Input
-              className="h-11 w-full border-violet-100 pl-10"
+              className={`h-11 w-full border-violet-100 pl-10 ${q ? "pr-10" : ""}`}
               placeholder={mode === "qa" ? "Ask a question about the trainings" : mode === "transcripts" ? "Search what was said in every training" : "Search titles, descriptions, categories, and topics"}
               value={q}
               onChange={(event) => { setQ(event.target.value); setPage(1); }}
             />
+            {q && (
+              <button
+                type="button"
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:bg-violet-50 hover:text-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                onClick={clearQuery}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
           {mode === "qa" && (
             <Button type="submit" className="h-11 shrink-0 px-5" disabled={q.trim().length < 3 || qaMutation.isPending}>
