@@ -146,13 +146,13 @@ function TranscriptVideoDialog({ active, onWatchFull }: {
             This video cannot be previewed here. Open the full training to watch it.
           </div>
         )}
-        <div className="mt-4 flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-950">
-          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white" aria-hidden="true">
+        <div className="mt-4 flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-950">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white" aria-hidden="true">
             <Captions className="h-4 w-4" />
           </span>
           <p className="leading-5">
             <span className="font-bold">Want to follow the transcript?</span>{" "}
-            Click the captions/Transcript button in the video player to open it.
+            Click the <span className="inline-flex items-center gap-1 rounded border border-blue-300 bg-white px-1.5 py-0.5 align-middle text-xs font-extrabold tracking-wide text-blue-800"><Captions className="h-3.5 w-3.5" />CC</span> button in the video player to open it.
           </p>
         </div>
         <Button className="mt-4 w-full" onClick={onWatchFull}>
