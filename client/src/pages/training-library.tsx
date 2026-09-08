@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import Player from "@vimeo/player";
-import { Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, FileSearch, Library, MessageCircleQuestion, Play, Search, Sparkles, Tag, X } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, ExternalLink, FileSearch, Globe2, Library, MessageCircleQuestion, Play, Search, Sparkles, Tag, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,8 @@ type TranscriptMatch = { text: string; startSeconds: number; endSeconds?: number
 type Item = { id: string; slug: string; title: string; description?: string | null; videoUrl?: string | null; category?: string | null; tags?: string[]; durationMinutes?: number | null; thumbnailUrl?: string | null; completed?: boolean; completedAt?: string | null; transcriptMatches?: TranscriptMatch[] };
 type ActiveMatch = { item: Item; match: TranscriptMatch };
 type QASource = { replayId: string; slug: string; title: string; videoUrl?: string | null; text: string; startSeconds: number; endSeconds?: number | null };
-type QAResult = { question: string; answer: string; foundAnswer: boolean; sources: QASource[] };
+type QAWebSource = { title: string; url: string; domain: string };
+type QAResult = { question: string; answer: string; foundAnswer: boolean; answerSource?: "trainings" | "web" | "none"; sources: QASource[]; webSources?: QAWebSource[] };
 async function api(url: string) { const response = await fetch(url, { credentials: "include" }); if (!response.ok) throw new Error("Unable to load the training library."); return response.json(); }
 async function postApi<T>(url: string, body: unknown): Promise<T> {
   const response = await fetch(url, {
@@ -341,8 +342,8 @@ export default function TrainingLibraryPage() {
                 <Sparkles className="h-5 w-5 animate-pulse" />
               </span>
               <div>
-                <h2 className="font-bold text-slate-950">Searching the trainings</h2>
-                <p className="text-sm text-slate-600">Finding the strongest transcript evidence and preparing a useful answer…</p>
+                <h2 className="font-bold text-slate-950">Searching your trainings first</h2>
+                <p className="text-sm text-slate-600">If the library does not cover it, we’ll research authoritative online sources next…</p>
               </div>
             </div>
             <div className="mt-6 space-y-3">
@@ -365,9 +366,14 @@ export default function TrainingLibraryPage() {
               </div>
               <div className="px-5 py-6 sm:px-7">
                 <div className="mb-4 flex items-center gap-2 text-sm font-bold text-violet-700">
-                  <Sparkles className="h-4 w-4" />
-                  Answer from the trainings
+                  {qaMutation.data.answerSource === "web" ? <Globe2 className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+                  {qaMutation.data.answerSource === "web" ? "Answer from trusted online sources" : "Answer from your trainings"}
                 </div>
+                {qaMutation.data.answerSource === "web" && (
+                  <p className="mb-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-950">
+                    Your training library was searched first. Because it didn’t contain enough information for a complete answer, this response uses authoritative online resources.
+                  </p>
+                )}
                 <div className="whitespace-pre-wrap text-[15px] leading-7 text-slate-700">{qaMutation.data.answer}</div>
               </div>
             </article>
@@ -396,6 +402,31 @@ export default function TrainingLibraryPage() {
                         Watch this part
                       </Button>
                     </article>
+                  ))}
+                </div>
+              </section>
+            )}
+            {(qaMutation.data.webSources?.length ?? 0) > 0 && (
+              <section aria-labelledby="qa-web-sources-heading">
+                <div className="mb-3">
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Online research</p>
+                  <h2 id="qa-web-sources-heading" className="mt-1 text-xl font-extrabold text-slate-950">Sources used for this answer</h2>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {qaMutation.data.webSources?.map((source) => (
+                    <a
+                      key={source.url}
+                      href={source.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group flex items-center justify-between gap-4 rounded-2xl border border-blue-100 bg-white p-4 shadow-sm transition hover:border-blue-300 hover:shadow-md"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold uppercase tracking-wider text-blue-700">{source.domain}</p>
+                        <h3 className="mt-1 line-clamp-2 font-bold text-slate-950">{source.title}</h3>
+                      </div>
+                      <ExternalLink className="h-4 w-4 shrink-0 text-blue-600 transition group-hover:translate-x-0.5" />
+                    </a>
                   ))}
                 </div>
               </section>

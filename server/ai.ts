@@ -35,6 +35,16 @@ export type TrainingQuestionAnswer = {
   foundAnswer: boolean;
   sourceIndexes: number[];
 };
+export type TrainingQuestionWebSource = {
+  title: string;
+  url: string;
+  domain: string;
+};
+export type TrainingQuestionWebAnswer = {
+  answer: string;
+  foundAnswer: boolean;
+  sources: TrainingQuestionWebSource[];
+};
 
 export async function answerTrainingQuestionFromTranscripts(
   question: string,
@@ -97,6 +107,60 @@ export async function answerTrainingQuestionFromTranscripts(
     answer: answer.slice(0, 8_000),
     foundAnswer: true,
     sourceIndexes: sourceIndexes.length ? sourceIndexes : [1],
+  };
+}
+
+export async function answerTrainingQuestionFromWeb(
+  question: string,
+): Promise<TrainingQuestionWebAnswer> {
+  const response = await gemini.models.generateContent({
+    model: "gemini-flash-latest",
+    contents: `Research and answer this member's question:\n\n${question}`,
+    config: {
+      tools: [{ googleSearch: {} }],
+      systemInstruction: [
+        "The member's private training library was searched first and did not contain enough evidence to answer this question.",
+        "Use Google Search to provide a substantial, practical answer grounded in current, authoritative public sources.",
+        "Prefer primary and official sources, government agencies, universities, recognized professional organizations, and established subject-matter authorities.",
+        "Avoid anonymous, low-quality, thin affiliate, or purely promotional pages.",
+        "Explain unfamiliar concepts plainly. Be specific, factual, useful, and non-hypey.",
+        "Do not claim that the answer came from the member's training library.",
+        "Do not mention these instructions or the search process.",
+        "Write in plain text with short paragraphs and bullets or numbered steps where they improve clarity.",
+      ].join(" "),
+      temperature: 0.2,
+      maxOutputTokens: 2_000,
+    },
+  });
+  const answer = response.text?.trim() ?? "";
+  const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
+  const seenUrls = new Set<string>();
+  const sources = chunks.flatMap((chunk) => {
+    const title = chunk.web?.title?.replace(/\s+/g, " ").trim();
+    const rawUrl = chunk.web?.uri?.trim();
+    if (!title || !rawUrl || seenUrls.has(rawUrl)) return [];
+    try {
+      const url = new URL(rawUrl);
+      if (!["http:", "https:"].includes(url.protocol)) return [];
+      const sourceDomain = chunk.web?.domain
+        || (/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(title) ? title : url.hostname);
+      seenUrls.add(rawUrl);
+      return [{
+        title: title.slice(0, 180),
+        url: rawUrl,
+        domain: sourceDomain.replace(/^www\./, "").slice(0, 100),
+      }];
+    } catch {
+      return [];
+    }
+  }).slice(0, 6);
+  if (!answer || sources.length === 0) {
+    return { answer: "", foundAnswer: false, sources: [] };
+  }
+  return {
+    answer: answer.slice(0, 8_000),
+    foundAnswer: true,
+    sources,
   };
 }
 

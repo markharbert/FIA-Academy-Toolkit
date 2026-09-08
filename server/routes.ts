@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { answerTrainingQuestionFromTranscripts, transcribeAudio, transcribeAudioWhisper, transcribeAudioWithTimestamps, scoreTranscript, generateTitle, generateDmoSummary, generateBulletPoints, generateLessonChapters, generateReplayDescription, generateReplayMetadata } from "./ai";
+import { answerTrainingQuestionFromTranscripts, answerTrainingQuestionFromWeb, transcribeAudio, transcribeAudioWhisper, transcribeAudioWithTimestamps, scoreTranscript, generateTitle, generateDmoSummary, generateBulletPoints, generateLessonChapters, generateReplayDescription, generateReplayMetadata } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio, extractRemoteAudioSegments, probeVideo, faststartMp4, prepareTeleprompterMp4, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
 import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, type TrainingReplay, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema, insertProjectTemplateSchema, insertProjectTemplateTaskSchema, updateProjectTemplateTaskSchema, insertProjectColumnSchema, insertCannedResponseSchema, insertAnnouncementSchema, insertAffiliateLinkSchema } from "@shared/schema";
 import { safeTimezone, todayKeyInTz, dueHasTime } from "@shared/datetime";
@@ -15141,6 +15141,9 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
           startSeconds: item.startSeconds,
         })),
       );
+      const webResult = result.foundAnswer
+        ? null
+        : await answerTrainingQuestionFromWeb(parsed.data.question);
       const seenSources = new Set<string>();
       const sources = result.foundAnswer
         ? result.sourceIndexes.flatMap((sourceIndex) => {
@@ -15162,9 +15165,11 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         : [];
       res.json({
         question: parsed.data.question,
-        answer: result.answer,
-        foundAnswer: result.foundAnswer,
+        answer: webResult?.foundAnswer ? webResult.answer : result.answer,
+        foundAnswer: result.foundAnswer || webResult?.foundAnswer === true,
+        answerSource: result.foundAnswer ? "trainings" : webResult?.foundAnswer ? "web" : "none",
         sources,
+        webSources: webResult?.sources ?? [],
       });
     } catch (error) {
       console.error("[training library Q&A]", error);
