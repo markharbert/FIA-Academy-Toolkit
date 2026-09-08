@@ -599,18 +599,23 @@ export default function TrainingReplayPage() {
 
         <div className="mx-auto max-w-[780px]">
           {transcriptText && (
-            <div className="mx-auto mb-8 mt-8 w-full overflow-hidden rounded-xl border border-blue-100 bg-blue-50/60">
+            <div className="mx-auto mb-8 mt-8 w-full overflow-hidden rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 via-white to-violet-50/70 shadow-[0_14px_36px_-24px_rgba(37,99,235,.5)]">
               <button
                 type="button"
-                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                className="flex w-full items-center justify-between gap-3 border-b border-blue-100/80 px-5 py-4 text-left transition-colors hover:bg-white/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600"
                 onClick={() => setTranscriptOpen((open) => !open)}
                 aria-expanded={transcriptOpen}
               >
-                <span className="flex items-center gap-2 text-[13px] font-semibold text-blue-900">
-                  <FileText className="h-4 w-4" />
-                  View Chapters / Transcript
+                <span className="flex items-center gap-3 text-[13px] font-bold text-blue-950">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm">
+                    <FileText className="h-4 w-4" />
+                  </span>
+                  <span>
+                    <span className="block">View Chapters / Transcript</span>
+                    <span className="mt-0.5 block text-xs font-medium text-blue-800/70">Jump to a section or follow along with the full transcript.</span>
+                  </span>
                 </span>
-                <ChevronDown className={cn("h-4 w-4 text-blue-900 transition-transform", transcriptOpen && "rotate-180")} />
+                <ChevronDown className={cn("h-5 w-5 shrink-0 text-blue-700 transition-transform", transcriptOpen && "rotate-180")} />
               </button>
 
               {transcriptOpen && (
@@ -701,15 +706,16 @@ export default function TrainingReplayPage() {
 
           {showReplayContent && (
             <section
-              className="mb-10 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"
+              className="relative mb-10 overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_16px_40px_-30px_rgba(15,23,42,.55)] sm:p-7"
             >
-              <div className="mb-5 flex items-center gap-3 border-b border-slate-100 pb-4">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-violet-600 via-blue-500 to-violet-200" />
+              <div className="mb-5 flex items-center gap-3 border-b border-slate-200 pb-4">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-100 text-violet-700">
                   <FileText className="h-4 w-4" />
                 </span>
                 <div>
-                  <h2 className="text-sm font-bold uppercase tracking-wider text-slate-800">Replay content</h2>
-                  <p className="mt-0.5 text-xs text-slate-500">Notes and details for this training.</p>
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-slate-950">Replay content</h2>
+                  <p className="mt-0.5 text-xs font-medium text-slate-500">Notes and details for this training.</p>
                 </div>
               </div>
               <div
@@ -722,14 +728,17 @@ export default function TrainingReplayPage() {
           )}
 
           {replay.resources?.length ? (
-            <section className="mb-10 rounded-2xl border border-blue-100 bg-blue-50/35 p-5 shadow-sm sm:p-6">
-              <div className="mb-4 flex items-center gap-3 border-b border-blue-100/80 pb-4">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-100 text-blue-700">
+            <section className="mb-10 rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50/90 via-white to-blue-50/50 p-5 shadow-[0_16px_40px_-30px_rgba(37,99,235,.55)] sm:p-6">
+              <div className="mb-4 flex items-center gap-3 border-b border-blue-200/80 pb-4">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm">
                   <ExternalLink className="h-4 w-4" />
                 </span>
                 <div>
-                  <h2 className="text-sm font-bold uppercase tracking-wider text-blue-950">Resources</h2>
-                  <p className="mt-0.5 text-xs text-blue-800/70">Helpful links and downloads for this training.</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-sm font-bold uppercase tracking-wider text-blue-950">Resources</h2>
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-800">{replay.resources.length}</span>
+                  </div>
+                  <p className="mt-0.5 text-xs font-medium text-blue-800/70">Helpful links and downloads for this training.</p>
                 </div>
               </div>
               <div className="space-y-2">
@@ -739,7 +748,7 @@ export default function TrainingReplayPage() {
                     href={safeHref(resource.url)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="group flex items-center gap-3 rounded-xl border border-blue-100 bg-white px-4 py-4 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50/70"
+                    className="group flex items-center gap-3 rounded-xl border border-blue-100 bg-white px-4 py-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/70 hover:shadow-md"
                   >
                     <TrainingResourceIcon kind={resource.kind} />
                     <div className="min-w-0 flex-1">
