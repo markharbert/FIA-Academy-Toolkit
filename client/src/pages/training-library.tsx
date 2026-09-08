@@ -41,41 +41,79 @@ function renderAnswerInline(text: string) {
 }
 
 function FormattedAnswer({ text }: { text: string }) {
-  const blocks = text.trim().split(/\n\s*\n/).filter(Boolean);
+  type AnswerBlock =
+    | { type: "paragraph"; lines: string[] }
+    | { type: "heading"; text: string }
+    | { type: "list"; ordered: boolean; items: string[] };
+  const blocks: AnswerBlock[] = [];
+  let paragraphLines: string[] = [];
+  let listItems: string[] = [];
+  let listOrdered = false;
+  const flushParagraph = () => {
+    if (paragraphLines.length) {
+      blocks.push({ type: "paragraph", lines: paragraphLines });
+      paragraphLines = [];
+    }
+  };
+  const flushList = () => {
+    if (listItems.length) {
+      blocks.push({ type: "list", ordered: listOrdered, items: listItems });
+      listItems = [];
+    }
+  };
+  for (const rawLine of text.trim().split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+    const heading = line.match(/^#{1,3}\s+(.+)$/);
+    const boldHeading = line.match(/^\*\*([^*]+)\*\*:?$/);
+    if (heading || boldHeading) {
+      flushParagraph();
+      flushList();
+      blocks.push({ type: "heading", text: (heading?.[1] ?? boldHeading?.[1] ?? "").replace(/:$/, "") });
+      continue;
+    }
+    const bullet = line.match(/^[-*•]\s+(.+)$/);
+    const numbered = line.match(/^\d+[.)]\s+(.+)$/);
+    if (bullet || numbered) {
+      flushParagraph();
+      const ordered = Boolean(numbered);
+      if (listItems.length && ordered !== listOrdered) flushList();
+      listOrdered = ordered;
+      listItems.push((bullet?.[1] ?? numbered?.[1] ?? "").trim());
+      continue;
+    }
+    flushList();
+    paragraphLines.push(line);
+  }
+  flushParagraph();
+  flushList();
+
   return (
-    <div className="space-y-5 text-[15px] leading-7 text-slate-700">
+    <div className="max-w-4xl space-y-5 text-[15px] leading-7 text-slate-700">
       {blocks.map((block, blockIndex) => {
-        const lines = block.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-        if (!lines.length) return null;
-
-        const heading = lines.length === 1
-          ? lines[0].match(/^#{1,3}\s+(.+)$/)
-          : null;
-        if (heading) {
-          return <h3 key={blockIndex} className="text-lg font-extrabold leading-7 text-slate-950">{renderAnswerInline(heading[1])}</h3>;
+        if (block.type === "heading") {
+          return <h3 key={blockIndex} className="pt-1 text-lg font-extrabold leading-7 text-slate-950">{renderAnswerInline(block.text)}</h3>;
         }
-
-        const isBulleted = lines.every((line) => /^[-*•]\s+/.test(line));
-        if (isBulleted) {
+        if (block.type === "list") {
+          const List = block.ordered ? "ol" : "ul";
           return (
-            <ul key={blockIndex} className="list-disc space-y-2 pl-6 marker:text-violet-500">
-              {lines.map((line, lineIndex) => <li key={lineIndex} className="pl-1">{renderAnswerInline(line.replace(/^[-*•]\s+/, ""))}</li>)}
-            </ul>
+            <List
+              key={blockIndex}
+              className={block.ordered
+                ? "list-decimal space-y-2 pl-6 marker:font-bold marker:text-violet-600"
+                : "list-disc space-y-2 pl-6 marker:text-violet-500"}
+            >
+              {block.items.map((item, itemIndex) => <li key={itemIndex} className="pl-1">{renderAnswerInline(item)}</li>)}
+            </List>
           );
         }
-
-        const isNumbered = lines.every((line) => /^\d+[.)]\s+/.test(line));
-        if (isNumbered) {
-          return (
-            <ol key={blockIndex} className="list-decimal space-y-2 pl-6 marker:font-bold marker:text-violet-600">
-              {lines.map((line, lineIndex) => <li key={lineIndex} className="pl-1">{renderAnswerInline(line.replace(/^\d+[.)]\s+/, ""))}</li>)}
-            </ol>
-          );
-        }
-
         return (
           <p key={blockIndex}>
-            {lines.map((line, lineIndex) => (
+            {block.lines.map((line, lineIndex) => (
               <span key={lineIndex}>
                 {lineIndex > 0 && <br />}
                 {renderAnswerInline(line)}
