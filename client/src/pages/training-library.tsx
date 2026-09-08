@@ -31,6 +31,64 @@ async function postApi<T>(url: string, body: unknown): Promise<T> {
 }
 const stamp = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 
+function renderAnswerInline(text: string) {
+  const parts = text.split(/(\*\*[^*]+\*\*|__[^_]+__)/g);
+  return parts.map((part, index) => {
+    const isBold = (part.startsWith("**") && part.endsWith("**")) || (part.startsWith("__") && part.endsWith("__"));
+    return isBold
+      ? <strong key={index} className="font-bold text-slate-950">{part.slice(2, -2)}</strong>
+      : <span key={index}>{part}</span>;
+  });
+}
+
+function FormattedAnswer({ text }: { text: string }) {
+  const blocks = text.trim().split(/\n\s*\n/).filter(Boolean);
+  return (
+    <div className="space-y-5 text-[15px] leading-7 text-slate-700">
+      {blocks.map((block, blockIndex) => {
+        const lines = block.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+        if (!lines.length) return null;
+
+        const heading = lines.length === 1
+          ? lines[0].match(/^#{1,3}\s+(.+)$/)
+          : null;
+        if (heading) {
+          return <h3 key={blockIndex} className="text-lg font-extrabold leading-7 text-slate-950">{renderAnswerInline(heading[1])}</h3>;
+        }
+
+        const isBulleted = lines.every((line) => /^[-*•]\s+/.test(line));
+        if (isBulleted) {
+          return (
+            <ul key={blockIndex} className="list-disc space-y-2 pl-6 marker:text-violet-500">
+              {lines.map((line, lineIndex) => <li key={lineIndex} className="pl-1">{renderAnswerInline(line.replace(/^[-*•]\s+/, ""))}</li>)}
+            </ul>
+          );
+        }
+
+        const isNumbered = lines.every((line) => /^\d+[.)]\s+/.test(line));
+        if (isNumbered) {
+          return (
+            <ol key={blockIndex} className="list-decimal space-y-2 pl-6 marker:font-bold marker:text-violet-600">
+              {lines.map((line, lineIndex) => <li key={lineIndex} className="pl-1">{renderAnswerInline(line.replace(/^\d+[.)]\s+/, ""))}</li>)}
+            </ol>
+          );
+        }
+
+        return (
+          <p key={blockIndex}>
+            {lines.map((line, lineIndex) => (
+              <span key={lineIndex}>
+                {lineIndex > 0 && <br />}
+                {renderAnswerInline(line)}
+              </span>
+            ))}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 function getVideoEmbedUrl(videoUrl: string | null | undefined, startSeconds: number) {
   if (!videoUrl) return null;
   try {
@@ -367,14 +425,18 @@ export default function TrainingLibraryPage() {
               <div className="px-5 py-6 sm:px-7">
                 <div className="mb-4 flex items-center gap-2 text-sm font-bold text-violet-700">
                   {qaMutation.data.answerSource === "web" ? <Globe2 className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
-                  {qaMutation.data.answerSource === "web" ? "Answer from trusted online sources" : "Answer from your trainings"}
+                  {qaMutation.data.answerSource === "web"
+                    ? "Found online"
+                    : qaMutation.data.answerSource === "trainings"
+                      ? "Answer from your trainings"
+                      : "No adequate answer found"}
                 </div>
                 {qaMutation.data.answerSource === "web" && (
                   <p className="mb-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-950">
                     Your training library was searched first. Because it didn’t contain enough information for a complete answer, this response uses authoritative online resources.
                   </p>
                 )}
-                <div className="whitespace-pre-wrap text-[15px] leading-7 text-slate-700">{qaMutation.data.answer}</div>
+                <FormattedAnswer text={qaMutation.data.answer} />
               </div>
             </article>
             {qaMutation.data.sources.length > 0 && (
@@ -409,7 +471,7 @@ export default function TrainingLibraryPage() {
             {(qaMutation.data.webSources?.length ?? 0) > 0 && (
               <section aria-labelledby="qa-web-sources-heading">
                 <div className="mb-3">
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Online research</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Found online</p>
                   <h2 id="qa-web-sources-heading" className="mt-1 text-xl font-extrabold text-slate-950">Sources used for this answer</h2>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
