@@ -31,12 +31,22 @@ async function postApi<T>(url: string, body: unknown): Promise<T> {
 const stamp = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 
 function renderAnswerInline(text: string) {
-  const parts = text.split(/(\*\*[^*]+\*\*|__[^_]+__)/g);
+  const readableText = text
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
+  const parts = readableText.split(/(\*\*[^*]+\*\*|__[^_]+__|`[^`]+`|\[[^\]]+\]\([^)]+\))/g);
   return parts.map((part, index) => {
     const isBold = (part.startsWith("**") && part.endsWith("**")) || (part.startsWith("__") && part.endsWith("__"));
-    return isBold
-      ? <strong key={index} className="font-bold text-slate-950">{part.slice(2, -2)}</strong>
-      : <span key={index}>{part}</span>;
+    if (isBold) return <strong key={index} className="font-bold text-slate-950">{part.slice(2, -2)}</strong>;
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return <code key={index} className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.9em] font-semibold text-slate-800">{part.slice(1, -1)}</code>;
+    }
+    const markdownLink = part.match(/^\[([^\]]+)\]\([^)]+\)$/);
+    if (markdownLink) return <span key={index} className="font-semibold text-slate-900">{markdownLink[1]}</span>;
+    return <span key={index}>{part}</span>;
   });
 }
 
@@ -44,7 +54,8 @@ function FormattedAnswer({ text }: { text: string }) {
   type AnswerBlock =
     | { type: "paragraph"; lines: string[] }
     | { type: "heading"; text: string }
-    | { type: "list"; ordered: boolean; items: string[] };
+    | { type: "list"; ordered: boolean; items: string[] }
+    | { type: "divider" };
   const blocks: AnswerBlock[] = [];
   let paragraphLines: string[] = [];
   let listItems: string[] = [];
@@ -66,6 +77,12 @@ function FormattedAnswer({ text }: { text: string }) {
     if (!line) {
       flushParagraph();
       flushList();
+      continue;
+    }
+    if (/^(?:-{3,}|_{3,}|\*{3,})$/.test(line)) {
+      flushParagraph();
+      flushList();
+      blocks.push({ type: "divider" });
       continue;
     }
     const heading = line.match(/^#{1,3}\s+(.+)$/);
@@ -95,6 +112,9 @@ function FormattedAnswer({ text }: { text: string }) {
   return (
     <div className="max-w-4xl space-y-5 text-[15px] leading-7 text-slate-700">
       {blocks.map((block, blockIndex) => {
+        if (block.type === "divider") {
+          return <hr key={blockIndex} className="border-0 border-t border-violet-100" />;
+        }
         if (block.type === "heading") {
           return <h3 key={blockIndex} className="pt-1 text-lg font-extrabold leading-7 text-slate-950">{renderAnswerInline(block.text)}</h3>;
         }
