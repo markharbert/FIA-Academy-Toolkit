@@ -232,22 +232,24 @@ export default function TrainingLibraryPage() {
           </button>
         </div>
         <form
-          className="relative"
+          className="flex items-center gap-2"
           onSubmit={(event) => {
             event.preventDefault();
             const question = q.trim();
             if (mode === "qa" && question.length >= 3) qaMutation.mutate(question);
           }}
         >
-          {mode === "qa" ? <MessageCircleQuestion className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-violet-600" /> : <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-violet-600" />}
-          <Input
-            className={`h-11 border-violet-100 pl-10 ${mode === "qa" ? "pr-24" : ""}`}
-            placeholder={mode === "qa" ? "Ask a question about the trainings" : mode === "transcripts" ? "Search what was said in every training" : "Search titles, descriptions, categories, and topics"}
-            value={q}
-            onChange={(event) => { setQ(event.target.value); setPage(1); }}
-          />
+          <div className="relative min-w-0 flex-1">
+            {mode === "qa" ? <MessageCircleQuestion className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-violet-600" /> : <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-violet-600" />}
+            <Input
+              className="h-11 w-full border-violet-100 pl-10"
+              placeholder={mode === "qa" ? "Ask a question about the trainings" : mode === "transcripts" ? "Search what was said in every training" : "Search titles, descriptions, categories, and topics"}
+              value={q}
+              onChange={(event) => { setQ(event.target.value); setPage(1); }}
+            />
+          </div>
           {mode === "qa" && (
-            <Button type="submit" size="sm" className="absolute right-1.5 top-1/2 -translate-y-1/2" disabled={q.trim().length < 3 || qaMutation.isPending}>
+            <Button type="submit" className="h-11 shrink-0 px-5" disabled={q.trim().length < 3 || qaMutation.isPending}>
               {qaMutation.isPending ? "Thinking…" : "Ask"}
             </Button>
           )}
