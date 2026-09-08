@@ -85,6 +85,7 @@ function formatCommentDate(value: string) {
 
 function getEmbedUrl(videoUrl?: string | null, startSeconds = 0) {
   if (!videoUrl) return null;
+  const shouldAutoplay = startSeconds > 0;
   try {
     const url = new URL(videoUrl);
     if (url.hostname.includes("vimeo.com")) {
@@ -92,19 +93,29 @@ function getEmbedUrl(videoUrl?: string | null, startSeconds = 0) {
       if (!videoId) return null;
       const params = new URLSearchParams(url.search);
       params.set("api", "1");
+      if (shouldAutoplay) {
+        params.set("autoplay", "1");
+        params.set("muted", "1");
+      }
       return `https://player.vimeo.com/video/${videoId}?${params.toString()}`;
     }
     if (url.hostname.includes("youtube.com")) {
       const videoId = url.searchParams.get("v");
-      return videoId ? `https://www.youtube.com/embed/${videoId}?start=${Math.floor(startSeconds)}&enablejsapi=1` : null;
+      return videoId
+        ? `https://www.youtube.com/embed/${videoId}?start=${Math.floor(startSeconds)}&enablejsapi=1&autoplay=${shouldAutoplay ? 1 : 0}&mute=${shouldAutoplay ? 1 : 0}`
+        : null;
     }
     if (url.hostname.includes("youtu.be")) {
       const videoId = url.pathname.split("/").filter(Boolean)[0];
-      return videoId ? `https://www.youtube.com/embed/${videoId}?start=${Math.floor(startSeconds)}&enablejsapi=1` : null;
+      return videoId
+        ? `https://www.youtube.com/embed/${videoId}?start=${Math.floor(startSeconds)}&enablejsapi=1&autoplay=${shouldAutoplay ? 1 : 0}&mute=${shouldAutoplay ? 1 : 0}`
+        : null;
     }
     if (url.hostname.includes("wistia.com") || url.hostname.includes("wi.st")) {
       const videoId = url.pathname.split("/").filter(Boolean).pop();
-      return videoId ? `https://fast.wistia.net/embed/iframe/${videoId}?time=${Math.floor(startSeconds)}` : null;
+      return videoId
+        ? `https://fast.wistia.net/embed/iframe/${videoId}?time=${Math.floor(startSeconds)}&autoPlay=${shouldAutoplay ? "true" : "false"}&muted=${shouldAutoplay ? "true" : "false"}`
+        : null;
     }
     return null;
   } catch {
@@ -294,7 +305,21 @@ export default function TrainingReplayPage() {
     const update = ({ seconds }: { seconds: number }) => setVideoCurrentTime(seconds);
     vimeoPlayerApiRef.current = player;
     player.on("timeupdate", update);
-    if (Number.isFinite(initialTime) && initialTime > 0) void player.setCurrentTime(initialTime);
+    if (Number.isFinite(initialTime) && initialTime > 0) {
+      void (async () => {
+        await player.setCurrentTime(initialTime);
+        try {
+          await player.play();
+        } catch {
+          try {
+            await player.setVolume(0);
+            await player.play();
+          } catch {
+            // The player remains ready for a manual play if the browser blocks autoplay.
+          }
+        }
+      })();
+    }
     return () => {
       player.off("timeupdate", update);
       if (vimeoPlayerApiRef.current === player) vimeoPlayerApiRef.current = null;
@@ -306,6 +331,10 @@ export default function TrainingReplayPage() {
     if (!video || !isDirectVideo || initialTime <= 0) return;
     const seek = () => {
       video.currentTime = initialTime;
+      void video.play().catch(async () => {
+        video.muted = true;
+        await video.play().catch(() => undefined);
+      });
     };
     if (video.readyState >= 1) seek();
     else video.addEventListener("loadedmetadata", seek, { once: true });
@@ -608,6 +637,7 @@ export default function TrainingReplayPage() {
                 ref={isVimeoReplay ? vimeoPlayerRef : undefined}
                 src={embedUrl}
                 className="h-full w-full"
+                allow="autoplay; fullscreen; picture-in-picture"
                 allowFullScreen
                 title={replay.title}
               />
@@ -615,7 +645,7 @@ export default function TrainingReplayPage() {
           </div>
         ) : isDirectVideo && replay.videoUrl ? (
           <div className="mx-auto mb-8 w-full max-w-[1100px]">
-            <video ref={directVideoRef} controls preload="metadata" className="aspect-video w-full rounded-xl bg-slate-950 shadow-sm">
+            <video ref={directVideoRef} controls preload="metadata" autoPlay={initialTime > 0} playsInline className="aspect-video w-full rounded-xl bg-slate-950 shadow-sm">
               <source src={replay.videoUrl} />
             </video>
           </div>
