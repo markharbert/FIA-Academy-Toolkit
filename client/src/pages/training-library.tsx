@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import Player from "@vimeo/player";
-import { Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, FileSearch, Globe2, Library, MessageCircleQuestion, Play, Search, Sparkles, Tag, X } from "lucide-react";
+import jsPDF from "jspdf";
+import { Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, Download, FileSearch, Globe2, Library, MessageCircleQuestion, Play, Search, Sparkles, Tag, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,32 +31,13 @@ async function postApi<T>(url: string, body: unknown): Promise<T> {
 }
 const stamp = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 
-function renderAnswerInline(text: string) {
-  const readableText = text
-    .replace(/&amp;/gi, "&")
-    .replace(/&quot;/gi, "\"")
-    .replace(/&#39;|&apos;/gi, "'")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">");
-  const parts = readableText.split(/(\*\*[^*]+\*\*|__[^_]+__|`[^`]+`|\[[^\]]+\]\([^)]+\))/g);
-  return parts.map((part, index) => {
-    const isBold = (part.startsWith("**") && part.endsWith("**")) || (part.startsWith("__") && part.endsWith("__"));
-    if (isBold) return <strong key={index} className="font-bold text-slate-950">{part.slice(2, -2)}</strong>;
-    if (part.startsWith("`") && part.endsWith("`")) {
-      return <code key={index} className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.9em] font-semibold text-slate-800">{part.slice(1, -1)}</code>;
-    }
-    const markdownLink = part.match(/^\[([^\]]+)\]\([^)]+\)$/);
-    if (markdownLink) return <span key={index} className="font-semibold text-slate-900">{markdownLink[1]}</span>;
-    return <span key={index}>{part}</span>;
-  });
-}
+type AnswerBlock =
+  | { type: "paragraph"; lines: string[] }
+  | { type: "heading"; text: string }
+  | { type: "list"; ordered: boolean; items: string[] }
+  | { type: "divider" };
 
-function FormattedAnswer({ text }: { text: string }) {
-  type AnswerBlock =
-    | { type: "paragraph"; lines: string[] }
-    | { type: "heading"; text: string }
-    | { type: "list"; ordered: boolean; items: string[] }
-    | { type: "divider" };
+function parseAnswerBlocks(text: string): AnswerBlock[] {
   const blocks: AnswerBlock[] = [];
   let paragraphLines: string[] = [];
   let listItems: string[] = [];
@@ -108,7 +90,39 @@ function FormattedAnswer({ text }: { text: string }) {
   }
   flushParagraph();
   flushList();
+  return blocks;
+}
 
+function cleanAnswerText(text: string) {
+  return text
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\*\*([^*]+)\*\*|__([^_]+)__/g, "$1$2")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .trim();
+}
+
+function renderAnswerInline(text: string) {
+  const readableText = cleanAnswerText(text);
+  const parts = readableText.split(/(\*\*[^*]+\*\*|__[^_]+__|`[^`]+`|\[[^\]]+\]\([^)]+\))/g);
+  return parts.map((part, index) => {
+    const isBold = (part.startsWith("**") && part.endsWith("**")) || (part.startsWith("__") && part.endsWith("__"));
+    if (isBold) return <strong key={index} className="font-bold text-slate-950">{part.slice(2, -2)}</strong>;
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return <code key={index} className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.9em] font-semibold text-slate-800">{part.slice(1, -1)}</code>;
+    }
+    const markdownLink = part.match(/^\[([^\]]+)\]\([^)]+\)$/);
+    if (markdownLink) return <span key={index} className="font-semibold text-slate-900">{markdownLink[1]}</span>;
+    return <span key={index}>{part}</span>;
+  });
+}
+
+function FormattedAnswer({ text }: { text: string }) {
+  const blocks = parseAnswerBlocks(text);
   return (
     <div className="max-w-4xl space-y-5 text-[15px] leading-7 text-slate-700">
       {blocks.map((block, blockIndex) => {
@@ -144,6 +158,163 @@ function FormattedAnswer({ text }: { text: string }) {
       })}
     </div>
   );
+}
+
+function downloadQaPdf(result: QAResult) {
+  const doc = new jsPDF({ unit: "pt", format: "letter" });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 54;
+  const contentW = pageW - margin * 2;
+  const sourceLabel = result.answerSource === "web" ? "Found online" : "Answer from your trainings";
+  const addFooter = () => {
+    const pageCount = doc.getNumberOfPages();
+    for (let page = 1; page <= pageCount; page += 1) {
+      doc.setPage(page);
+      doc.setDrawColor(226, 232, 240);
+      doc.line(margin, pageH - 42, pageW - margin, pageH - 42);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text("Fearless Influencer Academy — Replay Vault Q&A", margin, pageH - 25);
+      doc.text(`Page ${page} of ${pageCount}`, pageW - margin, pageH - 25, { align: "right" });
+    }
+  };
+  const drawContentHeader = () => {
+    doc.setFillColor(30, 27, 75);
+    doc.rect(0, 0, pageW, 46, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(255, 255, 255);
+    doc.text("Fearless Influencer Academy", margin, 29);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text("Replay Vault Q&A", pageW - margin, 29, { align: "right" });
+  };
+
+  // Cover page
+  doc.setFillColor(30, 27, 75);
+  doc.rect(0, 0, pageW, pageH, "F");
+  doc.setFillColor(124, 58, 237);
+  doc.rect(0, 0, pageW, 14, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.text("Fearless Influencer Academy", margin, 92);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+  doc.setTextColor(221, 214, 254);
+  doc.text("Replay Vault Q&A", margin, 116);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(27);
+  doc.setTextColor(255, 255, 255);
+  const coverQuestion = doc.splitTextToSize(cleanAnswerText(result.question), contentW);
+  doc.text(coverQuestion, margin, 245);
+  const questionHeight = coverQuestion.length * 32;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+  doc.setTextColor(221, 214, 254);
+  doc.text("QUESTION", margin, 205);
+  doc.setFillColor(196, 181, 253);
+  doc.roundedRect(margin, 245 + questionHeight + 34, 116, 24, 12, 12, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(49, 46, 129);
+  doc.text(sourceLabel, margin + 58, 245 + questionHeight + 50, { align: "center" });
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(196, 181, 253);
+  doc.text("A formatted answer from the Replay Vault", margin, pageH - 70);
+
+  // Answer pages
+  doc.addPage();
+  drawContentHeader();
+  let y = 82;
+  const ensureSpace = (height: number) => {
+    if (y + height > pageH - 62) {
+      doc.addPage();
+      drawContentHeader();
+      y = 78;
+    }
+  };
+  const answerTitle = doc.splitTextToSize(cleanAnswerText(result.question), contentW);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.setTextColor(15, 23, 42);
+  doc.text(answerTitle, margin, y);
+  y += answerTitle.length * 22 + 14;
+  doc.setDrawColor(221, 214, 254);
+  doc.line(margin, y, pageW - margin, y);
+  y += 26;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(109, 40, 217);
+  doc.text(sourceLabel.toUpperCase(), margin, y);
+  y += 24;
+
+  for (const block of parseAnswerBlocks(result.answer)) {
+    if (block.type === "divider") {
+      ensureSpace(18);
+      doc.setDrawColor(226, 232, 240);
+      doc.line(margin, y, pageW - margin, y);
+      y += 18;
+      continue;
+    }
+    if (block.type === "heading") {
+      const lines = doc.splitTextToSize(cleanAnswerText(block.text), contentW);
+      ensureSpace(lines.length * 18 + 14);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(13);
+      doc.setTextColor(15, 23, 42);
+      doc.text(lines, margin, y);
+      y += lines.length * 18 + 12;
+      continue;
+    }
+    if (block.type === "paragraph") {
+      const lines = doc.splitTextToSize(cleanAnswerText(block.lines.join(" ")), contentW);
+      ensureSpace(lines.length * 15 + 12);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10.5);
+      doc.setTextColor(51, 65, 85);
+      doc.text(lines, margin, y);
+      y += lines.length * 15 + 12;
+      continue;
+    }
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10.5);
+    for (const [index, item] of block.items.entries()) {
+      const prefix = block.ordered ? `${index + 1}. ` : "• ";
+      const itemLines = doc.splitTextToSize(`${prefix}${cleanAnswerText(item)}`, contentW - 14);
+      ensureSpace(itemLines.length * 15 + 7);
+      doc.setTextColor(51, 65, 85);
+      doc.text(itemLines, margin + 10, y);
+      y += itemLines.length * 15 + 7;
+    }
+    y += 5;
+  }
+
+  if (result.sources.length > 0) {
+    ensureSpace(50);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.setTextColor(15, 23, 42);
+    doc.text("Supporting training", margin, y);
+    y += 20;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(51, 65, 85);
+    for (const source of result.sources) {
+      const lines = doc.splitTextToSize(`${stamp(source.startSeconds)} — ${cleanAnswerText(source.title)}`, contentW - 10);
+      ensureSpace(lines.length * 15 + 5);
+      doc.text(`• ${lines[0]}`, margin + 10, y);
+      if (lines.length > 1) doc.text(lines.slice(1), margin + 19, y + 15);
+      y += lines.length * 15 + 5;
+    }
+  }
+
+  addFooter();
+  const filename = `replay-vault-qa-${cleanAnswerText(result.question).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "answer"}.pdf`;
+  doc.save(filename);
 }
 
 function getVideoEmbedUrl(videoUrl: string | null | undefined, startSeconds: number) {
