@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, Library, Search, Tag, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -32,6 +32,7 @@ export default function TrainingLibraryPage() {
   }>({
     queryKey: ["/api/training/library", debouncedQ, category, tags, page],
     queryFn: () => api(`/api/training/library?q=${encodeURIComponent(debouncedQ)}&category=${encodeURIComponent(category === "all" ? "" : category)}&tags=${encodeURIComponent(tags.join(","))}&page=${page}`),
+    placeholderData: keepPreviousData,
   });
   const items = data?.items || data?.replays || [];
   const categories = data?.facets?.categories || [];
