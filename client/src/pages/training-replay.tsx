@@ -108,6 +108,25 @@ function getEmbedUrl(videoUrl?: string | null) {
   }
 }
 
+const replayContentSanitizeOptions = {
+  ALLOWED_TAGS: ["p", "br", "b", "i", "em", "strong", "ul", "ol", "li", "a", "h1", "h2", "h3", "h4", "blockquote", "code", "pre", "hr", "img", "span"],
+  ALLOWED_ATTR: ["href", "target", "rel", "src", "alt", "class", "style"],
+  ALLOW_DATA_ATTR: false,
+  FORCE_BODY: true,
+};
+
+function sanitizeReplayContent(content?: string | null) {
+  return content ? DOMPurify.sanitize(content, replayContentSanitizeOptions) : "";
+}
+
+function hasReplayContent(content: string) {
+  const text = content
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&(?:nbsp|#160);/gi, " ")
+    .trim();
+  return Boolean(text || /<(?:img|hr)\b/i.test(content));
+}
+
 export default function TrainingReplayPage() {
   const { slug } = useParams<{ slug: string }>();
   const [, go] = useLocation();
@@ -221,6 +240,8 @@ export default function TrainingReplayPage() {
   const chapters = replay?.transcriptChapters ?? [];
   const transcriptCues = replay?.transcriptCues ?? [];
   const transcriptText = replay?.transcriptText ? formatTranscriptParagraphs(replay.transcriptText) : "";
+  const sanitizedReplayContent = sanitizeReplayContent(replay?.content);
+  const showReplayContent = hasReplayContent(sanitizedReplayContent);
   const transcriptTokens = transcriptText.split(/(\s+)/);
   let transcriptWordCount = 0;
   const transcriptTokenWordIndexes = transcriptTokens.map((token) => {
@@ -678,7 +699,7 @@ export default function TrainingReplayPage() {
             </div>
           )}
 
-          {replay.content && (
+          {showReplayContent && (
             <section
               className="mb-10 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"
             >
@@ -694,12 +715,7 @@ export default function TrainingReplayPage() {
               <div
                 className="prose prose-slate max-w-none text-[15px] leading-7"
                 dangerouslySetInnerHTML={{
-                  __html: DOMPurify.sanitize(replay.content, {
-                    ALLOWED_TAGS: ["p", "br", "b", "i", "em", "strong", "ul", "ol", "li", "a", "h1", "h2", "h3", "h4", "blockquote", "code", "pre", "hr", "img", "span"],
-                    ALLOWED_ATTR: ["href", "target", "rel", "src", "alt", "class", "style"],
-                    ALLOW_DATA_ATTR: false,
-                    FORCE_BODY: true,
-                  }),
+                  __html: sanitizedReplayContent,
                 }}
               />
             </section>
@@ -712,7 +728,7 @@ export default function TrainingReplayPage() {
                   <ExternalLink className="h-4 w-4" />
                 </span>
                 <div>
-                  <h2 className="text-sm font-bold uppercase tracking-wider text-blue-950">Replay resources</h2>
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-blue-950">Resources</h2>
                   <p className="mt-0.5 text-xs text-blue-800/70">Helpful links and downloads for this training.</p>
                 </div>
               </div>
