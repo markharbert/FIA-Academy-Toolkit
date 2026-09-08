@@ -87,15 +87,6 @@ function TranscriptVideoDialog({ active, onWatchFull }: {
     void (async () => {
       try {
         await player.setCurrentTime(active.match.startSeconds);
-        try {
-          const tracks = await player.getTextTracks();
-          const defaultTrack = tracks[0];
-          if (defaultTrack) {
-            await player.enableTextTrack(defaultTrack.language, defaultTrack.kind, true);
-          }
-        } catch {
-          // Some Vimeo videos expose the transcript control without a selectable caption track.
-        }
         if (disposed) return;
         await player.play();
       } catch {
