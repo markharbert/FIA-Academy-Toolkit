@@ -350,6 +350,14 @@ async function fetchCfLessonPage(
   currentPath: string,
   session?: CfRecoverySession,
 ): Promise<{ html: string; url: string } | null> {
+  const initialUrl = lessonPageUrl(coursePath, sectionPath, currentPath);
+  return initialUrl ? fetchCfLessonPageUrl(initialUrl, session) : null;
+}
+
+async function fetchCfLessonPageUrl(
+  initialUrl: URL,
+  session?: CfRecoverySession,
+): Promise<{ html: string; url: string } | null> {
   if (!CF_SSO_DOMAIN) return null;
   let origin: URL;
   try {
@@ -357,8 +365,7 @@ async function fetchCfLessonPage(
   } catch {
     return null;
   }
-  const initialUrl = lessonPageUrl(coursePath, sectionPath, currentPath);
-  if (!initialUrl) return null;
+  if (initialUrl.origin !== origin.origin) return null;
   let url: URL = initialUrl;
 
   try {
@@ -415,13 +422,17 @@ export function authenticatedLessonPageHeaders(session: CfRecoverySession): Reco
 
 async function createAuthenticatedRecoverySession(
   email: string,
-  coursePath: string | null,
+  targetPath: string | null,
 ): Promise<CfRecoverySession | null> {
-  if (!email || !coursePath || !CF_SSO_DOMAIN) return null;
+  if (!email || !targetPath || !CF_SSO_DOMAIN) return null;
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
   try {
-    const courseUrl = new URL(coursePath, `https://${CF_SSO_DOMAIN}`).toString();
-    const ssoUrl = generateCfSsoUrl(email, courseUrl);
+    const targetUrl = new URL(targetPath, `https://${CF_SSO_DOMAIN}`);
+    if (targetUrl.hostname !== CF_SSO_DOMAIN) {
+      throw new Error("ClickFunnels recovery target is outside the configured workspace");
+    }
+    const targetUrlString = targetUrl.toString();
+    const ssoUrl = generateCfSsoUrl(email, targetUrlString);
     browser = await puppeteer.launch({
       executablePath: getChromiumPath(),
       args: CHROMIUM_LAUNCH_ARGS,
@@ -446,7 +457,7 @@ async function createAuthenticatedRecoverySession(
     return {
       cookie: sessionCookie,
       userAgent: await page.evaluate(() => navigator.userAgent),
-      referer: courseUrl,
+      referer: targetUrlString,
     };
   } catch (error) {
     console.warn("[CF Import] Authenticated browser recovery unavailable:", error instanceof Error ? error.message : error);
@@ -454,6 +465,108 @@ async function createAuthenticatedRecoverySession(
   } finally {
     if (browser) await browser.close().catch(() => undefined);
   }
+}
+
+async function recoverTreeLesson(
+  node: CfTreeNode,
+  session?: CfRecoverySession,
+): Promise<void> {
+  const startedAt = Date.now();
+  let apiDurationMs = 0;
+  let pageDurationMs = 0;
+  let vimeoDurationMs = 0;
+  let apiBody: string | null = null;
+  const apiStartedAt = Date.now();
+  try {
+    const raw = await cfGet(`/courses/lessons/${encodeURIComponent(node.cfId)}`);
+    const lesson = raw?.data ?? raw;
+    apiBody = typeof lesson?.body === "string" ? lesson.body : null;
+  } catch {
+    // Protected page recovery can still succeed when the single-lesson API is unavailable.
+  } finally {
+    apiDurationMs = Date.now() - apiStartedAt;
+  }
+
+  let recovered = extractCfLessonContent(apiBody);
+  if (node.sourceUrl && session) {
+    const pageStartedAt = Date.now();
+    try {
+      const sourceUrl = new URL(node.sourceUrl);
+      const page = await fetchCfLessonPageUrl(sourceUrl, session);
+      if (page && !isUnavailableLessonHtml(page.html)) {
+        const pageRecovered = extractCfLessonContent(page.html, page.url);
+        if (pageRecovered.status !== "unavailable") recovered = pageRecovered;
+      }
+    } catch {
+      // Invalid or unavailable source URLs fall back to API lesson content.
+    } finally {
+      pageDurationMs = Date.now() - pageStartedAt;
+    }
+  }
+
+  node.videoUrl = recovered.videoUrl ?? undefined;
+  node.content = recovered.content;
+  node.description = recovered.description;
+  node.thumbnailUrl = recovered.thumbnailUrl;
+  node.resources = recovered.resources;
+  node.recoveryStatus = recovered.status;
+
+  const vimeoId = node.videoUrl ? extractVimeoVideoId(node.videoUrl) : null;
+  if (vimeoId && (!node.description || !node.thumbnailUrl)) {
+    const vimeoStartedAt = Date.now();
+    try {
+      const metadata = await getVimeoVideoMetadata(vimeoId);
+      node.description ||= metadata.description;
+      node.thumbnailUrl ||= metadata.thumbnailUrl;
+    } catch {
+      // Imported content remains valid when optional Vimeo metadata is unavailable.
+    } finally {
+      vimeoDurationMs = Date.now() - vimeoStartedAt;
+    }
+  }
+  console.log(
+    `[CF Import] lesson ${node.cfId} recovery ${Date.now() - startedAt}ms`
+    + ` (api ${apiDurationMs}ms, page ${pageDurationMs}ms, vimeo ${vimeoDurationMs}ms)`,
+  );
+}
+
+/**
+ * Recovers only lessons already selected in the import preview. This avoids
+ * re-fetching every section and lesson list for the full course at execution.
+ */
+export async function recoverSelectedCfLessonTree(
+  tree: CfTreeNode[],
+  recoveryEmail?: string,
+  onProgress: (completed: number, total: number) => void = () => undefined,
+): Promise<CfTreeNode[]> {
+  const lessons: CfTreeNode[] = [];
+  const collect = (nodes: CfTreeNode[]) => {
+    for (const node of nodes) {
+      if (node.type === "lesson") lessons.push(node);
+      else collect(node.children);
+    }
+  };
+  collect(tree);
+  if (!lessons.length) return tree;
+
+  const recoveryTarget = lessons.find((lesson) => lesson.sourceUrl)?.sourceUrl ?? null;
+  const session = recoveryEmail && recoveryTarget
+    ? await createAuthenticatedRecoverySession(recoveryEmail, recoveryTarget)
+    : null;
+  let completed = 0;
+  const queue = [...lessons];
+  const workerCount = Math.min(session ? 12 : 8, lessons.length);
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (true) {
+      const lesson = queue.shift();
+      if (!lesson) break;
+      await recoverTreeLesson(lesson, session ?? undefined);
+      completed += 1;
+      onProgress(completed, lessons.length);
+    }
+  });
+  await Promise.all(workers);
+  return tree;
 }
 
 async function recoverLessonContent(

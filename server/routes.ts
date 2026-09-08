@@ -51,7 +51,7 @@ import {
   CF_COURSE_ID,
   type CfContactInfo,
 } from "./clickfunnels";
-import { listCfCourses, listCfDownloads, getCfCourseStructure, extractVideoUrl, extractVimeoUrl, type CfTreeNode } from "./cf-import-client";
+import { listCfCourses, listCfDownloads, getCfCourseStructure, recoverSelectedCfLessonTree, extractVideoUrl, extractVimeoUrl, type CfTreeNode } from "./cf-import-client";
 import { runCfMembershipReconciliation } from "./cfMembershipReconciliation";
 import { listVimeoProjects, listVimeoVideos, searchVimeoVideos, extractVimeoVideoId, listVimeoTextTracks, fetchVimeoTranscript, getVimeoVideoDurationMinutes, getVimeoVideoThumbnail, getVimeoVideoDownload, syncVimeoChapters, type VimeoChapterInput } from "./vimeo";
 import { FIA_EVENT_CALENDAR_ID, FIA_EVENT_CALENDAR_NAME, FIA_EVENT_CALENDAR_SUBSCRIBE_URL, FIA_EVENT_CALENDAR_TIMEZONE, GoogleCalendarError, getTrainingCalendarEvents } from "./googleCalendar";
@@ -2473,41 +2473,18 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Unsupported import destination." });
       }
 
-      const selectedLessonIds = new Set<string>();
-      const collectSelectedLessonIds = (nodes: CfTreeNode[]) => {
-        for (const node of nodes) {
-          if (node.type === "lesson") selectedLessonIds.add(node.cfId);
-          else collectSelectedLessonIds(node.children);
-        }
-      };
-      collectSelectedLessonIds(filteredTree);
-
       let importTree = filteredTree;
-      if (selectedLessonIds.size > 0) {
-        const recoveredStructure = await getCfCourseStructure(
-          cfCourseId,
-          () => undefined,
-          typeof adminUser?.email === "string" ? adminUser.email : undefined,
-          selectedLessonIds,
-        );
-        const recoveredLessons = new Map<string, CfTreeNode>();
-        const indexRecoveredLessons = (nodes: CfTreeNode[]) => {
-          for (const node of nodes) {
-            if (node.type === "lesson") recoveredLessons.set(node.cfId, node);
-            else indexRecoveredLessons(node.children);
+      const recoveryStartedAt = Date.now();
+      importTree = await recoverSelectedCfLessonTree(
+        filteredTree,
+        typeof adminUser?.email === "string" ? adminUser.email : undefined,
+        (completed, total) => {
+          if (completed === total || completed % 10 === 0) {
+            console.log(`[CF Import] recovered ${completed} of ${total} selected lessons`);
           }
-        };
-        indexRecoveredLessons(recoveredStructure.roots);
-        const mergeRecoveredLessons = (nodes: CfTreeNode[]): CfTreeNode[] =>
-          nodes.map((node) => {
-            if (node.type === "lesson") {
-              const recovered = recoveredLessons.get(node.cfId);
-              return recovered ? { ...node, ...recovered, children: [] } : node;
-            }
-            return { ...node, children: mergeRecoveredLessons(node.children) };
-          });
-        importTree = mergeRecoveredLessons(filteredTree);
-      }
+        },
+      );
+      console.log(`[CF Import] recovered selected lesson content in ${Date.now() - recoveryStartedAt}ms`);
 
       if (destination.type === "training-library") {
         const { rows, errors } = collectTrainingReplayRows(importTree);

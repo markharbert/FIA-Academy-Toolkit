@@ -60,6 +60,8 @@ Load the course outline from the ClickFunnels API without crawling lesson pages;
 
 **How to apply:** Keep structure discovery and page recovery as separate phases, reuse one short-lived SSO cookie, and fetch selected pages concurrently without loading page assets.
 
+At execution time, recover directly from the selected tree and its known lesson URLs. Never re-fetch every section and lesson list merely to import a small selection; that makes one-lesson imports scale with the size of the entire source course.
+
 ## Replay prefill source priority
 
 Recovered ClickFunnels data must populate the editable Vault replay record, not remain only in the import preview.
