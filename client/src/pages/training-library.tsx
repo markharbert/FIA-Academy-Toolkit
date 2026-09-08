@@ -50,9 +50,8 @@ function isDirectVideoUrl(videoUrl: string | null | undefined) {
   return Boolean(videoUrl && /\.(?:mp4|webm|ogg)(?:$|[?#])/i.test(videoUrl));
 }
 
-function TranscriptVideoDialog({ active, onClose, onWatchFull }: {
+function TranscriptVideoDialog({ active, onWatchFull }: {
   active: ActiveMatch;
-  onClose: () => void;
   onWatchFull: () => void;
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -327,7 +326,6 @@ export default function TrainingLibraryPage() {
                   {item.category && <span className="mt-3 inline-flex w-fit rounded-full border border-red-700 bg-red-600 px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wider text-white shadow-sm">{item.category}</span>}
                   <div className="mt-auto flex items-center justify-between border-t border-violet-50 pt-3 text-xs font-medium text-slate-500">
                     <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-violet-600" />{item.durationMinutes ? `${item.durationMinutes} min` : "Replay"}</span>
-                    <span>{item.durationMinutes ? `${item.durationMinutes} min` : "Replay"}</span>
                   </div>
                 </div>
               </button>
@@ -363,7 +361,6 @@ export default function TrainingLibraryPage() {
         {activeMatch && (
           <TranscriptVideoDialog
             active={activeMatch}
-            onClose={() => setActiveMatch(null)}
             onWatchFull={() => {
               const target = `/training/library/${activeMatch.item.slug}?t=${Math.floor(activeMatch.match.startSeconds)}`;
               setActiveMatch(null);
