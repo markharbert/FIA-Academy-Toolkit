@@ -129,16 +129,10 @@ export type TrainingReplayListItem = Pick<TrainingReplay,
   "id" | "slug" | "title" | "description" | "videoUrl" | "thumbnailUrl"
   | "durationMinutes" | "category" | "tags" | "sortOrder" | "createdAt"
 >;
-export type TrainingReplayTranscriptCue = {
-  text: string;
-  startSeconds: number;
-  endSeconds: number | null;
-};
 export type TrainingReplayTranscriptMatch = {
   text: string;
   startSeconds: number;
   endSeconds: number | null;
-  contextCues: TrainingReplayTranscriptCue[];
   version: number;
   transcriptUpdatedAt: Date | null;
 };
@@ -7039,15 +7033,10 @@ export class DatabaseStorage implements IStorage {
     const matchRows = await pool.query<{
       replayId: string;
       text: string;
-      matchText: string;
       startSeconds: number;
       endSeconds: number | null;
       previousText: string | null;
-      previousStartSeconds: number | null;
-      previousEndSeconds: number | null;
       nextText: string | null;
-      nextStartSeconds: number | null;
-      nextEndSeconds: number | null;
       version: number;
       transcriptUpdatedAt: Date | null;
     }>(`
@@ -7063,21 +7052,9 @@ export class DatabaseStorage implements IStorage {
           LAG(chunk.text) OVER (
             PARTITION BY version.id ORDER BY chunk.chunk_index
           ) AS previous_text,
-          LAG(chunk.start_seconds) OVER (
-            PARTITION BY version.id ORDER BY chunk.chunk_index
-          ) AS previous_start_seconds,
-          LAG(chunk.end_seconds) OVER (
-            PARTITION BY version.id ORDER BY chunk.chunk_index
-          ) AS previous_end_seconds,
           LEAD(chunk.text) OVER (
             PARTITION BY version.id ORDER BY chunk.chunk_index
-          ) AS next_text,
-          LEAD(chunk.start_seconds) OVER (
-            PARTITION BY version.id ORDER BY chunk.chunk_index
-          ) AS next_start_seconds,
-          LEAD(chunk.end_seconds) OVER (
-            PARTITION BY version.id ORDER BY chunk.chunk_index
-          ) AS next_end_seconds
+          ) AS next_text
         FROM training_replays replay
         JOIN training_replay_transcript_versions version ON version.replay_id = replay.id
         JOIN training_replay_transcript_chunks chunk ON chunk.transcript_version_id = version.id
@@ -7088,15 +7065,8 @@ export class DatabaseStorage implements IStorage {
       SELECT
         replay_id AS "replayId",
         LEFT(CONCAT_WS(' ', previous_text, match_text, next_text), 1_200) AS text,
-        match_text AS "matchText",
         start_seconds AS "startSeconds",
         end_seconds AS "endSeconds",
-        previous_text AS "previousText",
-        previous_start_seconds AS "previousStartSeconds",
-        previous_end_seconds AS "previousEndSeconds",
-        next_text AS "nextText",
-        next_start_seconds AS "nextStartSeconds",
-        next_end_seconds AS "nextEndSeconds",
         version,
         transcript_updated_at AS "transcriptUpdatedAt"
       FROM current_chunks
@@ -7106,31 +7076,10 @@ export class DatabaseStorage implements IStorage {
     const matchesByReplay = new Map<string, TrainingReplayTranscriptMatch[]>();
     for (const match of matchRows.rows) {
       const current = matchesByReplay.get(match.replayId) ?? [];
-      const contextCues: TrainingReplayTranscriptCue[] = [];
-      if (match.previousText && match.previousStartSeconds !== null) {
-        contextCues.push({
-          text: match.previousText,
-          startSeconds: Number(match.previousStartSeconds),
-          endSeconds: match.previousEndSeconds === null ? null : Number(match.previousEndSeconds),
-        });
-      }
-      contextCues.push({
-        text: match.matchText,
-        startSeconds: Number(match.startSeconds),
-        endSeconds: match.endSeconds === null ? null : Number(match.endSeconds),
-      });
-      if (match.nextText && match.nextStartSeconds !== null) {
-        contextCues.push({
-          text: match.nextText,
-          startSeconds: Number(match.nextStartSeconds),
-          endSeconds: match.nextEndSeconds === null ? null : Number(match.nextEndSeconds),
-        });
-      }
       if (current.length < 5) current.push({
         text: match.text,
         startSeconds: Number(match.startSeconds),
         endSeconds: match.endSeconds === null ? null : Number(match.endSeconds),
-        contextCues,
         version: Number(match.version),
         transcriptUpdatedAt: match.transcriptUpdatedAt,
       });
