@@ -191,8 +191,8 @@ export default function TrainingLibraryPage() {
           </button>
         </div>
         <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-violet-600" /><Input className="h-11 border-violet-100 pl-10" placeholder={mode === "transcripts" ? "Search what was said in every training" : "Search titles, descriptions, categories, and topics"} value={q} onChange={(event) => { setQ(event.target.value); setPage(1); }} /></div>
-        <div className="mt-4 flex flex-wrap items-center gap-2"><span className="mr-1 text-xs font-bold uppercase tracking-wider text-slate-500">Browse</span><Button size="sm" variant={category === "all" ? "default" : "outline"} onClick={() => { setCategory("all"); setPage(1); }}>All sessions</Button>{categories.map((item) => <Button key={item} size="sm" variant={category === item ? "default" : "outline"} onClick={() => { setCategory(item); setPage(1); }}>{item}</Button>)}</div>
-        {availableTags.length > 0 && (
+        {mode === "trainings" && <div className="mt-4 flex flex-wrap items-center gap-2"><span className="mr-1 text-xs font-bold uppercase tracking-wider text-slate-500">Browse</span><Button size="sm" variant={category === "all" ? "default" : "outline"} onClick={() => { setCategory("all"); setPage(1); }}>All sessions</Button>{categories.map((item) => <Button key={item} size="sm" variant={category === item ? "default" : "outline"} onClick={() => { setCategory(item); setPage(1); }}>{item}</Button>)}</div>}
+        {mode === "trainings" && availableTags.length > 0 && (
           <div className="mt-3 border-t border-violet-50 pt-3">
             <div className="flex flex-wrap items-center gap-2">
               <span className="mr-1 flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-slate-500">
