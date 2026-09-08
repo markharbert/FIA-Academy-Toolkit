@@ -241,8 +241,9 @@ export default function TrainingReplayPage() {
       toast({ title: "Couldn’t delete comment", description: error.message, variant: "destructive" });
     },
   });
-  const [transcriptOpen, setTranscriptOpen] = useState(false);
-  const [transcriptTab, setTranscriptTab] = useState<"chapters" | "transcript">("chapters");
+  const openedFromTranscriptSearch = new URLSearchParams(window.location.search).get("fromTranscriptSearch") === "1";
+  const [transcriptOpen, setTranscriptOpen] = useState(openedFromTranscriptSearch);
+  const [transcriptTab, setTranscriptTab] = useState<"chapters" | "transcript">(openedFromTranscriptSearch ? "transcript" : "chapters");
   const [videoCurrentTime, setVideoCurrentTime] = useState(0);
   const vimeoPlayerRef = useRef<HTMLIFrameElement>(null);
   const vimeoPlayerApiRef = useRef<Player | null>(null);
@@ -357,8 +358,8 @@ export default function TrainingReplayPage() {
   }, [activeWordIndex, transcriptOpen, transcriptTab]);
 
   useEffect(() => {
-    setTranscriptOpen(false);
-    setTranscriptTab("chapters");
+    setTranscriptOpen(openedFromTranscriptSearch);
+    setTranscriptTab(openedFromTranscriptSearch ? "transcript" : "chapters");
     setVideoCurrentTime(0);
     setCommentBody("");
     setReplyingTo(null);
@@ -367,7 +368,7 @@ export default function TrainingReplayPage() {
     setEditBody("");
     setConfirmDeleteId(null);
     lastScrolledWordRef.current = null;
-  }, [slug]);
+  }, [openedFromTranscriptSearch, slug]);
 
   const seekToChapter = (seconds: number) => {
     if (isVimeoReplay) {

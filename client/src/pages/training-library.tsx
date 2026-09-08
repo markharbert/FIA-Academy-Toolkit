@@ -25,7 +25,7 @@ function getVideoEmbedUrl(videoUrl: string | null | undefined, startSeconds: num
     if (url.hostname.includes("vimeo.com")) {
       const videoId = url.pathname.match(/(?:^|\/)(?:video\/)?(\d+)(?:\/|$)/)?.[1];
       return videoId
-        ? `https://player.vimeo.com/video/${videoId}?api=1&autoplay=1&muted=1#t=${start}s`
+        ? `https://player.vimeo.com/video/${videoId}?api=1&autoplay=1&muted=1&transcript=1#t=${start}s`
         : null;
     }
     if (url.hostname.includes("youtube.com")) {
@@ -87,6 +87,15 @@ function TranscriptVideoDialog({ active, onWatchFull }: {
     void (async () => {
       try {
         await player.setCurrentTime(active.match.startSeconds);
+        try {
+          const tracks = await player.getTextTracks();
+          const defaultTrack = tracks[0];
+          if (defaultTrack) {
+            await player.enableTextTrack(defaultTrack.language, defaultTrack.kind, true);
+          }
+        } catch {
+          // Some Vimeo videos expose the transcript control without a selectable caption track.
+        }
         if (disposed) return;
         await player.play();
       } catch {
@@ -374,7 +383,7 @@ export default function TrainingLibraryPage() {
           <TranscriptVideoDialog
             active={activeMatch}
             onWatchFull={() => {
-              const target = `/training/library/${activeMatch.item.slug}?t=${Math.floor(activeMatch.match.startSeconds)}`;
+              const target = `/training/library/${activeMatch.item.slug}?t=${Math.floor(activeMatch.match.startSeconds)}&fromTranscriptSearch=1`;
               setActiveMatch(null);
               go(target);
             }}
