@@ -131,9 +131,9 @@ function TranscriptVideoDialog({ active, onWatchFull }: {
             This video cannot be previewed here. Open the full training to watch it.
           </div>
         )}
-        <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-4 flex flex-col gap-3">
           <p className="text-sm leading-relaxed text-slate-600">{active.match.text}</p>
-          <Button className="shrink-0" onClick={onWatchFull}>
+          <Button className="w-full" onClick={onWatchFull}>
             <Play className="mr-1.5 h-3.5 w-3.5" />
             Watch this training in full
           </Button>
