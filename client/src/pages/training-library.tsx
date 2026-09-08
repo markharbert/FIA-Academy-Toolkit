@@ -325,7 +325,12 @@ function downloadQaPdf(result: QAResult) {
   }
 
   addFooter();
-  const filename = `replay-vault-qa-${cleanAnswerText(result.question).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "answer"}.pdf`;
+  const filenameQuestion = cleanAnswerText(result.question)
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 180);
+  const filename = `${filenameQuestion || "answer"}.pdf`;
   doc.save(filename);
 }
 
