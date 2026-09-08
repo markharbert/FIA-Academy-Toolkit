@@ -139,6 +139,16 @@ export type TrainingReplayTranscriptMatch = {
 export type TrainingReplayTranscriptSearchItem = TrainingReplayListItem & {
   transcriptMatches: TrainingReplayTranscriptMatch[];
 };
+export type TrainingReplayTranscriptEvidence = {
+  replayId: string;
+  slug: string;
+  title: string;
+  videoUrl: string | null;
+  text: string;
+  startSeconds: number;
+  endSeconds: number | null;
+  score: number;
+};
 
 type CourseNavigationLesson = Pick<
   CourseLesson,
@@ -897,6 +907,10 @@ export interface IStorage {
     page: number;
     pageSize: number;
   }): Promise<{ items: TrainingReplayTranscriptSearchItem[]; total: number }>;
+  searchPublishedTrainingReplayTranscriptEvidence(
+    question: string,
+    limit?: number,
+  ): Promise<TrainingReplayTranscriptEvidence[]>;
   getUserTrainingReplayProgress(userId: string): Promise<TrainingReplayProgress[]>;
   getTrainingReplayProgress(userId: string, replayId: string): Promise<TrainingReplayProgress | undefined>;
   upsertTrainingReplayProgress(userId: string, replayId: string, completed: boolean): Promise<TrainingReplayProgress>;
@@ -7092,6 +7106,104 @@ export class DatabaseStorage implements IStorage {
       })),
       total: Number(totals.rows[0]?.total ?? 0),
     };
+  }
+
+  async searchPublishedTrainingReplayTranscriptEvidence(
+    question: string,
+    limit = 18,
+  ): Promise<TrainingReplayTranscriptEvidence[]> {
+    const stopWords = new Set([
+      "about", "after", "again", "also", "and", "are", "can", "could", "does",
+      "for", "from", "have", "how", "into", "just", "most", "that", "the",
+      "their", "then", "there", "they", "this", "through", "want", "what",
+      "when", "where", "which", "with", "would", "you", "your",
+    ]);
+    const allTerms = question.toLocaleLowerCase().match(/[a-z0-9]+/g) ?? [];
+    let terms = [...new Set(allTerms.filter((term) => term.length > 2 && !stopWords.has(term)))].slice(0, 12);
+    if (!terms.length) terms = [...new Set(allTerms.filter((term) => term.length > 1))].slice(0, 12);
+    if (!terms.length) return [];
+    const tsQuery = terms.join(" | ");
+    const boundedLimit = Math.max(1, Math.min(limit, 30));
+    const rows = await pool.query<{
+      replayId: string;
+      slug: string;
+      title: string;
+      videoUrl: string | null;
+      text: string;
+      startSeconds: number;
+      endSeconds: number | null;
+      score: number;
+    }>(`
+      WITH current_chunks AS (
+        SELECT
+          replay.id AS replay_id,
+          replay.slug,
+          replay.title,
+          replay.video_url,
+          replay.sort_order,
+          chunk.chunk_index,
+          chunk.text AS match_text,
+          chunk.start_seconds,
+          chunk.end_seconds,
+          LAG(chunk.text) OVER (
+            PARTITION BY version.id ORDER BY chunk.chunk_index
+          ) AS previous_text,
+          LEAD(chunk.text) OVER (
+            PARTITION BY version.id ORDER BY chunk.chunk_index
+          ) AS next_text
+        FROM training_replays replay
+        JOIN training_replay_transcript_versions version ON version.replay_id = replay.id
+        JOIN training_replay_transcript_chunks chunk ON chunk.transcript_version_id = version.id
+        WHERE replay.status = 'published'
+          AND replay.current_transcript_version = version.version
+          AND version.index_status = 'complete'
+      ),
+      ranked AS (
+        SELECT
+          replay_id,
+          slug,
+          title,
+          video_url,
+          LEFT(CONCAT_WS(' ', previous_text, match_text, next_text), 1_800) AS context_text,
+          start_seconds,
+          end_seconds,
+          ts_rank_cd(
+            to_tsvector('english', CONCAT_WS(' ', title, match_text)),
+            to_tsquery('english', $1)
+          ) AS relevance,
+          ROW_NUMBER() OVER (
+            PARTITION BY replay_id
+            ORDER BY ts_rank_cd(
+              to_tsvector('english', CONCAT_WS(' ', title, match_text)),
+              to_tsquery('english', $1)
+            ) DESC, chunk_index
+          ) AS replay_rank,
+          sort_order,
+          chunk_index
+        FROM current_chunks
+        WHERE to_tsvector('english', CONCAT_WS(' ', title, match_text))
+          @@ to_tsquery('english', $1)
+      )
+      SELECT
+        replay_id AS "replayId",
+        slug,
+        title,
+        video_url AS "videoUrl",
+        context_text AS text,
+        start_seconds AS "startSeconds",
+        end_seconds AS "endSeconds",
+        relevance AS score
+      FROM ranked
+      WHERE replay_rank <= 3
+      ORDER BY relevance DESC, sort_order, chunk_index
+      LIMIT $2
+    `, [tsQuery, boundedLimit]);
+    return rows.rows.map((row) => ({
+      ...row,
+      startSeconds: Number(row.startSeconds),
+      endSeconds: row.endSeconds === null ? null : Number(row.endSeconds),
+      score: Number(row.score),
+    }));
   }
 
   async getUserTrainingReplayProgress(userId: string): Promise<TrainingReplayProgress[]> {

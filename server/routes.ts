@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { transcribeAudio, transcribeAudioWhisper, transcribeAudioWithTimestamps, scoreTranscript, generateTitle, generateDmoSummary, generateBulletPoints, generateLessonChapters, generateReplayDescription, generateReplayMetadata } from "./ai";
+import { answerTrainingQuestionFromTranscripts, transcribeAudio, transcribeAudioWhisper, transcribeAudioWithTimestamps, scoreTranscript, generateTitle, generateDmoSummary, generateBulletPoints, generateLessonChapters, generateReplayDescription, generateReplayMetadata } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio, extractRemoteAudioSegments, probeVideo, faststartMp4, prepareTeleprompterMp4, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
 import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, type TrainingReplay, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema, insertProjectTemplateSchema, insertProjectTemplateTaskSchema, updateProjectTemplateTaskSchema, insertProjectColumnSchema, insertCannedResponseSchema, insertAnnouncementSchema, insertAffiliateLinkSchema } from "@shared/schema";
 import { safeTimezone, todayKeyInTz, dueHasTime } from "@shared/datetime";
@@ -15123,6 +15123,52 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     } catch (error) {
       console.error("[replay chapter titles]", error);
       res.status(500).json({ message: "Could not save chapter titles." });
+    }
+  });
+
+  app.post("/api/training/library/qa", requireAdmin, async (req, res) => {
+    const parsed = z.object({
+      question: z.string().trim().min(3, "Ask a more specific question.").max(500, "Questions must be 500 characters or fewer."),
+    }).safeParse(req.body);
+    if (!parsed.success) return replayValidationError(res, parsed.error);
+    try {
+      const evidence = await storage.searchPublishedTrainingReplayTranscriptEvidence(parsed.data.question, 18);
+      const result = await answerTrainingQuestionFromTranscripts(
+        parsed.data.question,
+        evidence.map((item) => ({
+          title: item.title,
+          text: item.text,
+          startSeconds: item.startSeconds,
+        })),
+      );
+      const seenSources = new Set<string>();
+      const sources = result.foundAnswer
+        ? result.sourceIndexes.flatMap((sourceIndex) => {
+          const item = evidence[sourceIndex - 1];
+          if (!item) return [];
+          const key = `${item.replayId}:${Math.floor(item.startSeconds)}`;
+          if (seenSources.has(key)) return [];
+          seenSources.add(key);
+          return [{
+            replayId: item.replayId,
+            slug: item.slug,
+            title: item.title,
+            videoUrl: item.videoUrl,
+            text: item.text,
+            startSeconds: item.startSeconds,
+            endSeconds: item.endSeconds,
+          }];
+        })
+        : [];
+      res.json({
+        question: parsed.data.question,
+        answer: result.answer,
+        foundAnswer: result.foundAnswer,
+        sources,
+      });
+    } catch (error) {
+      console.error("[training library Q&A]", error);
+      res.status(500).json({ message: "We couldn’t answer that question right now. Please try again." });
     }
   });
 

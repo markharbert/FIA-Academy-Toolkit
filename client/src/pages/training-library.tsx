@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import Player from "@vimeo/player";
-import { Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, FileSearch, Library, Play, Search, Tag, X } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, FileSearch, Library, MessageCircleQuestion, Play, Search, Sparkles, Tag, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,11 +10,24 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-type SearchMode = "trainings" | "transcripts";
+type SearchMode = "trainings" | "transcripts" | "qa";
 type TranscriptMatch = { text: string; startSeconds: number; endSeconds?: number | null; version: number; transcriptUpdatedAt?: string | null };
 type Item = { id: string; slug: string; title: string; description?: string | null; videoUrl?: string | null; category?: string | null; tags?: string[]; durationMinutes?: number | null; thumbnailUrl?: string | null; completed?: boolean; completedAt?: string | null; transcriptMatches?: TranscriptMatch[] };
 type ActiveMatch = { item: Item; match: TranscriptMatch };
+type QASource = { replayId: string; slug: string; title: string; videoUrl?: string | null; text: string; startSeconds: number; endSeconds?: number | null };
+type QAResult = { question: string; answer: string; foundAnswer: boolean; sources: QASource[] };
 async function api(url: string) { const response = await fetch(url, { credentials: "include" }); if (!response.ok) throw new Error("Unable to load the training library."); return response.json(); }
+async function postApi<T>(url: string, body: unknown): Promise<T> {
+  const response = await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(payload?.message || "Unable to answer that question.");
+  return payload;
+}
 const stamp = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 
 function getVideoEmbedUrl(videoUrl: string | null | undefined, startSeconds: number) {
@@ -170,6 +183,9 @@ export default function TrainingLibraryPage() {
   const [topicsOpen, setTopicsOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [activeMatch, setActiveMatch] = useState<ActiveMatch | null>(null);
+  const qaMutation = useMutation<QAResult, Error, string>({
+    mutationFn: (question) => postApi("/api/training/library/qa", { question }),
+  });
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQ(q), 300);
     return () => window.clearTimeout(timer);
@@ -183,13 +199,18 @@ export default function TrainingLibraryPage() {
     queryKey: ["/api/training/library", mode, debouncedQ, category, tags, page],
     queryFn: () => api(`/api/training/library?mode=${mode}&q=${encodeURIComponent(debouncedQ)}&category=${encodeURIComponent(category === "all" ? "" : category)}&tags=${encodeURIComponent(tags.join(","))}&page=${page}`),
     placeholderData: keepPreviousData,
+    enabled: mode !== "qa",
   });
   const items = data?.items || data?.replays || [];
   const categories = data?.facets?.categories || [];
   const availableTags = data?.facets?.tags || [];
   const pagination = data?.pagination;
   const active = Boolean(q || category !== "all" || tags.length);
-  const heading = useMemo(() => active ? `${pagination?.total ?? items.length} replay${(pagination?.total ?? items.length) === 1 ? "" : "s"} found` : "The Replay Vault", [active, items.length, pagination?.total]);
+  const heading = useMemo(() => mode === "qa"
+    ? "Ask the Replay Vault"
+    : active
+      ? `${pagination?.total ?? items.length} replay${(pagination?.total ?? items.length) === 1 ? "" : "s"} found`
+      : "The Replay Vault", [active, items.length, mode, pagination?.total]);
   const toggle = (tag: string) => {
     setPage(1);
     setTags((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag]);
@@ -199,15 +220,38 @@ export default function TrainingLibraryPage() {
     <div className="mx-auto max-w-7xl">
       <header className="mb-8 max-w-3xl"><div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-violet-700"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-700 text-white"><Library className="h-4 w-4" /></span> Fearless Influencer Academy</div><h1 className="text-4xl font-extrabold tracking-tight text-slate-950 sm:text-5xl">{heading}</h1><p className="mt-3 max-w-2xl text-base text-slate-600">Practical sessions, sharp ideas, and the context to put them to work.</p></header>
       <section className="mb-8 rounded-2xl border border-violet-100 bg-white/90 p-4 shadow-[0_14px_35px_-28px_rgba(46,16,101,.42)]">
-        <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl bg-violet-50 p-1.5" role="tablist" aria-label="Search mode">
+        <div className="mb-4 grid grid-cols-3 gap-2 rounded-xl bg-violet-50 p-1.5" role="tablist" aria-label="Search mode">
           <button type="button" role="tab" aria-selected={mode === "trainings"} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-bold transition ${mode === "trainings" ? "bg-white text-violet-900 shadow-sm" : "text-slate-600 hover:text-violet-800"}`} onClick={() => { setMode("trainings"); setPage(1); }}>
             <Library className="h-4 w-4" />Search trainings
           </button>
           <button type="button" role="tab" aria-selected={mode === "transcripts"} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-bold transition ${mode === "transcripts" ? "bg-white text-violet-900 shadow-sm" : "text-slate-600 hover:text-violet-800"}`} onClick={() => { setMode("transcripts"); setPage(1); }}>
             <FileSearch className="h-4 w-4" />Search transcripts
           </button>
+          <button type="button" role="tab" aria-selected={mode === "qa"} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-bold transition ${mode === "qa" ? "bg-white text-violet-900 shadow-sm" : "text-slate-600 hover:text-violet-800"}`} onClick={() => { setMode("qa"); setPage(1); }}>
+            <MessageCircleQuestion className="h-4 w-4" />Q&amp;A
+          </button>
         </div>
-        <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-violet-600" /><Input className="h-11 border-violet-100 pl-10" placeholder={mode === "transcripts" ? "Search what was said in every training" : "Search titles, descriptions, categories, and topics"} value={q} onChange={(event) => { setQ(event.target.value); setPage(1); }} /></div>
+        <form
+          className="relative"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const question = q.trim();
+            if (mode === "qa" && question.length >= 3) qaMutation.mutate(question);
+          }}
+        >
+          {mode === "qa" ? <MessageCircleQuestion className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-violet-600" /> : <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-violet-600" />}
+          <Input
+            className={`h-11 border-violet-100 pl-10 ${mode === "qa" ? "pr-24" : ""}`}
+            placeholder={mode === "qa" ? "Ask a question about the trainings" : mode === "transcripts" ? "Search what was said in every training" : "Search titles, descriptions, categories, and topics"}
+            value={q}
+            onChange={(event) => { setQ(event.target.value); setPage(1); }}
+          />
+          {mode === "qa" && (
+            <Button type="submit" size="sm" className="absolute right-1.5 top-1/2 -translate-y-1/2" disabled={q.trim().length < 3 || qaMutation.isPending}>
+              {qaMutation.isPending ? "Thinking…" : "Ask"}
+            </Button>
+          )}
+        </form>
         {mode === "trainings" && <div className="mt-4 flex flex-wrap items-center gap-2"><span className="mr-1 text-xs font-bold uppercase tracking-wider text-slate-500">Browse</span><Button size="sm" variant={category === "all" ? "default" : "outline"} onClick={() => { setCategory("all"); setPage(1); }}>All sessions</Button>{categories.map((item) => <Button key={item} size="sm" variant={category === item ? "default" : "outline"} onClick={() => { setCategory(item); setPage(1); }}>{item}</Button>)}</div>}
         {mode === "trainings" && availableTags.length > 0 && (
           <div className="mt-3 border-t border-violet-50 pt-3">
@@ -271,7 +315,84 @@ export default function TrainingLibraryPage() {
           </div>
         )}
       </section>
-      {isLoading ? (
+      {mode === "qa" ? (
+        qaMutation.isPending ? (
+          <div className="rounded-2xl border border-violet-100 bg-white p-8 shadow-sm">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
+                <Sparkles className="h-5 w-5 animate-pulse" />
+              </span>
+              <div>
+                <h2 className="font-bold text-slate-950">Searching the trainings</h2>
+                <p className="text-sm text-slate-600">Finding the strongest transcript evidence and preparing a useful answer…</p>
+              </div>
+            </div>
+            <div className="mt-6 space-y-3">
+              <div className="h-4 w-full animate-pulse rounded bg-violet-100" />
+              <div className="h-4 w-11/12 animate-pulse rounded bg-violet-100" />
+              <div className="h-4 w-4/5 animate-pulse rounded bg-violet-100" />
+            </div>
+          </div>
+        ) : qaMutation.isError ? (
+          <div className="rounded-2xl border border-destructive/30 bg-white p-10 text-center">
+            <p className="font-semibold text-destructive">{qaMutation.error.message}</p>
+            <Button variant="outline" className="mt-3" onClick={() => q.trim().length >= 3 && qaMutation.mutate(q.trim())}>Try again</Button>
+          </div>
+        ) : qaMutation.data ? (
+          <div className="space-y-5">
+            <article className="overflow-hidden rounded-2xl border border-violet-100 bg-white shadow-sm">
+              <div className="border-b border-violet-100 bg-violet-50/70 px-5 py-4 sm:px-7">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-700">Your question</p>
+                <h2 className="mt-1 text-xl font-extrabold text-slate-950">{qaMutation.data.question}</h2>
+              </div>
+              <div className="px-5 py-6 sm:px-7">
+                <div className="mb-4 flex items-center gap-2 text-sm font-bold text-violet-700">
+                  <Sparkles className="h-4 w-4" />
+                  Answer from the trainings
+                </div>
+                <div className="whitespace-pre-wrap text-[15px] leading-7 text-slate-700">{qaMutation.data.answer}</div>
+              </div>
+            </article>
+            {qaMutation.data.sources.length > 0 && (
+              <section aria-labelledby="qa-sources-heading">
+                <div className="mb-3">
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-700">Go deeper</p>
+                  <h2 id="qa-sources-heading" className="mt-1 text-xl font-extrabold text-slate-950">Watch the supporting training</h2>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {qaMutation.data.sources.map((source, index) => (
+                    <article key={`${source.replayId}-${source.startSeconds}-${index}`} className="flex items-center justify-between gap-4 rounded-2xl border border-violet-100 bg-white p-4 shadow-sm">
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-violet-700">{stamp(source.startSeconds)}</p>
+                        <h3 className="mt-0.5 truncate font-bold text-slate-950">{source.title}</h3>
+                      </div>
+                      <Button
+                        size="sm"
+                        className="shrink-0"
+                        onClick={() => setActiveMatch({
+                          item: { id: source.replayId, slug: source.slug, title: source.title, videoUrl: source.videoUrl },
+                          match: { text: source.text, startSeconds: source.startSeconds, endSeconds: source.endSeconds, version: 0 },
+                        })}
+                      >
+                        <Play className="mr-1.5 h-3.5 w-3.5" />
+                        Watch this part
+                      </Button>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-violet-200 bg-white/70 p-14 text-center">
+            <MessageCircleQuestion className="mx-auto h-10 w-10 text-violet-400" />
+            <h2 className="mt-4 font-semibold text-slate-900">Ask the trainings a question</h2>
+            <p className="mx-auto mt-1 max-w-2xl text-sm leading-6 text-slate-600">
+              Ask for guidance, examples, or practical steps. Your answer will be based only on what was taught in the available training transcripts.
+            </p>
+          </div>
+        )
+      ) : isLoading ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3, 4, 5, 6].map((item) => <div key={item} className="h-72 animate-pulse rounded-2xl bg-violet-100/70" />)}
         </div>

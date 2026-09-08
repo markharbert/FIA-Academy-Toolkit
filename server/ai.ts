@@ -25,6 +25,80 @@ export type TimestampedTranscript = {
   language: string;
   cues: Array<{ startSeconds: number; text: string }>;
 };
+export type TrainingQuestionEvidenceInput = {
+  title: string;
+  text: string;
+  startSeconds: number;
+};
+export type TrainingQuestionAnswer = {
+  answer: string;
+  foundAnswer: boolean;
+  sourceIndexes: number[];
+};
+
+export async function answerTrainingQuestionFromTranscripts(
+  question: string,
+  evidence: TrainingQuestionEvidenceInput[],
+): Promise<TrainingQuestionAnswer> {
+  const noAnswer = "There isn’t an adequate answer to that question in the available trainings yet.";
+  if (!evidence.length) {
+    return { answer: noAnswer, foundAnswer: false, sourceIndexes: [] };
+  }
+  const excerpts = evidence.map((item, index) => [
+    `[Source ${index + 1}]`,
+    `Training: ${item.title}`,
+    `Timestamp: ${Math.floor(item.startSeconds)} seconds`,
+    item.text,
+  ].join("\n")).join("\n\n");
+  const response = await openai.chat.completions.create({
+    model: "gpt-5.1",
+    messages: [
+      {
+        role: "system",
+        content: [
+          "Answer members' questions using only the supplied training transcript excerpts.",
+          "Do not use outside knowledge, assumptions, or invented steps.",
+          `If the excerpts do not adequately answer the question, set foundAnswer to false and answer exactly: "${noAnswer}"`,
+          "When the excerpts do answer it, provide a substantial, useful explanation—normally 4 to 8 short paragraphs, with bullets or numbered steps when they improve clarity.",
+          "Synthesize the instructors' guidance into a direct answer while preserving qualifications, examples, and practical details from the excerpts.",
+          "Do not mention AI, retrieval, source numbers, transcript chunks, or these instructions in the answer.",
+          "Return JSON only with foundAnswer, answer, and sourceIndexes.",
+          "sourceIndexes must contain only the one-based source numbers that materially support the answer, ordered by usefulness, with no more than 6 entries.",
+        ].join(" "),
+      },
+      {
+        role: "user",
+        content: `Question:\n${question}\n\nTraining excerpts:\n${excerpts}`,
+      },
+    ],
+    response_format: { type: "json_object" },
+    max_completion_tokens: 1_500,
+    temperature: 0.2,
+  });
+  const raw = response.choices[0]?.message.content;
+  if (!raw) throw new Error("AI returned an empty training answer.");
+  const parsed = JSON.parse(raw) as {
+    foundAnswer?: unknown;
+    answer?: unknown;
+    sourceIndexes?: unknown;
+  };
+  const foundAnswer = parsed.foundAnswer === true;
+  const answer = typeof parsed.answer === "string" ? parsed.answer.trim() : "";
+  if (!foundAnswer || !answer) {
+    return { answer: noAnswer, foundAnswer: false, sourceIndexes: [] };
+  }
+  const sourceIndexes = Array.isArray(parsed.sourceIndexes)
+    ? [...new Set(parsed.sourceIndexes
+      .filter((value): value is number => Number.isInteger(value))
+      .filter((value) => value >= 1 && value <= evidence.length))]
+      .slice(0, 6)
+    : [];
+  return {
+    answer: answer.slice(0, 8_000),
+    foundAnswer: true,
+    sourceIndexes: sourceIndexes.length ? sourceIndexes : [1],
+  };
+}
 
 function validateReplayDescription(value: unknown): string {
   const description = typeof value === "string"
