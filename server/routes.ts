@@ -15169,7 +15169,6 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         foundAnswer: result.foundAnswer || webResult?.foundAnswer === true,
         answerSource: result.foundAnswer ? "trainings" : webResult?.foundAnswer ? "web" : "none",
         sources,
-        webSources: webResult?.sources ?? [],
       });
     } catch (error) {
       console.error("[training library Q&A]", error);

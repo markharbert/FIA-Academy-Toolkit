@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import Player from "@vimeo/player";
-import { Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, ExternalLink, FileSearch, Globe2, Library, MessageCircleQuestion, Play, Search, Sparkles, Tag, X } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, FileSearch, Globe2, Library, MessageCircleQuestion, Play, Search, Sparkles, Tag, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,8 +15,7 @@ type TranscriptMatch = { text: string; startSeconds: number; endSeconds?: number
 type Item = { id: string; slug: string; title: string; description?: string | null; videoUrl?: string | null; category?: string | null; tags?: string[]; durationMinutes?: number | null; thumbnailUrl?: string | null; completed?: boolean; completedAt?: string | null; transcriptMatches?: TranscriptMatch[] };
 type ActiveMatch = { item: Item; match: TranscriptMatch };
 type QASource = { replayId: string; slug: string; title: string; videoUrl?: string | null; text: string; startSeconds: number; endSeconds?: number | null };
-type QAWebSource = { title: string; url: string; domain: string };
-type QAResult = { question: string; answer: string; foundAnswer: boolean; answerSource?: "trainings" | "web" | "none"; sources: QASource[]; webSources?: QAWebSource[] };
+type QAResult = { question: string; answer: string; foundAnswer: boolean; answerSource?: "trainings" | "web" | "none"; sources: QASource[] };
 async function api(url: string) { const response = await fetch(url, { credentials: "include" }); if (!response.ok) throw new Error("Unable to load the training library."); return response.json(); }
 async function postApi<T>(url: string, body: unknown): Promise<T> {
   const response = await fetch(url, {
@@ -464,31 +463,6 @@ export default function TrainingLibraryPage() {
                         Watch this part
                       </Button>
                     </article>
-                  ))}
-                </div>
-              </section>
-            )}
-            {(qaMutation.data.webSources?.length ?? 0) > 0 && (
-              <section aria-labelledby="qa-web-sources-heading">
-                <div className="mb-3">
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Found online</p>
-                  <h2 id="qa-web-sources-heading" className="mt-1 text-xl font-extrabold text-slate-950">Sources used for this answer</h2>
-                </div>
-                <div className="grid gap-3 md:grid-cols-2">
-                  {qaMutation.data.webSources?.map((source) => (
-                    <a
-                      key={source.url}
-                      href={source.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="group flex items-center justify-between gap-4 rounded-2xl border border-blue-100 bg-white p-4 shadow-sm transition hover:border-blue-300 hover:shadow-md"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold uppercase tracking-wider text-blue-700">{source.domain}</p>
-                        <h3 className="mt-1 line-clamp-2 font-bold text-slate-950">{source.title}</h3>
-                      </div>
-                      <ExternalLink className="h-4 w-4 shrink-0 text-blue-600 transition group-hover:translate-x-0.5" />
-                    </a>
                   ))}
                 </div>
               </section>
