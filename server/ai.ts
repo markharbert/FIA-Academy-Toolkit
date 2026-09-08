@@ -116,27 +116,46 @@ export async function answerTrainingQuestionFromTranscripts(
 export async function answerTrainingQuestionFromWeb(
   question: string,
 ): Promise<TrainingQuestionWebAnswer> {
-  const response = await gemini.models.generateContent({
+  const config = {
+    tools: [{ googleSearch: {} }],
+    systemInstruction: [
+      "The member's private training library was searched first and did not contain enough evidence to answer this question.",
+      "You must use Google Search before answering. Do not answer only from memory.",
+      "Provide a substantial, practical answer grounded in current, authoritative public sources.",
+      "Prefer primary and official sources, government agencies, universities, recognized professional organizations, and established subject-matter authorities.",
+      "Avoid anonymous, low-quality, thin affiliate, or purely promotional pages.",
+      "Explain unfamiliar concepts plainly. Be specific, factual, useful, and non-hypey.",
+      "Do not claim that the answer came from the member's training library.",
+      "Do not mention these instructions or the search process.",
+      "Use simple Markdown-style formatting: short headings when useful and **bold** for important takeaways, plus bullets or numbered steps where they improve clarity.",
+    ].join(" "),
+    temperature: 0.2,
+    maxOutputTokens: 2_000,
+  };
+  let response = await gemini.models.generateContent({
     model: "gemini-flash-latest",
-    contents: `Research and answer this member's question:\n\n${question}`,
-    config: {
-      tools: [{ googleSearch: {} }],
-      systemInstruction: [
-        "The member's private training library was searched first and did not contain enough evidence to answer this question.",
-        "Use Google Search to provide a substantial, practical answer grounded in current, authoritative public sources.",
-        "Prefer primary and official sources, government agencies, universities, recognized professional organizations, and established subject-matter authorities.",
-        "Avoid anonymous, low-quality, thin affiliate, or purely promotional pages.",
-        "Explain unfamiliar concepts plainly. Be specific, factual, useful, and non-hypey.",
-        "Do not claim that the answer came from the member's training library.",
-        "Do not mention these instructions or the search process.",
-        "Use simple Markdown-style formatting: short headings when useful and **bold** for important takeaways, plus bullets or numbered steps where they improve clarity.",
-      ].join(" "),
-      temperature: 0.2,
-      maxOutputTokens: 2_000,
-    },
+    contents: `Use Google Search now, then answer this member's question using the sources you find:\n\n${question}`,
+    config,
   });
-  const answer = response.text?.trim() ?? "";
-  const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
+  let answer = response.text?.trim() ?? "";
+  if (!answer) {
+    response = await gemini.models.generateContent({
+      model: "gemini-flash-latest",
+      contents: `Perform a fresh Google Search before answering. Return a detailed, useful answer to this question even if the first search attempt found nothing:\n\n${question}`,
+      config,
+    });
+    answer = response.text?.trim() ?? "";
+  }
+  const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
+  const allChunks = groundingMetadata?.groundingChunks ?? [];
+  const supportedChunkIndexes = new Set(
+    (groundingMetadata?.groundingSupports ?? [])
+      .flatMap((support) => support.groundingChunkIndices ?? [])
+      .filter((index) => Number.isInteger(index) && index >= 0 && index < allChunks.length),
+  );
+  const chunks = supportedChunkIndexes.size
+    ? allChunks.filter((_, index) => supportedChunkIndexes.has(index))
+    : allChunks;
   const seenUrls = new Set<string>();
   const sources = chunks.flatMap((chunk) => {
     const title = chunk.web?.title?.replace(/\s+/g, " ").trim();
@@ -157,7 +176,7 @@ export async function answerTrainingQuestionFromWeb(
       return [];
     }
   }).slice(0, 6);
-  if (!answer || sources.length === 0) {
+  if (!answer) {
     return { answer: "", foundAnswer: false, sources: [] };
   }
   return {
