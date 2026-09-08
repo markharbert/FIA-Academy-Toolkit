@@ -130,10 +130,13 @@ function TranscriptVideoDialog({ active, onWatchFull }: {
     void (async () => {
       try {
         await player.setCurrentTime(active.match.startSeconds);
+        if (disposed) return;
         await player.play();
       } catch {
+        if (disposed) return;
         try {
           await player.setVolume(0);
+          if (disposed) return;
           await player.play();
         } catch {
           // The muted iframe remains available for manual playback.
@@ -145,7 +148,10 @@ function TranscriptVideoDialog({ active, onWatchFull }: {
       window.clearInterval(pollTimer);
       player.off("timeupdate", update);
       void player.pause().catch(() => undefined);
-      void player.destroy().catch(() => undefined);
+      // Do not call destroy() here. React development mode intentionally runs
+      // effect cleanup during initialization, and destroying the iframe then
+      // severs the Vimeo API connection used for transcript tracking. Closing
+      // the dialog unmounts the iframe after this explicit pause.
     };
   }, [active, embedUrl, isVimeo]);
 

@@ -1,5 +1,6 @@
 - [Teleprompter recording upload](teleprompter-upload.md) — signed-URL direct-to-GCS is CORS-blocked; use server proxy route instead.
 - [Popup dialog blocking](popup-dialog-blocking.md) — canvas iframe sandbox silently blocks confirm()/beforeunload in popups; only a custom DOM overlay dialog works.
+- [Vimeo player cleanup](vimeo-player-cleanup.md) — never destroy an iframe player in a React effect cleanup; development lifecycle cleanup can sever its live API connection.
 - [GCS Signed URL Downloads](gcs-signed-url-downloads.md) — do NOT proxy through Express (Cloud Run kills responses >32MiB in prod); set contentDisposition object metadata, then 302 to plain signed URL.
 - [MediaRecorder MP4 Opus audio](mediarecorder-mp4-opus.md) — browser-recorded .mp4 has Opus audio; silent in QuickTime/Windows players; needs server-side AAC transcode.
 - [Generate Full Script feature](generate-full-script.md) — how the feature works and a key debugging lesson about server restarts.
