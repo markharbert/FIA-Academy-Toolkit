@@ -759,8 +759,8 @@ export default function TrainingReplayPage() {
                 <MessageCircle className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-xl font-bold text-slate-950">Member Discussion</h2>
-                <p className="text-sm text-slate-500">Share what stood out or how you plan to use it.</p>
+                <h2 className="text-xl font-bold text-slate-950">What did you get most out of this training?</h2>
+                <p className="text-sm text-slate-500">Leave a detailed comment below to share what you learned with the community.</p>
               </div>
             </div>
 
