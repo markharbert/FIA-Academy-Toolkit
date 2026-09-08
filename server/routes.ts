@@ -14914,7 +14914,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         generateLessonChapters(transcript.cues),
       ]);
       const generatedAt = new Date();
-      const saved = await storage.updateTrainingReplay(replay.id, {
+      const saved = await storage.saveTrainingReplayTranscript(replay.id, {
         transcriptText, transcriptLanguage: transcript.language || null,
         transcriptSource: `Vimeo${transcript.name ? ` · ${transcript.name}` : ""}`,
         transcriptUpdatedAt: new Date(), transcriptCues: transcript.cues, transcriptChapters,
@@ -15004,7 +15004,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       ]);
       const generatedAt = new Date();
       progressStream.progress(95, "Saving transcript and chapters");
-      const saved = await storage.updateTrainingReplay(replay.id, {
+      const saved = await storage.saveTrainingReplayTranscript(replay.id, {
         transcriptText,
         transcriptLanguage: transcriptLanguage || null,
         transcriptSource: "Fresh transcription from Vimeo video",
@@ -15053,7 +15053,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       const replay = await storage.getTrainingReplay(req.params.id);
       if (!replay) return res.status(404).json({ message: "Not found" });
       const videoId = replay.videoUrl ? extractVimeoVideoId(replay.videoUrl) : null;
-      const saved = await storage.updateTrainingReplay(req.params.id, {
+      const saved = await storage.saveTrainingReplayTranscript(req.params.id, {
         transcriptText: null, transcriptLanguage: null, transcriptSource: null, transcriptUpdatedAt: null,
         transcriptCues: null, transcriptChapters: null, transcriptChaptersGeneratedAt: null,
       });
@@ -15085,7 +15085,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         cues = (await fetchVimeoTranscript(videoId, track.id)).cues;
       }
       const chapters = await generateLessonChapters(cues);
-      const saved = await storage.updateTrainingReplay(replay.id, {
+      const saved = await storage.saveTrainingReplayTranscript(replay.id, {
         transcriptCues: cues,
         transcriptChapters: chapters,
         transcriptChaptersGeneratedAt: new Date(),
@@ -15112,7 +15112,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
           startSeconds: chapter.startSeconds,
           title: parsed.data.titles[index],
         }));
-      const saved = await storage.updateTrainingReplay(replay.id, {
+      const saved = await storage.saveTrainingReplayTranscript(replay.id, {
         transcriptChapters: updatedChapters,
       });
       const videoId = replay.videoUrl ? extractVimeoVideoId(replay.videoUrl) : null;
@@ -15126,32 +15126,6 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }
   });
 
-  function transcriptMatchSnippets(replay: { transcriptText: string | null; transcriptCues: { startSeconds: number; text: string }[] | null }, query?: string) {
-    if (!query || !replay.transcriptText) return [];
-    const normalized = query.toLowerCase();
-    const text = replay.transcriptText;
-    const offset = text.toLowerCase().indexOf(normalized);
-    if (offset < 0) return [];
-    const cues = Array.isArray(replay.transcriptCues) ? replay.transcriptCues : [];
-    // Captions are the authoritative timestamp anchors. Match a cue first, then
-    // use the closest preceding cue when the text was normalized into paragraphs.
-    const cueIndex = cues.findIndex((cue) => cue.text.toLowerCase().includes(normalized));
-    let cue = cueIndex >= 0 ? cues[cueIndex] : undefined;
-    if (!cue) {
-      let nearestOffset = -1;
-      for (const candidate of cues) {
-        const candidateOffset = text.toLowerCase().indexOf(candidate.text.toLowerCase());
-        if (candidateOffset >= 0 && candidateOffset <= offset && candidateOffset >= nearestOffset) {
-          nearestOffset = candidateOffset;
-          cue = candidate;
-        }
-      }
-    }
-    return [{
-      startSeconds: cue?.startSeconds ?? 0,
-      text: text.slice(Math.max(0, offset - 100), Math.min(text.length, offset + query.length + 160)).replace(/\s+/g, " ").trim(),
-    }];
-  }
   app.get(["/api/training/library", "/api/training/replays"], requireAdmin, async (req, res) => {
     const parsed = z.object({
       q: z.string().trim().max(200).optional(),
@@ -15159,6 +15133,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       tag: z.string().trim().max(100).optional(),
       tags: z.string().trim().max(1_000).optional(),
       page: z.coerce.number().int().min(1).max(10_000).default(1),
+      mode: z.enum(["trainings", "transcripts"]).default("trainings"),
     }).safeParse(req.query);
     if (!parsed.success) return replayValidationError(res, parsed.error);
     try {
@@ -15177,7 +15152,17 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       const hasFilters = Boolean(parsed.data.q || parsed.data.category || selectedTags.length);
       let total = 0;
       let replays;
-      if (hasFilters) {
+      if (parsed.data.mode === "transcripts") {
+        const result = await storage.searchPublishedTrainingReplayTranscripts({
+          q: parsed.data.q ?? "",
+          category: parsed.data.category,
+          tags: selectedTags,
+          page: parsed.data.page,
+          pageSize,
+        });
+        total = result.total;
+        replays = result.items;
+      } else if (hasFilters) {
         const matches = (await storage.searchPublishedTrainingReplays({
           q: parsed.data.q,
           category: parsed.data.category,
@@ -15230,7 +15215,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
           thumbnailUrl,
           completed: !!completedAtByReplay.get(replay.id),
           completedAt: completedAtByReplay.get(replay.id) ?? null,
-          transcriptMatches: parsed.data.q ? transcriptMatchSnippets(replay as TrainingReplay, parsed.data.q) : [],
+           transcriptMatches: "transcriptMatches" in replay ? replay.transcriptMatches : [],
         };
       }));
       res.json({

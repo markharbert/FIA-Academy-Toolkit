@@ -2322,6 +2322,7 @@ export const trainingReplays = pgTable("training_replays", {
   transcriptProcessingQueuedAt: timestamp("transcript_processing_queued_at"),
   transcriptProcessingStartedAt: timestamp("transcript_processing_started_at"),
   transcriptProcessingNextAttemptAt: timestamp("transcript_processing_next_attempt_at"),
+  currentTranscriptVersion: integer("current_transcript_version"),
   durationMinutes: integer("duration_minutes"),
   category: text("category"),
   tags: jsonb("tags").$type<string[]>(),
@@ -2337,6 +2338,41 @@ export const trainingReplays = pgTable("training_replays", {
 export type TrainingReplay = typeof trainingReplays.$inferSelect;
 export type InsertTrainingReplay = typeof trainingReplays.$inferInsert;
 export const insertTrainingReplaySchema = createInsertSchema(trainingReplays).omit({ id: true, createdAt: true, updatedAt: true });
+
+export const trainingReplayTranscriptVersions = pgTable("training_replay_transcript_versions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  replayId: varchar("replay_id").notNull().references(() => trainingReplays.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  transcriptText: text("transcript_text"),
+  transcriptLanguage: text("transcript_language"),
+  transcriptSource: text("transcript_source"),
+  transcriptUpdatedAt: timestamp("transcript_updated_at"),
+  transcriptCues: jsonb("transcript_cues").$type<LessonTranscriptCue[]>(),
+  transcriptChapters: jsonb("transcript_chapters").$type<LessonChapter[]>(),
+  indexStatus: varchar("index_status", { length: 20 }).notNull().default("pending")
+    .$type<"pending" | "processing" | "complete" | "failed">(),
+  indexError: text("index_error"),
+  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (t) => ({
+  replayVersionUnique: unique("training_replay_transcript_versions_replay_version_unique").on(t.replayId, t.version),
+  indexQueueIdx: index("idx_training_replay_transcript_versions_index_queue").on(t.indexStatus, t.createdAt),
+}));
+export type TrainingReplayTranscriptVersion = typeof trainingReplayTranscriptVersions.$inferSelect;
+
+export const trainingReplayTranscriptChunks = pgTable("training_replay_transcript_chunks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  transcriptVersionId: varchar("transcript_version_id").notNull().references(() => trainingReplayTranscriptVersions.id, { onDelete: "cascade" }),
+  replayId: varchar("replay_id").notNull().references(() => trainingReplays.id, { onDelete: "cascade" }),
+  chunkIndex: integer("chunk_index").notNull(),
+  startSeconds: integer("start_seconds").notNull().default(0),
+  endSeconds: integer("end_seconds"),
+  text: text("text").notNull(),
+  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (t) => ({
+  versionChunkUnique: unique("training_replay_transcript_chunks_version_chunk_unique").on(t.transcriptVersionId, t.chunkIndex),
+  replayVersionIdx: index("idx_training_replay_transcript_chunks_replay_version").on(t.replayId, t.transcriptVersionId),
+}));
+export type TrainingReplayTranscriptChunk = typeof trainingReplayTranscriptChunks.$inferSelect;
 
 export const trainingReplayResources = pgTable("training_replay_resources", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

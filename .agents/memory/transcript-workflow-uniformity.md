@@ -20,3 +20,9 @@ The browser must also maintain a monotonic, bounded local estimate while the req
 **Why:** A client-side estimate guarantees visible movement even when no network progress event is delivered; its timer must stop before showing 100% or it can regress the displayed value.
 
 **How to apply:** Keep the estimate inside the shared transcript-generation client, cap it below completion, merge server values with `Math.max`, and clear it before emitting 100%.
+
+Replay transcript replacements, edits, regenerations, and removals must create immutable transcript versions. Keep prior versions for traceability, but search only the explicitly current version through a durable asynchronous chunk index.
+
+**Why:** A replay may be retranscribed or corrected after members have used it. Version history preserves what existed before, while a current-version pointer prevents stale wording from appearing in member search.
+
+**How to apply:** Save the full text, cues, language, source, chapters, and update time before queueing timestamped chunks. Clearing a transcript creates an empty current version rather than deleting history.

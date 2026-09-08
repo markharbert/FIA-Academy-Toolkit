@@ -61,6 +61,7 @@ import {
   type CourseLesson, type InsertCourseLesson, type CourseResource, type InsertCourseResource,
   type CourseProgress,
   trainingReplayCategories, trainingReplays, trainingReplayResources, trainingReplayProgress, trainingReplayComments,
+  trainingReplayTranscriptVersions,
   type TrainingReplayCategory,
   type TrainingReplay, type InsertTrainingReplay,
   type TrainingReplayResource, type InsertTrainingReplayResource,
@@ -128,6 +129,16 @@ export type TrainingReplayListItem = Pick<TrainingReplay,
   "id" | "slug" | "title" | "description" | "videoUrl" | "thumbnailUrl"
   | "durationMinutes" | "category" | "tags" | "sortOrder" | "createdAt"
 >;
+export type TrainingReplayTranscriptMatch = {
+  text: string;
+  startSeconds: number;
+  endSeconds: number | null;
+  version: number;
+  transcriptUpdatedAt: Date | null;
+};
+export type TrainingReplayTranscriptSearchItem = TrainingReplayListItem & {
+  transcriptMatches: TrainingReplayTranscriptMatch[];
+};
 
 type CourseNavigationLesson = Pick<
   CourseLesson,
@@ -866,6 +877,7 @@ export interface IStorage {
   getTrainingReplayTagVocabulary(): Promise<string[]>;
   createTrainingReplay(replay: InsertTrainingReplay): Promise<TrainingReplay>;
   updateTrainingReplay(id: string, updates: Partial<TrainingReplay>): Promise<TrainingReplay | undefined>;
+  saveTrainingReplayTranscript(id: string, updates: Partial<TrainingReplay>): Promise<TrainingReplay | undefined>;
   deleteTrainingReplay(id: string): Promise<boolean>;
   reorderTrainingReplays(orderedIds: string[]): Promise<void>;
   importTrainingReplays(rows: TrainingReplayImportRow[]): Promise<TrainingReplayImportResult>;
@@ -878,6 +890,13 @@ export interface IStorage {
   getPublishedTrainingReplayFacets(): Promise<Array<Pick<TrainingReplay, "category" | "tags">>>;
   getPublishedTrainingReplayBySlug(slug: string): Promise<TrainingReplay | undefined>;
   searchPublishedTrainingReplays(filters: { q?: string; category?: string; tag?: string }): Promise<TrainingReplay[]>;
+  searchPublishedTrainingReplayTranscripts(filters: {
+    q: string;
+    category?: string;
+    tags?: string[];
+    page: number;
+    pageSize: number;
+  }): Promise<{ items: TrainingReplayTranscriptSearchItem[]; total: number }>;
   getUserTrainingReplayProgress(userId: string): Promise<TrainingReplayProgress[]>;
   getTrainingReplayProgress(userId: string, replayId: string): Promise<TrainingReplayProgress | undefined>;
   upsertTrainingReplayProgress(userId: string, replayId: string, completed: boolean): Promise<TrainingReplayProgress>;
@@ -6640,6 +6659,67 @@ export class DatabaseStorage implements IStorage {
     return row || undefined;
   }
 
+  async saveTrainingReplayTranscript(id: string, updates: Partial<TrainingReplay>): Promise<TrainingReplay | undefined> {
+    return db.transaction(async (tx) => {
+      const locked = await tx.execute(sql`
+        SELECT
+          id,
+          current_transcript_version,
+          transcript_text,
+          transcript_language,
+          transcript_source,
+          transcript_cues,
+          transcript_chapters
+        FROM training_replays
+        WHERE id = ${id}
+        FOR UPDATE
+      `);
+      const current = locked.rows[0] as {
+        current_transcript_version: number | null;
+        transcript_text: string | null;
+        transcript_language: string | null;
+        transcript_source: string | null;
+        transcript_cues: TrainingReplay["transcriptCues"];
+        transcript_chapters: TrainingReplay["transcriptChapters"];
+      } | undefined;
+      if (!current) return undefined;
+      const nextVersion = (current.current_transcript_version ?? 0) + 1;
+      const transcriptUpdatedAt = new Date();
+      const transcriptText = updates.transcriptText !== undefined ? updates.transcriptText : current.transcript_text;
+      const transcriptLanguage = updates.transcriptLanguage !== undefined ? updates.transcriptLanguage : current.transcript_language;
+      const transcriptSource = updates.transcriptSource !== undefined ? updates.transcriptSource : current.transcript_source;
+      const transcriptCues = updates.transcriptCues !== undefined ? updates.transcriptCues : current.transcript_cues;
+      const transcriptChapters = updates.transcriptChapters !== undefined ? updates.transcriptChapters : current.transcript_chapters;
+      await tx.insert(trainingReplayTranscriptVersions).values({
+        replayId: id,
+        version: nextVersion,
+        transcriptText,
+        transcriptLanguage,
+        transcriptSource,
+        transcriptUpdatedAt,
+        transcriptCues,
+        transcriptChapters,
+        indexStatus: "pending",
+      });
+      const values = {
+        ...updates,
+        transcriptText,
+        transcriptLanguage,
+        transcriptSource,
+        transcriptCues,
+        transcriptChapters,
+        transcriptUpdatedAt,
+        currentTranscriptVersion: nextVersion,
+        updatedAt: new Date(),
+      };
+      const [row] = await tx.update(trainingReplays)
+        .set(values)
+        .where(eq(trainingReplays.id, id))
+        .returning();
+      return row || undefined;
+    });
+  }
+
   async deleteTrainingReplay(id: string): Promise<boolean> {
     const [row] = await db.delete(trainingReplays).where(eq(trainingReplays.id, id)).returning();
     return !!row;
@@ -6888,15 +6968,111 @@ export class DatabaseStorage implements IStorage {
       if (filters.category && replay.category !== filters.category) return false;
       if (filters.tag && !(replay.tags || []).includes(filters.tag)) return false;
       if (!q) return true;
-      const chapterText = Array.isArray(replay.transcriptChapters)
-        ? replay.transcriptChapters.map((chapter) => chapter.title).join(" ")
-        : "";
       const searchable = [
         replay.title, replay.description, replay.category, replay.tags?.join(" "),
-        replay.content?.replace(/<[^>]*>/g, " "), chapterText, replay.transcriptText,
       ].filter(Boolean).join(" ").toLowerCase();
       return searchable.includes(q);
     });
+  }
+
+  async searchPublishedTrainingReplayTranscripts(filters: {
+    q: string;
+    category?: string;
+    tags?: string[];
+    page: number;
+    pageSize: number;
+  }): Promise<{ items: TrainingReplayTranscriptSearchItem[]; total: number }> {
+    const query = filters.q.trim();
+    if (!query) return { items: [], total: 0 };
+    const offset = (filters.page - 1) * filters.pageSize;
+    const pattern = `%${query}%`;
+    const category = filters.category?.trim() || null;
+    const tags = (filters.tags ?? []).map((tag) => tag.toLocaleLowerCase());
+    const baseParams = [pattern, category, tags];
+    const whereSql = `
+      replay.status = 'published'
+      AND replay.current_transcript_version = version.version
+      AND version.index_status = 'complete'
+      AND chunk.text ILIKE $1
+      AND ($2::text IS NULL OR replay.category = $2)
+      AND (
+        cardinality($3::text[]) = 0
+        OR NOT EXISTS (
+          SELECT 1 FROM unnest($3::text[]) selected_tag
+          WHERE NOT EXISTS (
+            SELECT 1 FROM jsonb_array_elements_text(COALESCE(replay.tags, '[]'::jsonb)) replay_tag
+            WHERE LOWER(replay_tag) = selected_tag
+          )
+        )
+      )
+    `;
+    const totals = await pool.query<{ total: string }>(`
+      SELECT COUNT(DISTINCT replay.id)::text AS total
+      FROM training_replays replay
+      JOIN training_replay_transcript_versions version ON version.replay_id = replay.id
+      JOIN training_replay_transcript_chunks chunk ON chunk.transcript_version_id = version.id
+      WHERE ${whereSql}
+    `, baseParams);
+    const replayRows = await pool.query<TrainingReplayListItem>(`
+      SELECT DISTINCT
+        replay.id, replay.slug, replay.title, replay.description,
+        replay.video_url AS "videoUrl", replay.thumbnail_url AS "thumbnailUrl",
+        replay.duration_minutes AS "durationMinutes", replay.category, replay.tags,
+        replay.sort_order AS "sortOrder", replay.created_at AS "createdAt"
+      FROM training_replays replay
+      JOIN training_replay_transcript_versions version ON version.replay_id = replay.id
+      JOIN training_replay_transcript_chunks chunk ON chunk.transcript_version_id = version.id
+      WHERE ${whereSql}
+      ORDER BY replay.sort_order, replay.created_at
+      LIMIT $4 OFFSET $5
+    `, [...baseParams, filters.pageSize, offset]);
+    if (!replayRows.rows.length) {
+      return { items: [], total: Number(totals.rows[0]?.total ?? 0) };
+    }
+    const replayIds = replayRows.rows.map((row) => row.id);
+    const matchRows = await pool.query<{
+      replayId: string;
+      text: string;
+      startSeconds: number;
+      endSeconds: number | null;
+      version: number;
+      transcriptUpdatedAt: Date | null;
+    }>(`
+      SELECT
+        replay.id AS "replayId",
+        chunk.text,
+        chunk.start_seconds AS "startSeconds",
+        chunk.end_seconds AS "endSeconds",
+        version.version,
+        version.transcript_updated_at AS "transcriptUpdatedAt"
+      FROM training_replays replay
+      JOIN training_replay_transcript_versions version ON version.replay_id = replay.id
+      JOIN training_replay_transcript_chunks chunk ON chunk.transcript_version_id = version.id
+      WHERE replay.id = ANY($1::varchar[])
+        AND replay.current_transcript_version = version.version
+        AND version.index_status = 'complete'
+        AND chunk.text ILIKE $2
+      ORDER BY replay.sort_order, chunk.start_seconds, chunk.chunk_index
+    `, [replayIds, pattern]);
+    const matchesByReplay = new Map<string, TrainingReplayTranscriptMatch[]>();
+    for (const match of matchRows.rows) {
+      const current = matchesByReplay.get(match.replayId) ?? [];
+      if (current.length < 5) current.push({
+        text: match.text,
+        startSeconds: Number(match.startSeconds),
+        endSeconds: match.endSeconds === null ? null : Number(match.endSeconds),
+        version: Number(match.version),
+        transcriptUpdatedAt: match.transcriptUpdatedAt,
+      });
+      matchesByReplay.set(match.replayId, current);
+    }
+    return {
+      items: replayRows.rows.map((replay) => ({
+        ...replay,
+        transcriptMatches: matchesByReplay.get(replay.id) ?? [],
+      })),
+      total: Number(totals.rows[0]?.total ?? 0),
+    };
   }
 
   async getUserTrainingReplayProgress(userId: string): Promise<TrainingReplayProgress[]> {
@@ -7260,6 +7436,7 @@ export async function runMigrations(): Promise<void> {
         transcript_processing_queued_at TIMESTAMP,
         transcript_processing_started_at TIMESTAMP,
         transcript_processing_next_attempt_at TIMESTAMP,
+        current_transcript_version INTEGER,
         duration_minutes INTEGER,
         category TEXT,
         tags JSONB DEFAULT '[]'::jsonb,
@@ -7296,6 +7473,77 @@ export async function runMigrations(): Promise<void> {
     await pool.query(`ALTER TABLE training_replays ADD COLUMN IF NOT EXISTS transcript_processing_queued_at TIMESTAMP`);
     await pool.query(`ALTER TABLE training_replays ADD COLUMN IF NOT EXISTS transcript_processing_started_at TIMESTAMP`);
     await pool.query(`ALTER TABLE training_replays ADD COLUMN IF NOT EXISTS transcript_processing_next_attempt_at TIMESTAMP`);
+    await pool.query(`ALTER TABLE training_replays ADD COLUMN IF NOT EXISTS current_transcript_version INTEGER`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS training_replay_transcript_versions (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        replay_id VARCHAR NOT NULL REFERENCES training_replays(id) ON DELETE CASCADE,
+        version INTEGER NOT NULL,
+        transcript_text TEXT,
+        transcript_language TEXT,
+        transcript_source TEXT,
+        transcript_updated_at TIMESTAMP,
+        transcript_cues JSONB,
+        transcript_chapters JSONB,
+        index_status VARCHAR(20) NOT NULL DEFAULT 'pending',
+        index_error TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (replay_id, version)
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS training_replay_transcript_chunks (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        transcript_version_id VARCHAR NOT NULL REFERENCES training_replay_transcript_versions(id) ON DELETE CASCADE,
+        replay_id VARCHAR NOT NULL REFERENCES training_replays(id) ON DELETE CASCADE,
+        chunk_index INTEGER NOT NULL,
+        start_seconds INTEGER NOT NULL DEFAULT 0,
+        end_seconds INTEGER,
+        text TEXT NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (transcript_version_id, chunk_index)
+      )
+    `);
+    await pool.query(`
+      INSERT INTO training_replay_transcript_versions (
+        replay_id, version, transcript_text, transcript_language, transcript_source,
+        transcript_updated_at, transcript_cues, transcript_chapters, index_status, created_at
+      )
+      SELECT
+        replay.id, 1, replay.transcript_text, replay.transcript_language, replay.transcript_source,
+        replay.transcript_updated_at, replay.transcript_cues, replay.transcript_chapters, 'pending',
+        COALESCE(replay.transcript_updated_at, replay.updated_at, CURRENT_TIMESTAMP)
+      FROM training_replays replay
+      WHERE replay.transcript_text IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM training_replay_transcript_versions version
+          WHERE version.replay_id = replay.id
+        )
+    `);
+    await pool.query(`
+      UPDATE training_replays replay
+      SET current_transcript_version = latest.version
+      FROM (
+        SELECT replay_id, MAX(version) AS version
+        FROM training_replay_transcript_versions
+        GROUP BY replay_id
+      ) latest
+      WHERE replay.id = latest.replay_id
+        AND replay.current_transcript_version IS NULL
+    `);
+    await pool.query(`
+      UPDATE training_replay_transcript_versions
+      SET index_status = 'pending', index_error = NULL
+      WHERE index_status = 'processing'
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_training_replay_transcript_versions_index_queue
+      ON training_replay_transcript_versions(index_status, created_at)
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_training_replay_transcript_chunks_replay_version
+      ON training_replay_transcript_chunks(replay_id, transcript_version_id)
+    `);
     await pool.query(`
       UPDATE training_replays
       SET transcript_processing_status = 'queued',

@@ -13,6 +13,7 @@ import {
 } from "./vimeo";
 import { generateLessonChapters, generateReplayMetadata, transcribeAudioWithTimestamps } from "./ai";
 import { formatTranscriptParagraphs } from "@shared/transcript-format";
+import { startTrainingReplayTranscriptIndexWorker } from "./trainingReplayTranscriptIndex";
 
 const VIDEO_CONCURRENCY = 2;
 const GEMINI_CONCURRENCY = 3;
@@ -142,7 +143,7 @@ async function processReplay(replayId: string): Promise<void> {
     const existingTags = await storage.getTrainingReplayTagVocabulary();
     const generatedMetadata = await generateReplayMetadata(replay.title, transcriptText, existingTags);
     const generatedAt = new Date();
-    await storage.updateTrainingReplay(replay.id, {
+    await storage.saveTrainingReplayTranscript(replay.id, {
       description: generatedMetadata.description,
       tags: generatedMetadata.tags,
       transcriptText,
@@ -216,6 +217,7 @@ export async function enqueueImportedReplayTranscripts(replayIds: string[]): Pro
 export function startTrainingReplayTranscriptWorker(): void {
   if (started) return;
   started = true;
+  startTrainingReplayTranscriptIndexWorker();
   const timer = setInterval(() => {
     void fillWorkerSlots().catch((error) =>
       console.error("[Replay transcript queue] poll failed:", error),

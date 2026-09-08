@@ -83,7 +83,7 @@ function formatCommentDate(value: string) {
   }).format(date);
 }
 
-function getEmbedUrl(videoUrl?: string | null) {
+function getEmbedUrl(videoUrl?: string | null, startSeconds = 0) {
   if (!videoUrl) return null;
   try {
     const url = new URL(videoUrl);
@@ -96,11 +96,15 @@ function getEmbedUrl(videoUrl?: string | null) {
     }
     if (url.hostname.includes("youtube.com")) {
       const videoId = url.searchParams.get("v");
-      return videoId ? `https://www.youtube.com/embed/${videoId}` : null;
+      return videoId ? `https://www.youtube.com/embed/${videoId}?start=${Math.floor(startSeconds)}&enablejsapi=1` : null;
     }
     if (url.hostname.includes("youtu.be")) {
       const videoId = url.pathname.split("/").filter(Boolean)[0];
-      return videoId ? `https://www.youtube.com/embed/${videoId}` : null;
+      return videoId ? `https://www.youtube.com/embed/${videoId}?start=${Math.floor(startSeconds)}&enablejsapi=1` : null;
+    }
+    if (url.hostname.includes("wistia.com") || url.hostname.includes("wi.st")) {
+      const videoId = url.pathname.split("/").filter(Boolean).pop();
+      return videoId ? `https://fast.wistia.net/embed/iframe/${videoId}?time=${Math.floor(startSeconds)}` : null;
     }
     return null;
   } catch {
@@ -235,8 +239,11 @@ export default function TrainingReplayPage() {
   const activeTranscriptWordRef = useRef<HTMLSpanElement>(null);
   const lastScrolledWordRef = useRef<number | null>(null);
 
-  const embedUrl = getEmbedUrl(replay?.videoUrl);
+  const initialTime = Math.max(0, Number(new URLSearchParams(window.location.search).get("t")) || 0);
+  const embedUrl = getEmbedUrl(replay?.videoUrl, initialTime);
   const isVimeoReplay = Boolean(replay?.videoUrl?.includes("vimeo.com"));
+  const isDirectVideo = Boolean(replay?.videoUrl && !embedUrl && /\.(?:mp4|webm|ogg)(?:$|[?#])/i.test(replay.videoUrl));
+  const directVideoRef = useRef<HTMLVideoElement>(null);
   const chapters = replay?.transcriptChapters ?? [];
   const transcriptCues = replay?.transcriptCues ?? [];
   const transcriptText = replay?.transcriptText ? formatTranscriptParagraphs(replay.transcriptText) : "";
@@ -287,13 +294,23 @@ export default function TrainingReplayPage() {
     const update = ({ seconds }: { seconds: number }) => setVideoCurrentTime(seconds);
     vimeoPlayerApiRef.current = player;
     player.on("timeupdate", update);
-    const initialTime = Number(new URLSearchParams(window.location.search).get("t"));
     if (Number.isFinite(initialTime) && initialTime > 0) void player.setCurrentTime(initialTime);
     return () => {
       player.off("timeupdate", update);
       if (vimeoPlayerApiRef.current === player) vimeoPlayerApiRef.current = null;
     };
-  }, [embedUrl, isVimeoReplay]);
+  }, [embedUrl, initialTime, isVimeoReplay]);
+
+  useEffect(() => {
+    const video = directVideoRef.current;
+    if (!video || !isDirectVideo || initialTime <= 0) return;
+    const seek = () => {
+      video.currentTime = initialTime;
+    };
+    if (video.readyState >= 1) seek();
+    else video.addEventListener("loadedmetadata", seek, { once: true });
+    return () => video.removeEventListener("loadedmetadata", seek);
+  }, [initialTime, isDirectVideo, replay?.videoUrl]);
 
   useEffect(() => {
     if (!transcriptOpen || transcriptTab !== "transcript" || activeWordIndex < 0) return;
@@ -324,8 +341,14 @@ export default function TrainingReplayPage() {
   }, [slug]);
 
   const seekToChapter = (seconds: number) => {
-    if (!isVimeoReplay) return;
-    void vimeoPlayerApiRef.current?.setCurrentTime(seconds);
+    if (isVimeoReplay) {
+      void vimeoPlayerApiRef.current?.setCurrentTime(seconds);
+    } else if (isDirectVideo && directVideoRef.current) {
+      directVideoRef.current.currentTime = seconds;
+      void directVideoRef.current.play();
+    } else if (replay?.videoUrl) {
+      window.location.assign(`${window.location.pathname}?t=${Math.floor(seconds)}`);
+    }
     vimeoPlayerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
@@ -589,6 +612,12 @@ export default function TrainingReplayPage() {
                 title={replay.title}
               />
             </div>
+          </div>
+        ) : isDirectVideo && replay.videoUrl ? (
+          <div className="mx-auto mb-8 w-full max-w-[1100px]">
+            <video ref={directVideoRef} controls preload="metadata" className="aspect-video w-full rounded-xl bg-slate-950 shadow-sm">
+              <source src={replay.videoUrl} />
+            </video>
           </div>
         ) : (
           <div className="mx-auto mb-8 flex aspect-video w-full max-w-[1100px] items-center justify-center rounded-xl bg-slate-900 text-slate-300">

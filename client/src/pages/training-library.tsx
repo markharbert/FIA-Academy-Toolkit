@@ -1,20 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, Library, Search, Tag, X } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, FileSearch, Library, Play, Search, Tag, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 
-type Item = { id: string; slug: string; title: string; description?: string | null; category?: string | null; tags?: string[]; durationMinutes?: number | null; thumbnailUrl?: string | null; completed?: boolean; completedAt?: string | null; transcriptMatches?: { text: string; startSeconds: number }[] };
+type SearchMode = "trainings" | "transcripts";
+type TranscriptMatch = { text: string; startSeconds: number; endSeconds?: number | null; version: number; transcriptUpdatedAt?: string | null };
+type Item = { id: string; slug: string; title: string; description?: string | null; category?: string | null; tags?: string[]; durationMinutes?: number | null; thumbnailUrl?: string | null; completed?: boolean; completedAt?: string | null; transcriptMatches?: TranscriptMatch[] };
 async function api(url: string) { const response = await fetch(url, { credentials: "include" }); if (!response.ok) throw new Error("Unable to load the training library."); return response.json(); }
 const stamp = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 
 export default function TrainingLibraryPage() {
   const [, go] = useLocation();
   const [q, setQ] = useState("");
+  const [mode, setMode] = useState<SearchMode>("trainings");
   const [debouncedQ, setDebouncedQ] = useState("");
   const [category, setCategory] = useState("all");
   const [tags, setTags] = useState<string[]>([]);
@@ -30,8 +33,8 @@ export default function TrainingLibraryPage() {
     facets?: { categories: string[]; tags: string[] };
     pagination?: { page: number; pageSize: number; total: number; totalPages: number };
   }>({
-    queryKey: ["/api/training/library", debouncedQ, category, tags, page],
-    queryFn: () => api(`/api/training/library?q=${encodeURIComponent(debouncedQ)}&category=${encodeURIComponent(category === "all" ? "" : category)}&tags=${encodeURIComponent(tags.join(","))}&page=${page}`),
+    queryKey: ["/api/training/library", mode, debouncedQ, category, tags, page],
+    queryFn: () => api(`/api/training/library?mode=${mode}&q=${encodeURIComponent(debouncedQ)}&category=${encodeURIComponent(category === "all" ? "" : category)}&tags=${encodeURIComponent(tags.join(","))}&page=${page}`),
     placeholderData: keepPreviousData,
   });
   const items = data?.items || data?.replays || [];
@@ -49,7 +52,15 @@ export default function TrainingLibraryPage() {
     <div className="mx-auto max-w-7xl">
       <header className="mb-8 max-w-3xl"><div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-violet-700"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-700 text-white"><Library className="h-4 w-4" /></span> Fearless Influencer Academy</div><h1 className="text-4xl font-extrabold tracking-tight text-slate-950 sm:text-5xl">{heading}</h1><p className="mt-3 max-w-2xl text-base text-slate-600">Practical sessions, sharp ideas, and the context to put them to work.</p></header>
       <section className="mb-8 rounded-2xl border border-violet-100 bg-white/90 p-4 shadow-[0_14px_35px_-28px_rgba(46,16,101,.42)]">
-        <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-violet-600" /><Input className="h-11 border-violet-100 pl-10" placeholder="Search titles, topics, and transcripts" value={q} onChange={(event) => { setQ(event.target.value); setPage(1); }} /></div>
+        <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl bg-violet-50 p-1.5" role="tablist" aria-label="Search mode">
+          <button type="button" role="tab" aria-selected={mode === "trainings"} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-bold transition ${mode === "trainings" ? "bg-white text-violet-900 shadow-sm" : "text-slate-600 hover:text-violet-800"}`} onClick={() => { setMode("trainings"); setPage(1); }}>
+            <Library className="h-4 w-4" />Search trainings
+          </button>
+          <button type="button" role="tab" aria-selected={mode === "transcripts"} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-bold transition ${mode === "transcripts" ? "bg-white text-violet-900 shadow-sm" : "text-slate-600 hover:text-violet-800"}`} onClick={() => { setMode("transcripts"); setPage(1); }}>
+            <FileSearch className="h-4 w-4" />Search transcripts
+          </button>
+        </div>
+        <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-violet-600" /><Input className="h-11 border-violet-100 pl-10" placeholder={mode === "transcripts" ? "Search what was said in every training" : "Search titles, descriptions, categories, and topics"} value={q} onChange={(event) => { setQ(event.target.value); setPage(1); }} /></div>
         <div className="mt-4 flex flex-wrap items-center gap-2"><span className="mr-1 text-xs font-bold uppercase tracking-wider text-slate-500">Browse</span><Button size="sm" variant={category === "all" ? "default" : "outline"} onClick={() => { setCategory("all"); setPage(1); }}>All sessions</Button>{categories.map((item) => <Button key={item} size="sm" variant={category === item ? "default" : "outline"} onClick={() => { setCategory(item); setPage(1); }}>{item}</Button>)}</div>
         {availableTags.length > 0 && (
           <div className="mt-3 border-t border-violet-50 pt-3">
@@ -122,6 +133,12 @@ export default function TrainingLibraryPage() {
           <p className="font-semibold text-destructive">We couldn’t load the library.</p>
           <Button variant="outline" className="mt-3" onClick={() => refetch()}>Try again</Button>
         </div>
+      ) : mode === "transcripts" && !debouncedQ ? (
+        <div className="rounded-2xl border border-dashed border-violet-200 bg-white/70 p-14 text-center">
+          <FileSearch className="mx-auto h-10 w-10 text-violet-400" />
+          <h2 className="mt-4 font-semibold text-slate-900">Search inside every transcript</h2>
+          <p className="mx-auto mt-1 max-w-xl text-sm text-slate-600">Enter a phrase, question, or topic to find the exact moments where it was discussed.</p>
+        </div>
       ) : items.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-violet-200 bg-white/70 p-14 text-center">
           <Library className="mx-auto h-10 w-10 text-violet-300" />
@@ -131,13 +148,35 @@ export default function TrainingLibraryPage() {
         </div>
       ) : (
         <>
+        {mode === "transcripts" && (
+          <section className="mb-8 space-y-4" aria-labelledby="transcript-results-heading">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-700">Exact moments</p>
+              <h2 id="transcript-results-heading" className="mt-1 text-2xl font-extrabold text-slate-950">Transcript matches</h2>
+            </div>
+            {items.flatMap((item) => (item.transcriptMatches || []).map((match, index) => (
+              <article key={`${item.id}-${match.startSeconds}-${index}`} className="rounded-2xl border border-violet-100 bg-white p-5 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold text-violet-700">{stamp(match.startSeconds)}</p>
+                    <h3 className="mt-1 font-bold text-slate-950">{item.title}</h3>
+                  </div>
+                  <Button size="sm" onClick={() => go(`/training/library/${item.slug}?t=${match.startSeconds}`)}>
+                    <Play className="mr-1.5 h-3.5 w-3.5" />Watch from here
+                  </Button>
+                </div>
+                <p className="mt-3 text-sm leading-relaxed text-slate-700">{match.text}</p>
+              </article>
+            )))}
+          </section>
+        )}
         <div className="grid items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((item) => {
             const match = item.transcriptMatches?.[0];
             return (
               <button
                 key={item.id}
-                onClick={() => go(`/training/library/${item.slug}${match ? `?t=${match.startSeconds}` : ""}`)}
+                onClick={() => go(`/training/library/${item.slug}`)}
                 className="group flex h-full flex-col overflow-hidden rounded-2xl border border-violet-100 bg-white text-left shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-[0_18px_35px_-22px_rgba(46,16,101,.4)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-600"
               >
                 <div className="relative aspect-[16/9] w-full shrink-0 overflow-hidden bg-[linear-gradient(135deg,hsl(254_62%_33%),hsl(230_60%_17%))]">
@@ -159,9 +198,9 @@ export default function TrainingLibraryPage() {
                   {item.category && <span className="mt-3 inline-flex w-fit rounded-full border border-red-700 bg-red-600 px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wider text-white shadow-sm">{item.category}</span>}
                   <div className="mt-auto flex items-center justify-between border-t border-violet-50 pt-3 text-xs font-medium text-slate-500">
                     <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-violet-600" />{item.durationMinutes ? `${item.durationMinutes} min` : "Replay"}</span>
-                    {match && <span className="text-violet-700">{stamp(match.startSeconds)} match</span>}
+                    {mode === "transcripts" && match && <span className="text-violet-700">{item.transcriptMatches?.length} match{item.transcriptMatches?.length === 1 ? "" : "es"}</span>}
                   </div>
-                  {match && <p className="mt-2 line-clamp-1 text-xs text-slate-500">{match.text}</p>}
+                  {mode === "transcripts" && match && <p className="mt-2 line-clamp-1 text-xs text-slate-500">{match.text}</p>}
                 </div>
               </button>
             );
