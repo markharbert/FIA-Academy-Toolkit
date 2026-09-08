@@ -680,21 +680,42 @@ export default function TrainingReplayPage() {
 
           {replay.content && (
             <section
-              className="prose prose-slate mb-10 max-w-none text-[15px] leading-7"
-              dangerouslySetInnerHTML={{
-                __html: DOMPurify.sanitize(replay.content, {
-                  ALLOWED_TAGS: ["p", "br", "b", "i", "em", "strong", "ul", "ol", "li", "a", "h1", "h2", "h3", "h4", "blockquote", "code", "pre", "hr", "img", "span"],
-                  ALLOWED_ATTR: ["href", "target", "rel", "src", "alt", "class", "style"],
-                  ALLOW_DATA_ATTR: false,
-                  FORCE_BODY: true,
-                }),
-              }}
-            />
+              className="mb-10 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"
+            >
+              <div className="mb-5 flex items-center gap-3 border-b border-slate-100 pb-4">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                  <FileText className="h-4 w-4" />
+                </span>
+                <div>
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-slate-800">Replay content</h2>
+                  <p className="mt-0.5 text-xs text-slate-500">Notes and details for this training.</p>
+                </div>
+              </div>
+              <div
+                className="prose prose-slate max-w-none text-[15px] leading-7"
+                dangerouslySetInnerHTML={{
+                  __html: DOMPurify.sanitize(replay.content, {
+                    ALLOWED_TAGS: ["p", "br", "b", "i", "em", "strong", "ul", "ol", "li", "a", "h1", "h2", "h3", "h4", "blockquote", "code", "pre", "hr", "img", "span"],
+                    ALLOWED_ATTR: ["href", "target", "rel", "src", "alt", "class", "style"],
+                    ALLOW_DATA_ATTR: false,
+                    FORCE_BODY: true,
+                  }),
+                }}
+              />
+            </section>
           )}
 
           {replay.resources?.length ? (
-            <section className="mb-10">
-              <h2 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">Replay Resources</h2>
+            <section className="mb-10 rounded-2xl border border-blue-100 bg-blue-50/35 p-5 shadow-sm sm:p-6">
+              <div className="mb-4 flex items-center gap-3 border-b border-blue-100/80 pb-4">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-100 text-blue-700">
+                  <ExternalLink className="h-4 w-4" />
+                </span>
+                <div>
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-blue-950">Replay resources</h2>
+                  <p className="mt-0.5 text-xs text-blue-800/70">Helpful links and downloads for this training.</p>
+                </div>
+              </div>
               <div className="space-y-2">
                 {replay.resources.map((resource) => (
                   <a
@@ -702,7 +723,7 @@ export default function TrainingReplayPage() {
                     href={safeHref(resource.url)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="group flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-4 shadow-sm transition-colors hover:bg-blue-50"
+                    className="group flex items-center gap-3 rounded-xl border border-blue-100 bg-white px-4 py-4 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50/70"
                   >
                     <TrainingResourceIcon kind={resource.kind} />
                     <div className="min-w-0 flex-1">
