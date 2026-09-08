@@ -114,6 +114,19 @@ function TranscriptVideoDialog({ active, onWatchFull }: {
     const player = new Player(iframeRef.current);
     const update = ({ seconds }: { seconds: number }) => setVideoCurrentTime(seconds);
     player.on("timeupdate", update);
+    let disposed = false;
+    const pollCurrentTime = async () => {
+      try {
+        const seconds = await player.getCurrentTime();
+        if (!disposed && Number.isFinite(seconds)) setVideoCurrentTime(seconds);
+      } catch {
+        // The iframe can still be initializing; the next poll will retry.
+      }
+    };
+    const pollTimer = window.setInterval(() => {
+      void pollCurrentTime();
+    }, 250);
+    void pollCurrentTime();
     void (async () => {
       try {
         await player.setCurrentTime(active.match.startSeconds);
@@ -128,6 +141,8 @@ function TranscriptVideoDialog({ active, onWatchFull }: {
       }
     })();
     return () => {
+      disposed = true;
+      window.clearInterval(pollTimer);
       player.off("timeupdate", update);
       void player.pause().catch(() => undefined);
       void player.destroy().catch(() => undefined);
