@@ -7038,21 +7038,38 @@ export class DatabaseStorage implements IStorage {
       version: number;
       transcriptUpdatedAt: Date | null;
     }>(`
+      WITH current_chunks AS (
+        SELECT
+          replay.id AS replay_id,
+          chunk.chunk_index,
+          chunk.text AS match_text,
+          chunk.start_seconds,
+          chunk.end_seconds,
+          version.version,
+          version.transcript_updated_at,
+          LAG(chunk.text) OVER (
+            PARTITION BY version.id ORDER BY chunk.chunk_index
+          ) AS previous_text,
+          LEAD(chunk.text) OVER (
+            PARTITION BY version.id ORDER BY chunk.chunk_index
+          ) AS next_text
+        FROM training_replays replay
+        JOIN training_replay_transcript_versions version ON version.replay_id = replay.id
+        JOIN training_replay_transcript_chunks chunk ON chunk.transcript_version_id = version.id
+        WHERE replay.id = ANY($1::varchar[])
+          AND replay.current_transcript_version = version.version
+          AND version.index_status = 'complete'
+      )
       SELECT
-        replay.id AS "replayId",
-        chunk.text,
-        chunk.start_seconds AS "startSeconds",
-        chunk.end_seconds AS "endSeconds",
-        version.version,
-        version.transcript_updated_at AS "transcriptUpdatedAt"
-      FROM training_replays replay
-      JOIN training_replay_transcript_versions version ON version.replay_id = replay.id
-      JOIN training_replay_transcript_chunks chunk ON chunk.transcript_version_id = version.id
-      WHERE replay.id = ANY($1::varchar[])
-        AND replay.current_transcript_version = version.version
-        AND version.index_status = 'complete'
-        AND chunk.text ILIKE $2
-      ORDER BY replay.sort_order, chunk.start_seconds, chunk.chunk_index
+        replay_id AS "replayId",
+        LEFT(CONCAT_WS(' ', previous_text, match_text, next_text), 1_200) AS text,
+        start_seconds AS "startSeconds",
+        end_seconds AS "endSeconds",
+        version,
+        transcript_updated_at AS "transcriptUpdatedAt"
+      FROM current_chunks
+      WHERE match_text ILIKE $2
+      ORDER BY replay_id, start_seconds, chunk_index
     `, [replayIds, pattern]);
     const matchesByReplay = new Map<string, TrainingReplayTranscriptMatch[]>();
     for (const match of matchRows.rows) {
