@@ -103,10 +103,13 @@ export async function answerTrainingQuestionFromTranscripts(
       .filter((value) => value >= 1 && value <= evidence.length))]
       .slice(0, 6)
     : [];
+  if (!sourceIndexes.length) {
+    return { answer: noAnswer, foundAnswer: false, sourceIndexes: [] };
+  }
   return {
     answer: answer.slice(0, 8_000),
     foundAnswer: true,
-    sourceIndexes: sourceIndexes.length ? sourceIndexes : [1],
+    sourceIndexes,
   };
 }
 

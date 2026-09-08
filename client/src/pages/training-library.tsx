@@ -433,7 +433,7 @@ export default function TrainingLibraryPage() {
                 </div>
                 {qaMutation.data.answerSource === "web" && (
                   <p className="mb-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-950">
-                    Your training library was searched first. Because it didn’t contain enough information for a complete answer, this response uses authoritative online resources.
+                    There’s no supporting training information for this question, but here’s what we found online to help answer it.
                   </p>
                 )}
                 <FormattedAnswer text={qaMutation.data.answer} />
