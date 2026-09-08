@@ -189,41 +189,44 @@ function downloadQaPdf(result: QAResult) {
     }
   };
   const drawContentHeader = () => {
-    doc.setFillColor(30, 27, 75);
-    doc.rect(0, 0, pageW, 46, "F");
+    doc.setFillColor(124, 58, 237);
+    doc.rect(0, 0, pageW, 5, "F");
+    doc.setDrawColor(221, 214, 254);
+    doc.line(margin, 46, pageW - margin, 46);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
-    doc.setTextColor(255, 255, 255);
+    doc.setTextColor(49, 46, 129);
     doc.text("Fearless Influencer Academy", margin, 29);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
+    doc.setTextColor(100, 116, 139);
     doc.text("Replay Vault Q&A", pageW - margin, 29, { align: "right" });
   };
 
   // Cover page
-  doc.setFillColor(30, 27, 75);
+  doc.setFillColor(255, 255, 255);
   doc.rect(0, 0, pageW, pageH, "F");
   doc.setFillColor(124, 58, 237);
-  doc.rect(0, 0, pageW, 14, "F");
-  doc.setTextColor(255, 255, 255);
+  doc.rect(0, 0, pageW, 7, "F");
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
+  doc.setTextColor(49, 46, 129);
   doc.text("Fearless Influencer Academy", margin, 92);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(11);
-  doc.setTextColor(221, 214, 254);
+  doc.setTextColor(109, 40, 217);
   doc.text("Replay Vault Q&A", margin, 116);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(27);
-  doc.setTextColor(255, 255, 255);
+  doc.setTextColor(15, 23, 42);
   const coverQuestion = doc.splitTextToSize(cleanAnswerText(result.question), contentW);
   doc.text(coverQuestion, margin, 245);
   const questionHeight = coverQuestion.length * 32;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(11);
-  doc.setTextColor(221, 214, 254);
+  doc.setTextColor(109, 40, 217);
   doc.text("QUESTION", margin, 205);
-  doc.setFillColor(196, 181, 253);
+  doc.setFillColor(237, 233, 254);
   const badgeWidth = sourceLabel === "Answer from your trainings" ? 156 : 116;
   doc.roundedRect(margin, 245 + questionHeight + 34, badgeWidth, 24, 12, 12, "F");
   doc.setFont("helvetica", "bold");
@@ -232,7 +235,7 @@ function downloadQaPdf(result: QAResult) {
   doc.text(sourceLabel, margin + badgeWidth / 2, 245 + questionHeight + 50, { align: "center" });
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-  doc.setTextColor(196, 181, 253);
+  doc.setTextColor(100, 116, 139);
   doc.text("A formatted answer from the Replay Vault", margin, pageH - 70);
 
   // Answer pages
