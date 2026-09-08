@@ -25,20 +25,20 @@ function getVideoEmbedUrl(videoUrl: string | null | undefined, startSeconds: num
     if (url.hostname.includes("vimeo.com")) {
       const videoId = url.pathname.match(/(?:^|\/)(?:video\/)?(\d+)(?:\/|$)/)?.[1];
       return videoId
-        ? `https://player.vimeo.com/video/${videoId}?api=1&autoplay=1&muted=1&transcript=1#t=${start}s`
+        ? `https://player.vimeo.com/video/${videoId}?api=1&autoplay=1&transcript=1#t=${start}s`
         : null;
     }
     if (url.hostname.includes("youtube.com")) {
       const videoId = url.searchParams.get("v");
-      return videoId ? `https://www.youtube.com/embed/${videoId}?start=${start}&autoplay=1&mute=1&enablejsapi=1` : null;
+      return videoId ? `https://www.youtube.com/embed/${videoId}?start=${start}&autoplay=1&enablejsapi=1` : null;
     }
     if (url.hostname.includes("youtu.be")) {
       const videoId = url.pathname.split("/").filter(Boolean)[0];
-      return videoId ? `https://www.youtube.com/embed/${videoId}?start=${start}&autoplay=1&mute=1&enablejsapi=1` : null;
+      return videoId ? `https://www.youtube.com/embed/${videoId}?start=${start}&autoplay=1&enablejsapi=1` : null;
     }
     if (url.hostname.includes("wistia.com") || url.hostname.includes("wi.st")) {
       const videoId = url.pathname.split("/").filter(Boolean).pop();
-      return videoId ? `https://fast.wistia.net/embed/iframe/${videoId}?time=${start}&autoPlay=true&muted=true` : null;
+      return videoId ? `https://fast.wistia.net/embed/iframe/${videoId}?time=${start}&autoPlay=true` : null;
     }
     return null;
   } catch {
@@ -66,8 +66,7 @@ function TranscriptVideoDialog({ active, onWatchFull }: {
     const seekAndPlay = () => {
       video.currentTime = active.match.startSeconds;
       void video.play().catch(async () => {
-        video.muted = true;
-        await video.play().catch(() => undefined);
+        // Keep audio enabled if the browser requires a manual play gesture.
       });
     };
     if (video.readyState >= 1) seekAndPlay();
@@ -92,11 +91,9 @@ function TranscriptVideoDialog({ active, onWatchFull }: {
       } catch {
         if (disposed) return;
         try {
-          await player.setVolume(0);
-          if (disposed) return;
           await player.play();
         } catch {
-          // The muted iframe remains available for manual playback.
+          // The unmuted player remains available for manual playback.
         }
       }
     })();
@@ -135,7 +132,6 @@ function TranscriptVideoDialog({ active, onWatchFull }: {
             ref={videoRef}
             controls
             autoPlay
-            muted
             playsInline
             className="aspect-video w-full rounded-xl bg-slate-950"
           >
