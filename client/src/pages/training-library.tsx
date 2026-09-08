@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { CheckCircle2, ChevronLeft, ChevronRight, Clock, Library, Search, Tag, X } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, Library, Search, Tag, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 
 type Item = { id: string; slug: string; title: string; description?: string | null; category?: string | null; tags?: string[]; durationMinutes?: number | null; thumbnailUrl?: string | null; completed?: boolean; completedAt?: string | null; transcriptMatches?: { text: string; startSeconds: number }[] };
 async function api(url: string) { const response = await fetch(url, { credentials: "include" }); if (!response.ok) throw new Error("Unable to load the training library."); return response.json(); }
@@ -16,6 +18,7 @@ export default function TrainingLibraryPage() {
   const [debouncedQ, setDebouncedQ] = useState("");
   const [category, setCategory] = useState("all");
   const [tags, setTags] = useState<string[]>([]);
+  const [topicsOpen, setTopicsOpen] = useState(false);
   const [page, setPage] = useState(1);
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQ(q), 300);
@@ -47,7 +50,67 @@ export default function TrainingLibraryPage() {
       <section className="mb-8 rounded-2xl border border-violet-100 bg-white/90 p-4 shadow-[0_14px_35px_-28px_rgba(46,16,101,.42)]">
         <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-violet-600" /><Input className="h-11 border-violet-100 pl-10" placeholder="Search titles, topics, and transcripts" value={q} onChange={(event) => { setQ(event.target.value); setPage(1); }} /></div>
         <div className="mt-4 flex flex-wrap items-center gap-2"><span className="mr-1 text-xs font-bold uppercase tracking-wider text-slate-500">Browse</span><Button size="sm" variant={category === "all" ? "default" : "outline"} onClick={() => { setCategory("all"); setPage(1); }}>All sessions</Button>{categories.map((item) => <Button key={item} size="sm" variant={category === item ? "default" : "outline"} onClick={() => { setCategory(item); setPage(1); }}>{item}</Button>)}</div>
-        {availableTags.length > 0 && <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-violet-50 pt-3"><span className="mr-1 flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-slate-500"><Tag className="h-3.5 w-3.5" />Topics</span>{availableTags.map((item) => <Button key={item} size="sm" variant={tags.includes(item) ? "default" : "ghost"} className={tags.includes(item) ? "" : "text-slate-600"} onClick={() => toggle(item)}>{item}</Button>)}{active && <Button size="sm" variant="ghost" className="ml-auto text-slate-500" onClick={clear}><X className="mr-1 h-3.5 w-3.5" />Clear</Button>}</div>}
+        {availableTags.length > 0 && (
+          <div className="mt-3 border-t border-violet-50 pt-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="mr-1 flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-slate-500">
+                <Tag className="h-3.5 w-3.5" />
+                Topics
+              </span>
+              <Popover open={topicsOpen} onOpenChange={setTopicsOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={topicsOpen}
+                    className="min-w-[210px] justify-between border-violet-100 bg-white text-slate-700"
+                  >
+                    <span>{tags.length ? `${tags.length} topic${tags.length === 1 ? "" : "s"} selected` : "Choose topics"}</span>
+                    <ChevronDown className="ml-2 h-3.5 w-3.5 text-violet-500" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-[min(22rem,calc(100vw-2rem))] p-0">
+                  <Command>
+                    <CommandInput placeholder="Search topics…" />
+                    <CommandList>
+                      <CommandEmpty>No matching topics.</CommandEmpty>
+                      <CommandGroup heading={`${availableTags.length} available topic${availableTags.length === 1 ? "" : "s"}`}>
+                        {availableTags.map((item) => (
+                          <CommandItem key={item} value={item} onSelect={() => toggle(item)}>
+                            <span className="flex h-4 w-4 items-center justify-center rounded border border-violet-200">
+                              {tags.includes(item) && <Check className="h-3 w-3 text-violet-700" />}
+                            </span>
+                            <span className="truncate">{item}</span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {active && <Button size="sm" variant="ghost" className="ml-auto text-slate-500" onClick={clear}><X className="mr-1 h-3.5 w-3.5" />Clear</Button>}
+            </div>
+            {tags.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2" aria-label="Selected topics">
+                {tags.map((item) => (
+                  <Badge key={item} className="gap-1.5 bg-violet-100 px-2.5 py-1 text-violet-900 hover:bg-violet-100">
+                    {item}
+                    <button
+                      type="button"
+                      aria-label={`Remove ${item}`}
+                      className="rounded-full text-violet-600 hover:text-violet-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-600"
+                      onClick={() => toggle(item)}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </section>
       {isLoading ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

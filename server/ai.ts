@@ -40,7 +40,14 @@ function validateReplayDescription(value: unknown): string {
 export async function generateReplayMetadata(
   title: string,
   transcript: string,
+  existingTags: string[] = [],
 ): Promise<GeneratedReplayMetadata> {
+  const canonicalExistingTags = [...new Map(existingTags
+    .map((tag) => tag.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .map((tag) => [tag.toLocaleLowerCase(), tag])).values()]
+    .sort((a, b) => a.localeCompare(b))
+    .slice(0, 500);
   const response = await openai.chat.completions.create({
     model: "gpt-5.1",
     messages: [
@@ -53,11 +60,13 @@ export async function generateReplayMetadata(
           "Do not use hype, sensational claims, generic praise, fake urgency, or phrases such as 'game-changing', 'unlock', or 'revolutionary'.",
           "Do not mention the transcript, captions, or that AI wrote the copy.",
           "Return 5 to 8 concise topical tags. Tags should help members find the training, use title case, avoid duplicates, and not include the speaker's name unless central to the topic.",
+          "Reuse labels from the existing topic vocabulary whenever they accurately describe the training.",
+          "Only create a new tag when no existing topic is genuinely suitable; never create casing, punctuation, singular/plural, or synonym variants of an existing tag.",
         ].join(" "),
       },
       {
         role: "user",
-        content: `Return JSON only as {"description":"...","tags":["..."]}.\n\nTraining title:\n${title}\n\nTraining transcript:\n${transcript.slice(0, 48_000)}`,
+        content: `Return JSON only as {"description":"...","tags":["..."]}.\n\nExisting topic vocabulary (prefer these exact labels when relevant):\n${canonicalExistingTags.length ? canonicalExistingTags.join(" | ") : "(No existing topics yet)"}\n\nTraining title:\n${title}\n\nTraining transcript:\n${transcript.slice(0, 48_000)}`,
       },
     ],
     response_format: { type: "json_object" },
@@ -68,11 +77,16 @@ export async function generateReplayMetadata(
   if (!raw) throw new Error("AI did not return replay details.");
   const parsed = JSON.parse(raw) as { description?: unknown; tags?: unknown };
   const description = validateReplayDescription(parsed.description);
+  const existingByNormalizedName = new Map(canonicalExistingTags.map((tag) => [tag.toLocaleLowerCase(), tag]));
   const tags = Array.isArray(parsed.tags)
-    ? [...new Set(parsed.tags
+    ? [...new Map(parsed.tags
         .filter((tag): tag is string => typeof tag === "string")
         .map((tag) => tag.replace(/\s+/g, " ").trim().slice(0, 100))
-        .filter(Boolean))]
+        .filter(Boolean)
+        .map((tag) => {
+          const canonical = existingByNormalizedName.get(tag.toLocaleLowerCase()) ?? tag;
+          return [canonical.toLocaleLowerCase(), canonical];
+        })).values()]
         .slice(0, 8)
     : [];
   if (tags.length < 3) throw new Error("AI did not return enough useful replay tags.");

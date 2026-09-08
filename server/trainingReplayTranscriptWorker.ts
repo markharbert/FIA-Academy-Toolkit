@@ -139,7 +139,8 @@ async function processReplay(replayId: string): Promise<void> {
       throw new Error("No timestamped speech was found in the Vimeo video.");
     }
     const transcriptChapters = await generateLessonChapters(transcriptCues);
-    const generatedMetadata = await generateReplayMetadata(replay.title, transcriptText);
+    const existingTags = await storage.getTrainingReplayTagVocabulary();
+    const generatedMetadata = await generateReplayMetadata(replay.title, transcriptText, existingTags);
     const generatedAt = new Date();
     await storage.updateTrainingReplay(replay.id, {
       description: generatedMetadata.description,

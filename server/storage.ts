@@ -863,6 +863,7 @@ export interface IStorage {
   getTrainingReplays(): Promise<TrainingReplay[]>;
   getTrainingReplay(id: string): Promise<TrainingReplay | undefined>;
   getTrainingReplayBySlug(slug: string): Promise<TrainingReplay | undefined>;
+  getTrainingReplayTagVocabulary(): Promise<string[]>;
   createTrainingReplay(replay: InsertTrainingReplay): Promise<TrainingReplay>;
   updateTrainingReplay(id: string, updates: Partial<TrainingReplay>): Promise<TrainingReplay | undefined>;
   deleteTrainingReplay(id: string): Promise<boolean>;
@@ -6583,15 +6584,59 @@ export class DatabaseStorage implements IStorage {
     return row || undefined;
   }
 
+  async getTrainingReplayTagVocabulary(): Promise<string[]> {
+    const rows = await db.select({ tags: trainingReplays.tags }).from(trainingReplays);
+    const canonical = new Map<string, string>();
+    for (const row of rows) {
+      for (const tag of row.tags ?? []) {
+        const cleaned = tag.replace(/\s+/g, " ").trim();
+        if (cleaned && !canonical.has(cleaned.toLocaleLowerCase())) {
+          canonical.set(cleaned.toLocaleLowerCase(), cleaned);
+        }
+      }
+    }
+    return [...canonical.values()].sort((a, b) => a.localeCompare(b));
+  }
+
+  private async canonicalizeTrainingReplayTags(tags: string[]): Promise<string[]> {
+    const existingTags = await this.getTrainingReplayTagVocabulary();
+    const existingByNormalizedName = new Map(
+      existingTags.map((tag) => [tag.toLocaleLowerCase(), tag]),
+    );
+    const canonical = new Map<string, string>();
+    for (const tag of tags) {
+      const cleaned = tag.replace(/\s+/g, " ").trim().slice(0, 100);
+      if (!cleaned) continue;
+      const normalizedName = cleaned.toLocaleLowerCase();
+      if (!canonical.has(normalizedName)) {
+        canonical.set(normalizedName, existingByNormalizedName.get(normalizedName) ?? cleaned);
+      }
+    }
+    return [...canonical.values()];
+  }
+
   async createTrainingReplay(replay: InsertTrainingReplay): Promise<TrainingReplay> {
     if (replay.category) await this.ensureTrainingReplayCategory(replay.category);
-    const [row] = await db.insert(trainingReplays).values(replay).returning();
+    const values = {
+      ...replay,
+      tags: Array.isArray(replay.tags)
+        ? await this.canonicalizeTrainingReplayTags(replay.tags)
+        : replay.tags,
+    };
+    const [row] = await db.insert(trainingReplays).values(values).returning();
     return row;
   }
 
   async updateTrainingReplay(id: string, updates: Partial<TrainingReplay>): Promise<TrainingReplay | undefined> {
     if (updates.category) await this.ensureTrainingReplayCategory(updates.category);
-    const [row] = await db.update(trainingReplays).set({ ...updates, updatedAt: new Date() }).where(eq(trainingReplays.id, id)).returning();
+    const values = {
+      ...updates,
+      tags: Array.isArray(updates.tags)
+        ? await this.canonicalizeTrainingReplayTags(updates.tags)
+        : updates.tags,
+      updatedAt: new Date(),
+    };
+    const [row] = await db.update(trainingReplays).set(values).where(eq(trainingReplays.id, id)).returning();
     return row || undefined;
   }
 

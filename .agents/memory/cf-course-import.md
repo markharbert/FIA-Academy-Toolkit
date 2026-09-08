@@ -98,4 +98,4 @@ Vault imports automatically queue fresh Vimeo audio transcription and chapter ge
 
 **Why:** Fresh audio transcription is preferred for accuracy, but processing many imported videos inside the import request would cause timeouts and quota bursts.
 
-**How to apply:** Save imported replay fields first, queue only imported Vimeo replays in persistent database state, process at most two videos and three Gemini segments concurrently, retry transient failures, then generate fresh description and tags from the completed transcript while saving Vimeo duration; leave manual transcript controls unchanged for non-import workflows.
+**How to apply:** Save imported replay fields first, queue only imported Vimeo replays in persistent database state, process at most two videos and three Gemini segments concurrently, retry transient failures, then generate fresh description and tags from the completed transcript while saving Vimeo duration. Give metadata generation the existing Vault topic vocabulary and require exact-label reuse whenever an existing topic fits; create a new tag only when none is suitable. Leave manual transcript controls unchanged for non-import workflows.

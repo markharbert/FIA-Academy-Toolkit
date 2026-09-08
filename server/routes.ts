@@ -14906,8 +14906,9 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       if (!replay || !videoId) return res.status(400).json({ message: "Add a Vimeo video to this replay first." });
       const transcript = await fetchVimeoTranscript(videoId, trackId);
       const transcriptText = formatTranscriptParagraphs(transcript.text);
+      const existingTags = await storage.getTrainingReplayTagVocabulary();
       const [generatedMetadata, durationMinutes, thumbnailUrl, transcriptChapters] = await Promise.all([
-        generateReplayMetadata(replay.title, transcriptText),
+        generateReplayMetadata(replay.title, transcriptText, existingTags),
         getVimeoVideoDurationMinutes(videoId),
         getVimeoVideoThumbnail(videoId),
         generateLessonChapters(transcript.cues),
@@ -14996,8 +14997,9 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       const transcriptLanguage = segmentTranscripts.find((segment) => segment.language)?.language || "";
       if (!transcriptText) throw new Error("No speech was found in the Vimeo video.");
       progressStream.progress(88, "Creating replay details and chapters");
+      const existingTags = await storage.getTrainingReplayTagVocabulary();
       const [generatedMetadata, transcriptChapters] = await Promise.all([
-        generateReplayMetadata(replay.title, transcriptText),
+        generateReplayMetadata(replay.title, transcriptText, existingTags),
         generateLessonChapters(transcriptCues),
       ]);
       const generatedAt = new Date();
@@ -15179,7 +15181,10 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         const matches = (await storage.searchPublishedTrainingReplays({
           q: parsed.data.q,
           category: parsed.data.category,
-        })).filter((replay) => selectedTags.every((tag) => (replay.tags || []).includes(tag)));
+        })).filter((replay) => {
+          const replayTagKeys = new Set((replay.tags || []).map((tag) => tag.toLocaleLowerCase()));
+          return selectedTags.every((tag) => replayTagKeys.has(tag.toLocaleLowerCase()));
+        });
         total = matches.length;
         const offset = (parsed.data.page - 1) * pageSize;
         replays = matches.slice(offset, offset + pageSize);
@@ -15189,7 +15194,14 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         replays = result.items;
       }
       const categories = [...new Set(facetRows.map((replay) => replay.category).filter((item): item is string => !!item))].sort();
-      const tags = [...new Set(facetRows.flatMap((replay) => replay.tags || []))].sort();
+      const tagsByNormalizedName = new Map<string, string>();
+      for (const tag of facetRows.flatMap((replay) => replay.tags || [])) {
+        const cleaned = tag.replace(/\s+/g, " ").trim();
+        if (cleaned && !tagsByNormalizedName.has(cleaned.toLocaleLowerCase())) {
+          tagsByNormalizedName.set(cleaned.toLocaleLowerCase(), cleaned);
+        }
+      }
+      const tags = [...tagsByNormalizedName.values()].sort((a, b) => a.localeCompare(b));
       const items = await Promise.all(replays.map(async (replay) => {
         let thumbnailUrl = replay.thumbnailUrl;
         if (!thumbnailUrl && replay.videoUrl) {
