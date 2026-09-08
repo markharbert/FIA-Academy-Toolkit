@@ -11,7 +11,8 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 type SearchMode = "trainings" | "transcripts";
-type TranscriptMatch = { text: string; startSeconds: number; endSeconds?: number | null; version: number; transcriptUpdatedAt?: string | null };
+type TranscriptCue = { text: string; startSeconds: number; endSeconds?: number | null };
+type TranscriptMatch = { text: string; startSeconds: number; endSeconds?: number | null; contextCues?: TranscriptCue[]; version: number; transcriptUpdatedAt?: string | null };
 type Item = { id: string; slug: string; title: string; description?: string | null; videoUrl?: string | null; category?: string | null; tags?: string[]; durationMinutes?: number | null; thumbnailUrl?: string | null; completed?: boolean; completedAt?: string | null; transcriptMatches?: TranscriptMatch[] };
 type ActiveMatch = { item: Item; match: TranscriptMatch };
 async function api(url: string) { const response = await fetch(url, { credentials: "include" }); if (!response.ok) throw new Error("Unable to load the training library."); return response.json(); }
@@ -56,9 +57,37 @@ function TranscriptVideoDialog({ active, onWatchFull }: {
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [videoCurrentTime, setVideoCurrentTime] = useState(active.match.startSeconds);
   const embedUrl = getVideoEmbedUrl(active.item.videoUrl, active.match.startSeconds);
   const isVimeo = Boolean(active.item.videoUrl?.includes("vimeo.com"));
   const isDirect = isDirectVideoUrl(active.item.videoUrl);
+  const contextCues = active.match.contextCues?.length
+    ? active.match.contextCues
+    : [{ text: active.match.text, startSeconds: active.match.startSeconds, endSeconds: active.match.endSeconds }];
+  const activeCueIndex = contextCues.findIndex((cue, index) => {
+    const cueEnd = cue.endSeconds ?? contextCues[index + 1]?.startSeconds ?? cue.startSeconds + 8;
+    return videoCurrentTime >= cue.startSeconds && videoCurrentTime < cueEnd;
+  });
+  const activeCue = activeCueIndex >= 0 ? contextCues[activeCueIndex] : null;
+  const activeCueEnd = activeCue
+    ? (activeCue.endSeconds ?? contextCues[activeCueIndex + 1]?.startSeconds ?? activeCue.startSeconds + 8)
+    : 0;
+  const activeCueWords = activeCue?.text.trim().split(/\s+/).filter(Boolean) ?? [];
+  const activeWordInCue = activeCue
+    ? Math.min(
+        activeCueWords.length - 1,
+        Math.floor(
+          Math.min(
+            0.999,
+            Math.max(
+              0,
+              (videoCurrentTime - activeCue.startSeconds)
+                / Math.max(0.1, activeCueEnd - activeCue.startSeconds),
+            ),
+          ) * activeCueWords.length,
+        ),
+      )
+    : -1;
 
   useEffect(() => {
     const video = videoRef.current;
@@ -83,6 +112,8 @@ function TranscriptVideoDialog({ active, onWatchFull }: {
   useEffect(() => {
     if (!isVimeo || !iframeRef.current || !embedUrl) return;
     const player = new Player(iframeRef.current);
+    const update = ({ seconds }: { seconds: number }) => setVideoCurrentTime(seconds);
+    player.on("timeupdate", update);
     void (async () => {
       try {
         await player.setCurrentTime(active.match.startSeconds);
@@ -97,10 +128,15 @@ function TranscriptVideoDialog({ active, onWatchFull }: {
       }
     })();
     return () => {
+      player.off("timeupdate", update);
       void player.pause().catch(() => undefined);
       void player.destroy().catch(() => undefined);
     };
   }, [active, embedUrl, isVimeo]);
+
+  useEffect(() => {
+    setVideoCurrentTime(active.match.startSeconds);
+  }, [active]);
 
   return (
     <DialogContent className="w-[calc(100vw-2rem)] max-w-4xl overflow-hidden p-0">
@@ -123,7 +159,15 @@ function TranscriptVideoDialog({ active, onWatchFull }: {
             />
           </div>
         ) : isDirect && active.item.videoUrl ? (
-          <video ref={videoRef} controls autoPlay muted playsInline className="aspect-video w-full rounded-xl bg-slate-950">
+          <video
+            ref={videoRef}
+            controls
+            autoPlay
+            muted
+            playsInline
+            onTimeUpdate={(event) => setVideoCurrentTime(event.currentTarget.currentTime)}
+            className="aspect-video w-full rounded-xl bg-slate-950"
+          >
             <source src={active.item.videoUrl} />
           </video>
         ) : (
@@ -132,7 +176,30 @@ function TranscriptVideoDialog({ active, onWatchFull }: {
           </div>
         )}
         <div className="mt-4 flex flex-col gap-3">
-          <p className="text-sm leading-relaxed text-slate-600">{active.match.text}</p>
+          <p className="text-sm leading-relaxed text-slate-600">
+            {contextCues.map((cue, cueIndex) => {
+              const tokens = cue.text.split(/(\s+)/);
+              let wordIndex = 0;
+              return (
+                <span key={`${cue.startSeconds}-${cueIndex}`}>
+                  {cueIndex > 0 && " "}
+                  {tokens.map((token, tokenIndex) => {
+                    const isWhitespace = !token || /^\s+$/.test(token);
+                    const currentWordIndex = isWhitespace ? -1 : wordIndex++;
+                    const highlighted = cueIndex === activeCueIndex && currentWordIndex === activeWordInCue;
+                    return (
+                      <span
+                        key={tokenIndex}
+                        className={highlighted ? "rounded-sm bg-yellow-300 px-0.5 text-slate-900 shadow-sm" : undefined}
+                      >
+                        {token}
+                      </span>
+                    );
+                  })}
+                </span>
+              );
+            })}
+          </p>
           <Button className="w-full" onClick={onWatchFull}>
             <Play className="mr-1.5 h-3.5 w-3.5" />
             Watch this training in full
