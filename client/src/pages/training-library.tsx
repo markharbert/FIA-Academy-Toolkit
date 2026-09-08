@@ -1,18 +1,148 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import Player from "@vimeo/player";
 import { Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, FileSearch, Library, Play, Search, Tag, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 type SearchMode = "trainings" | "transcripts";
 type TranscriptMatch = { text: string; startSeconds: number; endSeconds?: number | null; version: number; transcriptUpdatedAt?: string | null };
-type Item = { id: string; slug: string; title: string; description?: string | null; category?: string | null; tags?: string[]; durationMinutes?: number | null; thumbnailUrl?: string | null; completed?: boolean; completedAt?: string | null; transcriptMatches?: TranscriptMatch[] };
+type Item = { id: string; slug: string; title: string; description?: string | null; videoUrl?: string | null; category?: string | null; tags?: string[]; durationMinutes?: number | null; thumbnailUrl?: string | null; completed?: boolean; completedAt?: string | null; transcriptMatches?: TranscriptMatch[] };
+type ActiveMatch = { item: Item; match: TranscriptMatch };
 async function api(url: string) { const response = await fetch(url, { credentials: "include" }); if (!response.ok) throw new Error("Unable to load the training library."); return response.json(); }
 const stamp = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+
+function getVideoEmbedUrl(videoUrl: string | null | undefined, startSeconds: number) {
+  if (!videoUrl) return null;
+  try {
+    const url = new URL(videoUrl);
+    const start = Math.max(0, Math.floor(startSeconds));
+    if (url.hostname.includes("vimeo.com")) {
+      const videoId = url.pathname.match(/(?:^|\/)(?:video\/)?(\d+)(?:\/|$)/)?.[1];
+      return videoId
+        ? `https://player.vimeo.com/video/${videoId}?api=1&autoplay=1&muted=1#t=${start}s`
+        : null;
+    }
+    if (url.hostname.includes("youtube.com")) {
+      const videoId = url.searchParams.get("v");
+      return videoId ? `https://www.youtube.com/embed/${videoId}?start=${start}&autoplay=1&mute=1&enablejsapi=1` : null;
+    }
+    if (url.hostname.includes("youtu.be")) {
+      const videoId = url.pathname.split("/").filter(Boolean)[0];
+      return videoId ? `https://www.youtube.com/embed/${videoId}?start=${start}&autoplay=1&mute=1&enablejsapi=1` : null;
+    }
+    if (url.hostname.includes("wistia.com") || url.hostname.includes("wi.st")) {
+      const videoId = url.pathname.split("/").filter(Boolean).pop();
+      return videoId ? `https://fast.wistia.net/embed/iframe/${videoId}?time=${start}&autoPlay=true&muted=true` : null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function isDirectVideoUrl(videoUrl: string | null | undefined) {
+  return Boolean(videoUrl && /\.(?:mp4|webm|ogg)(?:$|[?#])/i.test(videoUrl));
+}
+
+function TranscriptVideoDialog({ active, onClose, onWatchFull }: {
+  active: ActiveMatch;
+  onClose: () => void;
+  onWatchFull: () => void;
+}) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const embedUrl = getVideoEmbedUrl(active.item.videoUrl, active.match.startSeconds);
+  const isVimeo = Boolean(active.item.videoUrl?.includes("vimeo.com"));
+  const isDirect = isDirectVideoUrl(active.item.videoUrl);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !isDirect || !active.item.videoUrl) return;
+    const seekAndPlay = () => {
+      video.currentTime = active.match.startSeconds;
+      void video.play().catch(async () => {
+        video.muted = true;
+        await video.play().catch(() => undefined);
+      });
+    };
+    if (video.readyState >= 1) seekAndPlay();
+    else video.addEventListener("loadedmetadata", seekAndPlay, { once: true });
+    return () => {
+      video.removeEventListener("loadedmetadata", seekAndPlay);
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+    };
+  }, [active, isDirect]);
+
+  useEffect(() => {
+    if (!isVimeo || !iframeRef.current || !embedUrl) return;
+    const player = new Player(iframeRef.current);
+    void (async () => {
+      try {
+        await player.setCurrentTime(active.match.startSeconds);
+        await player.play();
+      } catch {
+        try {
+          await player.setVolume(0);
+          await player.play();
+        } catch {
+          // The muted iframe remains available for manual playback.
+        }
+      }
+    })();
+    return () => {
+      void player.pause().catch(() => undefined);
+      void player.destroy().catch(() => undefined);
+    };
+  }, [active, embedUrl, isVimeo]);
+
+  return (
+    <DialogContent className="w-[calc(100vw-2rem)] max-w-4xl overflow-hidden p-0">
+      <DialogHeader className="px-5 pt-5 sm:px-6 sm:pt-6">
+        <DialogTitle>{active.item.title}</DialogTitle>
+        <DialogDescription>
+          Starting at {stamp(active.match.startSeconds)} in this training.
+        </DialogDescription>
+      </DialogHeader>
+      <div className="px-5 pb-5 sm:px-6 sm:pb-6">
+        {embedUrl ? (
+          <div className="aspect-video overflow-hidden rounded-xl bg-slate-950">
+            <iframe
+              ref={isVimeo ? iframeRef : undefined}
+              src={embedUrl}
+              className="h-full w-full"
+              allow="autoplay; fullscreen; picture-in-picture"
+              allowFullScreen
+              title={active.item.title}
+            />
+          </div>
+        ) : isDirect && active.item.videoUrl ? (
+          <video ref={videoRef} controls autoPlay muted playsInline className="aspect-video w-full rounded-xl bg-slate-950">
+            <source src={active.item.videoUrl} />
+          </video>
+        ) : (
+          <div className="flex aspect-video items-center justify-center rounded-xl bg-slate-950 px-6 text-center text-sm text-slate-300">
+            This video cannot be previewed here. Open the full training to watch it.
+          </div>
+        )}
+        <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm leading-relaxed text-slate-600">{active.match.text}</p>
+          <Button className="shrink-0" onClick={onWatchFull}>
+            <Play className="mr-1.5 h-3.5 w-3.5" />
+            Watch this training in full
+          </Button>
+        </div>
+      </div>
+    </DialogContent>
+  );
+}
 
 export default function TrainingLibraryPage() {
   const [, go] = useLocation();
@@ -23,6 +153,7 @@ export default function TrainingLibraryPage() {
   const [tags, setTags] = useState<string[]>([]);
   const [topicsOpen, setTopicsOpen] = useState(false);
   const [page, setPage] = useState(1);
+  const [activeMatch, setActiveMatch] = useState<ActiveMatch | null>(null);
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQ(q), 300);
     return () => window.clearTimeout(timer);
@@ -148,7 +279,7 @@ export default function TrainingLibraryPage() {
         </div>
       ) : (
         <>
-        {mode === "transcripts" && (
+        {mode === "transcripts" ? (
           <section className="mb-8 space-y-4" aria-labelledby="transcript-results-heading">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-700">Exact moments</p>
@@ -161,18 +292,16 @@ export default function TrainingLibraryPage() {
                     <p className="text-sm font-bold text-violet-700">{stamp(match.startSeconds)}</p>
                     <h3 className="mt-1 font-bold text-slate-950">{item.title}</h3>
                   </div>
-                  <Button size="sm" onClick={() => go(`/training/library/${item.slug}?t=${match.startSeconds}`)}>
-                    <Play className="mr-1.5 h-3.5 w-3.5" />Watch from here
+                  <Button size="sm" onClick={() => setActiveMatch({ item, match })}>
+                    <Play className="mr-1.5 h-3.5 w-3.5" />Watch video
                   </Button>
                 </div>
                 <p className="mt-3 text-sm leading-relaxed text-slate-700">{match.text}</p>
               </article>
             )))}
           </section>
-        )}
-        <div className="grid items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        ) : <div className="grid items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((item) => {
-            const match = item.transcriptMatches?.[0];
             return (
               <button
                 key={item.id}
@@ -198,14 +327,13 @@ export default function TrainingLibraryPage() {
                   {item.category && <span className="mt-3 inline-flex w-fit rounded-full border border-red-700 bg-red-600 px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wider text-white shadow-sm">{item.category}</span>}
                   <div className="mt-auto flex items-center justify-between border-t border-violet-50 pt-3 text-xs font-medium text-slate-500">
                     <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-violet-600" />{item.durationMinutes ? `${item.durationMinutes} min` : "Replay"}</span>
-                    {mode === "transcripts" && match && <span className="text-violet-700">{item.transcriptMatches?.length} match{item.transcriptMatches?.length === 1 ? "" : "es"}</span>}
+                    <span>{item.durationMinutes ? `${item.durationMinutes} min` : "Replay"}</span>
                   </div>
-                  {mode === "transcripts" && match && <p className="mt-2 line-clamp-1 text-xs text-slate-500">{match.text}</p>}
                 </div>
               </button>
             );
           })}
-        </div>
+        </div>}
         {pagination && pagination.totalPages > 1 && (
           <nav className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-violet-100 bg-white px-4 py-3 shadow-sm" aria-label="Replay Vault pages">
             <p className="text-sm font-medium text-slate-600">
@@ -226,6 +354,24 @@ export default function TrainingLibraryPage() {
         )}
         </>
       )}
+      <Dialog
+        open={Boolean(activeMatch)}
+        onOpenChange={(open) => {
+          if (!open) setActiveMatch(null);
+        }}
+      >
+        {activeMatch && (
+          <TranscriptVideoDialog
+            active={activeMatch}
+            onClose={() => setActiveMatch(null)}
+            onWatchFull={() => {
+              const target = `/training/library/${activeMatch.item.slug}?t=${Math.floor(activeMatch.match.startSeconds)}`;
+              setActiveMatch(null);
+              go(target);
+            }}
+          />
+        )}
+      </Dialog>
     </div>
   </main>;
 }

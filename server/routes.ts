@@ -15213,6 +15213,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
           tags: replay.tags,
           durationMinutes: replay.durationMinutes,
           thumbnailUrl,
+           ...(parsed.data.mode === "transcripts" ? { videoUrl: replay.videoUrl } : {}),
           completed: !!completedAtByReplay.get(replay.id),
           completedAt: completedAtByReplay.get(replay.id) ?? null,
            transcriptMatches: "transcriptMatches" in replay ? replay.transcriptMatches : [],
