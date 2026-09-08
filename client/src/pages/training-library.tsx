@@ -164,7 +164,7 @@ function FormattedAnswer({ text }: { text: string }) {
   );
 }
 
-function downloadQaPdf(result: QAResult) {
+async function downloadQaPdf(result: QAResult, filenameTitle: string) {
   const doc = new jsPDF({ unit: "pt", format: "letter" });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -325,12 +325,7 @@ function downloadQaPdf(result: QAResult) {
   }
 
   addFooter();
-  const filenameQuestion = cleanAnswerText(result.question)
-    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 180);
-  const filename = `${filenameQuestion || "answer"}.pdf`;
+  const filename = `${filenameTitle.replace(/[<>:"/\\|?*\u0000-\u001F]/g, "").replace(/\s+/g, " ").trim() || "answer"}.pdf`;
   doc.save(filename);
 }
 
@@ -487,9 +482,23 @@ export default function TrainingLibraryPage() {
   const [topicsOpen, setTopicsOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [activeMatch, setActiveMatch] = useState<ActiveMatch | null>(null);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [pdfDownloadError, setPdfDownloadError] = useState<string | null>(null);
   const qaMutation = useMutation<QAResult, Error, string>({
     mutationFn: (question) => postApi("/api/training/library/qa", { question }),
   });
+  const handleDownloadPdf = async (result: QAResult) => {
+    setIsDownloadingPdf(true);
+    setPdfDownloadError(null);
+    try {
+      const { filename } = await postApi<{ filename: string }>("/api/training/library/qa/filename", { question: result.question });
+      await downloadQaPdf(result, filename);
+    } catch (error) {
+      setPdfDownloadError(error instanceof Error ? error.message : "Could not prepare the PDF.");
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQ(q), 300);
     return () => window.clearTimeout(timer);
@@ -673,12 +682,16 @@ export default function TrainingLibraryPage() {
                   variant="outline"
                   size="sm"
                   className="shrink-0 border-violet-200 bg-white text-violet-800"
-                  onClick={() => downloadQaPdf(qaMutation.data!)}
+                  disabled={isDownloadingPdf}
+                  onClick={() => handleDownloadPdf(qaMutation.data!)}
                 >
-                  <Download className="mr-1 h-3.5 w-3.5" />
-                  Download as a PDF
+                  <Download className={`mr-1 h-3.5 w-3.5 ${isDownloadingPdf ? "animate-pulse" : ""}`} />
+                  {isDownloadingPdf ? "Preparing PDF…" : "Download as a PDF"}
                 </Button>
               </div>
+              {pdfDownloadError && (
+                <p className="border-b border-violet-100 bg-red-50 px-5 py-2 text-sm text-red-800 sm:px-7">{pdfDownloadError}</p>
+              )}
               <div className="px-5 py-6 sm:px-7">
                 <div className="mb-4 flex items-center gap-2 text-sm font-bold text-violet-700">
                   {qaMutation.data.answerSource === "web" ? <Globe2 className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}

@@ -46,6 +46,35 @@ export type TrainingQuestionWebAnswer = {
   sources: TrainingQuestionWebSource[];
 };
 
+export async function generateTrainingQuestionFilename(question: string): Promise<string> {
+  const response = await openai.chat.completions.create({
+    model: "gpt-5.1",
+    messages: [
+      {
+        role: "system",
+        content: [
+          "Create a concise, clear filename for a downloaded PDF answer.",
+          "Return JSON only in the shape {\"title\":\"...\"}.",
+          "The title should summarize the member's question in 3 to 8 words, be specific enough to recognize later, and be no more than 70 characters.",
+          "Do not include a file extension, quotation marks, emojis, numbering, or commentary.",
+        ].join(" "),
+      },
+      { role: "user", content: `Member question:\n${question}` },
+    ],
+    response_format: { type: "json_object" },
+    max_completion_tokens: 100,
+    temperature: 0.2,
+  });
+  const raw = response.choices[0]?.message.content;
+  if (!raw) throw new Error("AI returned an empty PDF filename.");
+  const parsed = JSON.parse(raw) as { title?: unknown };
+  const title = typeof parsed.title === "string"
+    ? parsed.title.replace(/\s+/g, " ").trim()
+    : "";
+  if (!title || title.length > 70) throw new Error("AI returned an invalid PDF filename.");
+  return title;
+}
+
 export async function answerTrainingQuestionFromTranscripts(
   question: string,
   evidence: TrainingQuestionEvidenceInput[],
