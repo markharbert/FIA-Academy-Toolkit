@@ -93,13 +93,17 @@ function parseAnswerBlocks(text: string): AnswerBlock[] {
   return blocks;
 }
 
-function cleanAnswerText(text: string) {
+function decodeAnswerText(text: string) {
   return text
     .replace(/&amp;/gi, "&")
     .replace(/&quot;/gi, "\"")
     .replace(/&#39;|&apos;/gi, "'")
     .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
+    .replace(/&gt;/gi, ">");
+}
+
+function cleanAnswerText(text: string) {
+  return decodeAnswerText(text)
     .replace(/\*\*([^*]+)\*\*|__([^_]+)__/g, "$1$2")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
@@ -107,7 +111,7 @@ function cleanAnswerText(text: string) {
 }
 
 function renderAnswerInline(text: string) {
-  const readableText = cleanAnswerText(text);
+  const readableText = decodeAnswerText(text);
   const parts = readableText.split(/(\*\*[^*]+\*\*|__[^_]+__|`[^`]+`|\[[^\]]+\]\([^)]+\))/g);
   return parts.map((part, index) => {
     const isBold = (part.startsWith("**") && part.endsWith("**")) || (part.startsWith("__") && part.endsWith("__"));
@@ -166,7 +170,11 @@ function downloadQaPdf(result: QAResult) {
   const pageH = doc.internal.pageSize.getHeight();
   const margin = 54;
   const contentW = pageW - margin * 2;
-  const sourceLabel = result.answerSource === "web" ? "Found online" : "Answer from your trainings";
+  const sourceLabel = result.answerSource === "web"
+    ? "Found online"
+    : result.answerSource === "trainings"
+      ? "Answer from your trainings"
+      : "Replay Vault answer";
   const addFooter = () => {
     const pageCount = doc.getNumberOfPages();
     for (let page = 1; page <= pageCount; page += 1) {
@@ -216,11 +224,12 @@ function downloadQaPdf(result: QAResult) {
   doc.setTextColor(221, 214, 254);
   doc.text("QUESTION", margin, 205);
   doc.setFillColor(196, 181, 253);
-  doc.roundedRect(margin, 245 + questionHeight + 34, 116, 24, 12, 12, "F");
+  const badgeWidth = sourceLabel === "Answer from your trainings" ? 156 : 116;
+  doc.roundedRect(margin, 245 + questionHeight + 34, badgeWidth, 24, 12, 12, "F");
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.setTextColor(49, 46, 129);
-  doc.text(sourceLabel, margin + 58, 245 + questionHeight + 50, { align: "center" });
+  doc.text(sourceLabel, margin + badgeWidth / 2, 245 + questionHeight + 50, { align: "center" });
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   doc.setTextColor(196, 181, 253);
@@ -646,9 +655,21 @@ export default function TrainingLibraryPage() {
         ) : qaMutation.data ? (
           <div className="space-y-5">
             <article className="overflow-hidden rounded-2xl border border-violet-100 bg-white shadow-sm">
-              <div className="border-b border-violet-100 bg-violet-50/70 px-5 py-4 sm:px-7">
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-700">Your question</p>
-                <h2 className="mt-1 text-xl font-extrabold text-slate-950">{qaMutation.data.question}</h2>
+              <div className="flex flex-col gap-4 border-b border-violet-100 bg-violet-50/70 px-5 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-7">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-700">Your question</p>
+                  <h2 className="mt-1 text-xl font-extrabold text-slate-950">{qaMutation.data.question}</h2>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 border-violet-200 bg-white text-violet-800"
+                  onClick={() => downloadQaPdf(qaMutation.data!)}
+                >
+                  <Download className="mr-1 h-3.5 w-3.5" />
+                  Download as a PDF
+                </Button>
               </div>
               <div className="px-5 py-6 sm:px-7">
                 <div className="mb-4 flex items-center gap-2 text-sm font-bold text-violet-700">
