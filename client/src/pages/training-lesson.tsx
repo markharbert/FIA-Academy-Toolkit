@@ -552,7 +552,7 @@ export default function TrainingLessonPage() {
               </button>
             </div>
             <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
-              {moduleTree.map((module) => renderModuleNavigation(module, 0, false))}
+              {moduleTree.map((module, index) => renderModuleNavigation(module, 0, false, `${index + 1}`))}
             </nav>
           </aside>
         </div>
@@ -632,7 +632,7 @@ export default function TrainingLessonPage() {
                 <span>{completedCount}/{totalCount}</span>
               </div>
             )}
-            {moduleTree.map((module) => renderModuleNavigation(module))}
+            {moduleTree.map((module, index) => renderModuleNavigation(module, 0, courseNavCollapsed, `${index + 1}`))}
           </nav>
         </TooltipProvider>
       </aside>
