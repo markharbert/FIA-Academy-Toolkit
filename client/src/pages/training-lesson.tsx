@@ -471,7 +471,7 @@ export default function TrainingLessonPage() {
               collapsed && "justify-center px-1",
               isActive
                 ? "border-amber-300/40 bg-amber-400/15 text-amber-50 shadow-[inset_3px_0_0_#fbbf24]"
-                : "text-white/72 hover:border-white/10 hover:bg-white/[0.08] hover:text-white",
+                : "text-white/80 hover:border-white/10 hover:bg-white/[0.08] hover:text-white",
             )}
             title={collapsed ? lesson.title : undefined}
             aria-current={isActive ? "page" : undefined}
@@ -489,7 +489,7 @@ export default function TrainingLessonPage() {
             {!collapsed && (
               <span className={cn(
                 "min-w-0 whitespace-normal break-words text-[12px] leading-snug",
-                isActive ? "font-semibold" : "font-medium",
+                isActive ? "font-semibold text-amber-50" : "font-medium text-white/80 group-hover:text-white",
               )}>{lesson.title}</span>
             )}
           </button>
