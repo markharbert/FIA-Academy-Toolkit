@@ -14,3 +14,9 @@ Opening a lesson must expand every ancestor section in its path without closing 
 **Why:** A direct link or next-lesson action can land inside a deeply nested section. Hiding the active lesson inside collapsed ancestors makes the navigation appear disconnected from the page.
 
 **How to apply:** Resolve the active lesson against the full flattened module tree for breadcrumbs and navigation, then add its ancestor IDs to the expanded set.
+
+Keep the learner-facing dark roadmap panel with its wider layout, numbered hierarchy, colored depth treatments, connector rails, and strong active-lesson state.
+
+**Why:** The user explicitly reviewed and approved this front-facing course layout after seeing it in the app.
+
+**How to apply:** Do not remove or flatten the learner roadmap when changing the separate admin course-outline editor. Treat the learner panel and admin outline as distinct surfaces with shared hierarchy principles.

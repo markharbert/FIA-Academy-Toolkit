@@ -450,7 +450,12 @@ export default function TrainingLessonPage() {
               </span>
             </span>
             {isModuleComplete && (
-              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" aria-label="Module complete" />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" aria-label="Module complete" />
+                </TooltipTrigger>
+                <TooltipContent side="right">Module Complete</TooltipContent>
+              </Tooltip>
             )}
           </button>
         </div>
@@ -528,15 +533,15 @@ export default function TrainingLessonPage() {
             className="absolute inset-0 bg-slate-950/50"
             onClick={() => setMobileNavOpen(false)}
           />
-           <aside
-             className="relative flex h-full w-[min(22rem,88vw)] flex-col overflow-y-auto shadow-2xl"
+          <aside
+            className="relative flex h-full w-[min(22rem,88vw)] flex-col overflow-y-auto shadow-2xl"
             style={{ background: SIDEBAR_BG }}
           >
-             <div className="flex items-center justify-between border-b px-4 py-4" style={{ borderColor: SIDEBAR_BDR }}>
-               <div>
-                 <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300/75">Your roadmap</p>
-                 <span className="mt-1 block text-sm font-semibold text-amber-50">Course navigation</span>
-               </div>
+            <div className="flex items-center justify-between border-b px-4 py-4" style={{ borderColor: SIDEBAR_BDR }}>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300/75">Your roadmap</p>
+                <span className="mt-1 block text-sm font-semibold text-amber-50">Course navigation</span>
+              </div>
               <button
                 type="button"
                 aria-label="Close course navigation"
@@ -555,7 +560,7 @@ export default function TrainingLessonPage() {
       <aside
         className={cn(
           "hidden shrink-0 flex-col overflow-y-auto transition-[width] duration-200 lg:flex",
-           courseNavCollapsed ? "w-14" : "w-[360px]",
+          courseNavCollapsed ? "w-14" : "w-[360px]",
         )}
         style={{ background: SIDEBAR_BG, borderRight: `1px solid ${SIDEBAR_BDR}` }}
       >
@@ -620,13 +625,13 @@ export default function TrainingLessonPage() {
 
         {/* Module / lesson tree */}
         <TooltipProvider delayDuration={200}>
-           <nav className="flex-1 overflow-y-auto px-3 py-3">
-             {!courseNavCollapsed && (
-               <div className="mb-3 flex items-center justify-between px-1 text-[9px] font-bold uppercase tracking-[0.2em] text-white/35">
-                 <span>Your roadmap</span>
-                 <span>{completedCount}/{totalCount}</span>
-               </div>
-             )}
+          <nav className="flex-1 overflow-y-auto px-3 py-3">
+            {!courseNavCollapsed && (
+              <div className="mb-3 flex items-center justify-between px-1 text-[9px] font-bold uppercase tracking-[0.2em] text-white/35">
+                <span>Your roadmap</span>
+                <span>{completedCount}/{totalCount}</span>
+              </div>
+            )}
             {moduleTree.map((module) => renderModuleNavigation(module))}
           </nav>
         </TooltipProvider>

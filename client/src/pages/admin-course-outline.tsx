@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import {
   ArrowLeft, Plus, ChevronDown, ChevronRight, Pencil, Trash2,
-  FileText, Eye, EyeOff, ArrowUp, ArrowDown, Check, X, Smile, Play,
+  FileText, Eye, EyeOff, ArrowUp, ArrowDown, Check, X, Play, Layers,
+  Clock3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -303,6 +304,12 @@ export default function AdminCourseOutlinePage() {
       .filter((candidate) => candidate.parentModuleId === module.parentModuleId)
       .sort((left, right) => left.sortOrder - right.sortOrder);
     const siblingIndex = siblings.findIndex((candidate) => candidate.id === module.id);
+    const levelName = depth === 0 ? "Module" : depth === 1 ? "Section" : `Nested level ${depth + 1}`;
+    const levelClass = depth === 0
+      ? "border-l-[5px] border-l-[hsl(var(--brand-red))]"
+      : depth === 1
+        ? "ml-3 border-l-[5px] border-l-[hsl(var(--brand-light))] sm:ml-7"
+        : "ml-3 border-l-[5px] border-l-amber-500 sm:ml-7";
 
     return (
       <div
@@ -311,12 +318,13 @@ export default function AdminCourseOutlinePage() {
           "overflow-hidden rounded-lg border",
           depth === 0
             ? "border-sky-200 bg-sky-50/70 dark:border-sky-800/60 dark:bg-sky-950/20"
-            : "ml-5 border-l-4 border-violet-300 bg-violet-50/70 dark:border-violet-700/60 dark:bg-violet-950/20",
+            : "border-violet-200 bg-violet-50/70 dark:border-violet-700/60 dark:bg-violet-950/20",
+          levelClass,
         )}
       >
         <div
           className={cn(
-            "group flex items-center gap-2 px-3 py-2.5",
+            "group flex min-h-[68px] items-center gap-2 px-3 py-3 sm:gap-3 sm:px-4",
             depth === 0
               ? "bg-sky-100/80 dark:bg-sky-900/30"
               : "bg-violet-100/80 dark:bg-violet-900/30",
@@ -347,14 +355,27 @@ export default function AdminCourseOutlinePage() {
           >
             {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </button>
+          <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-foreground/[.06] text-foreground sm:flex">
+            <Layers className="h-4 w-4" />
+          </div>
           <div className="flex-1 min-w-0 font-medium text-sm">
+            <div className="mb-1 flex items-center gap-2">
+              <span className="font-mono text-[10px] font-bold uppercase tracking-[.14em] text-muted-foreground">{levelName}</span>
+              <span className={cn(
+                "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                module.status === "published"
+                  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                  : "bg-muted text-muted-foreground",
+              )}>{module.status}</span>
+            </div>
             <InlineEdit
               value={module.title}
               onSave={(title) => updateModule.mutate({ moduleId: module.id, title })}
             />
           </div>
-          <span className="text-xs text-muted-foreground shrink-0">
+          <span className="hidden text-xs text-muted-foreground shrink-0 sm:block">
             {module.lessons.length} lesson{module.lessons.length !== 1 ? "s" : ""}
+            {module.children.length > 0 && ` · ${module.children.length} nested`}
           </span>
           <Button
             size="icon"
@@ -367,11 +388,15 @@ export default function AdminCourseOutlinePage() {
         </div>
 
         {isOpen && (
-          <div className="divide-y">
+          <div className="space-y-1.5 border-t border-border/70 bg-background/55 p-2 sm:p-3">
+            <div className="mb-2 flex items-center justify-between px-1 text-[10px] font-bold uppercase tracking-[.14em] text-muted-foreground">
+              <span>Contents</span>
+              <span>{module.lessons.length + module.children.length} item{module.lessons.length + module.children.length !== 1 ? "s" : ""}</span>
+            </div>
             {module.lessons.map((lesson, lessonIndex) => (
               <div
                 key={lesson.id}
-                className="group flex items-center gap-2 border-t border-amber-200/70 bg-amber-50/70 px-4 py-2 transition-colors hover:bg-amber-100/80 dark:border-amber-800/40 dark:bg-amber-950/20 dark:hover:bg-amber-900/30"
+                className="group flex min-h-[52px] items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/[.07] px-2.5 py-2 transition-colors hover:bg-amber-500/[.13] sm:gap-3 sm:px-3"
               >
                 <div className="flex shrink-0 flex-col">
                   <button
@@ -393,9 +418,15 @@ export default function AdminCourseOutlinePage() {
                     <ArrowDown className="h-3 w-3" />
                   </button>
                 </div>
-                <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-300">
+                  <FileText className="h-4 w-4" />
+                </div>
                 <div className="flex-1 min-w-0 text-sm">
-                  <InlineEdit value={lesson.title} onSave={(title) => updateLesson.mutate({ lessonId: lesson.id, title })} />
+                  <div className="truncate font-medium"><InlineEdit value={lesson.title} onSave={(title) => updateLesson.mutate({ lessonId: lesson.id, title })} /></div>
+                  <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <span>Lesson</span>
+                    {lesson.durationMinutes && <><span>·</span><span className="inline-flex items-center gap-1"><Clock3 className="h-3 w-3" />{lesson.durationMinutes} min</span></>}
+                  </div>
                 </div>
                 {lesson.videoUrl && (
                   <span
@@ -406,7 +437,7 @@ export default function AdminCourseOutlinePage() {
                     <Play className="h-3.5 w-3.5 fill-current" />
                   </span>
                 )}
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 shrink-0">
+                <div className="flex items-center gap-1 shrink-0 sm:opacity-0 sm:group-hover:opacity-100">
                   <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setLocation(`/admin/courses/${id}/lessons/${lesson.id}`)} title="Edit lesson">
                     <Pencil className="h-3.5 w-3.5" />
                   </Button>
@@ -440,9 +471,10 @@ export default function AdminCourseOutlinePage() {
   };
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="min-h-[100dvh] bg-background px-4 py-5 sm:px-6 sm:py-8">
+      <div className="mx-auto max-w-5xl">
       {/* Back + header */}
-      <div className="flex items-center gap-3 mb-6">
+      <div className="mb-5 flex flex-wrap items-center gap-3">
         <Button
           variant="ghost"
           size="icon"
@@ -556,8 +588,8 @@ export default function AdminCourseOutlinePage() {
             onSave={(title) => title.trim() && updateCourse.mutate({ title: title.trim() })}
             className="text-xl font-semibold"
           />
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {modules.length} module{modules.length !== 1 ? "s" : ""} · {totalLessons} lesson{totalLessons !== 1 ? "s" : ""}
+          <p className="mt-1 text-xs text-muted-foreground">
+            Course outline <span className="mx-1 text-border">/</span> {modules.length} top-level module{modules.length !== 1 ? "s" : ""} <span className="mx-1 text-border">/</span> {totalLessons} lesson{totalLessons !== 1 ? "s" : ""}
           </p>
         </div>
         <Button
@@ -572,6 +604,13 @@ export default function AdminCourseOutlinePage() {
             <><Eye className="h-3.5 w-3.5 mr-1.5" /> Publish</>
           )}
         </Button>
+      </div>
+
+      <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="rounded-xl border border-border bg-card px-3 py-3"><div className="text-[10px] font-bold uppercase tracking-[.14em] text-muted-foreground">Structure</div><div className="mt-1 text-lg font-semibold">{modules.length} <span className="text-xs font-normal text-muted-foreground">modules</span></div></div>
+        <div className="rounded-xl border border-border bg-card px-3 py-3"><div className="text-[10px] font-bold uppercase tracking-[.14em] text-muted-foreground">Lessons</div><div className="mt-1 text-lg font-semibold">{totalLessons}</div></div>
+        <div className="rounded-xl border border-border bg-card px-3 py-3"><div className="text-[10px] font-bold uppercase tracking-[.14em] text-muted-foreground">Nested</div><div className="mt-1 text-lg font-semibold">{modules.filter((m) => m.parentModuleId).length}</div></div>
+        <div className="rounded-xl border border-border bg-card px-3 py-3"><div className="text-[10px] font-bold uppercase tracking-[.14em] text-muted-foreground">Status</div><div className="mt-1 text-sm font-semibold capitalize">{course.status}</div></div>
       </div>
 
       {/* Module list */}
@@ -660,6 +699,7 @@ export default function AdminCourseOutlinePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }
