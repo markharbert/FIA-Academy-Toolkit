@@ -2382,7 +2382,9 @@ export const trainingReplayResources = pgTable("training_replay_resources", {
   subtitle: text("subtitle"),
   kind: varchar("kind", { length: 20 }).notNull().default("link"),
   sortOrder: integer("sort_order").notNull().default(0),
-});
+}, (t) => ({
+  replaySortIdx: index("idx_training_replay_resources_replay_order").on(t.replayId, t.sortOrder),
+}));
 export type TrainingReplayResource = typeof trainingReplayResources.$inferSelect;
 export type InsertTrainingReplayResource = typeof trainingReplayResources.$inferInsert;
 export const insertTrainingReplayResourceSchema = createInsertSchema(trainingReplayResources).omit({ id: true });

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import Player from "@vimeo/player";
@@ -37,8 +37,7 @@ type Replay = {
   videoUrl?: string | null;
   content?: string | null;
   resources?: Resource[];
-  transcriptText?: string | null;
-  transcriptCues?: Cue[];
+  hasTranscript?: boolean;
   transcriptChapters?: Chapter[];
   comments?: ReplayComment[];
   completed?: boolean;
@@ -150,10 +149,11 @@ export default function TrainingReplayPage() {
   const { data: replay, isLoading, isError } = useQuery<Replay>({
     queryKey: ["/api/training/replays", slug],
     queryFn: () => api(`/api/training/replays/${slug}`),
-    staleTime: 0,
-    refetchOnMount: "always",
-    refetchOnWindowFocus: true,
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
+    refetchOnWindowFocus: false,
   });
+  const transcriptQueryKey = ["/api/training/replays", slug, "transcript"] as const;
   const [commentBody, setCommentBody] = useState("");
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyBody, setReplyBody] = useState("");
@@ -250,28 +250,66 @@ export default function TrainingReplayPage() {
   const transcriptScrollContainerRef = useRef<HTMLDivElement>(null);
   const activeTranscriptWordRef = useRef<HTMLSpanElement>(null);
   const lastScrolledWordRef = useRef<number | null>(null);
+  const transcriptTrackingActiveRef = useRef(false);
+  const { data: transcript, isLoading: isTranscriptLoading } = useQuery<{
+    transcriptText: string | null;
+    transcriptCues: Cue[];
+  }>({
+    queryKey: transcriptQueryKey,
+    queryFn: () => api(`/api/training/replays/${slug}/transcript`),
+    enabled: Boolean(slug && replay?.hasTranscript && transcriptOpen),
+    staleTime: 5 * 60_000,
+    gcTime: 15 * 60_000,
+    refetchOnWindowFocus: false,
+  });
 
   const initialTime = Math.max(0, Number(new URLSearchParams(window.location.search).get("t")) || 0);
   const embedUrl = getEmbedUrl(replay?.videoUrl, initialTime);
   const isVimeoReplay = Boolean(replay?.videoUrl?.includes("vimeo.com"));
   const isDirectVideo = Boolean(replay?.videoUrl && !embedUrl && /\.(?:mp4|webm|ogg)(?:$|[?#])/i.test(replay.videoUrl));
   const directVideoRef = useRef<HTMLVideoElement>(null);
-  const chapters = replay?.transcriptChapters ?? [];
-  const transcriptCues = replay?.transcriptCues ?? [];
-  const transcriptText = replay?.transcriptText ? formatTranscriptParagraphs(replay.transcriptText) : "";
-  const sanitizedReplayContent = sanitizeReplayContent(replay?.content);
-  const showReplayContent = hasReplayContent(sanitizedReplayContent);
-  const transcriptTokens = transcriptText.split(/(\s+)/);
-  let transcriptWordCount = 0;
-  const transcriptTokenWordIndexes = transcriptTokens.map((token) => {
-    if (!token || /^\s+$/.test(token)) return -1;
-    return transcriptWordCount++;
-  });
-  const activeCueIndex = transcriptCues.findIndex((cue, index) => {
-    const nextCue = transcriptCues[index + 1];
-    return videoCurrentTime >= cue.startSeconds
-      && videoCurrentTime < (nextCue?.startSeconds ?? cue.startSeconds + 8);
-  });
+  const chapters = useMemo(() => replay?.transcriptChapters ?? [], [replay?.transcriptChapters]);
+  const transcriptCues = useMemo(() => transcript?.transcriptCues ?? [], [transcript?.transcriptCues]);
+  const hasTranscript = Boolean(replay?.hasTranscript);
+  const transcriptText = useMemo(
+    () => transcript?.transcriptText && transcriptOpen
+      ? formatTranscriptParagraphs(transcript.transcriptText)
+      : "",
+    [transcript?.transcriptText, transcriptOpen],
+  );
+  const sanitizedReplayContent = useMemo(() => sanitizeReplayContent(replay?.content), [replay?.content]);
+  const showReplayContent = useMemo(() => hasReplayContent(sanitizedReplayContent), [sanitizedReplayContent]);
+  const { transcriptTokens, transcriptTokenWordIndexes, cueWordOffsets } = useMemo(() => {
+    if (!transcriptOpen || transcriptTab !== "transcript") {
+      return { transcriptTokens: [] as string[], transcriptTokenWordIndexes: [] as number[], cueWordOffsets: [] as number[] };
+    }
+    const tokens = transcriptText.split(/(\s+)/);
+    let wordCount = 0;
+    const wordIndexes = tokens.map((token) => {
+      if (!token || /^\s+$/.test(token)) return -1;
+      return wordCount++;
+    });
+    let cueWordCount = 0;
+    const offsets = transcriptCues.map((cue) => {
+      const offset = cueWordCount;
+      cueWordCount += cue.text.trim().split(/\s+/).filter(Boolean).length;
+      return offset;
+    });
+    return { transcriptTokens: tokens, transcriptTokenWordIndexes: wordIndexes, cueWordOffsets: offsets };
+  }, [transcriptCues, transcriptOpen, transcriptTab, transcriptText]);
+  const activeCueIndex = useMemo(() => {
+    if (!transcriptOpen || transcriptTab !== "transcript" || transcriptCues.length === 0) return -1;
+    let low = 0;
+    let high = transcriptCues.length - 1;
+    while (low <= high) {
+      const middle = Math.floor((low + high) / 2);
+      if (transcriptCues[middle].startSeconds <= videoCurrentTime) low = middle + 1;
+      else high = middle - 1;
+    }
+    if (high < 0) return -1;
+    const cueEnd = transcriptCues[high + 1]?.startSeconds ?? transcriptCues[high].startSeconds + 8;
+    return videoCurrentTime < cueEnd ? high : -1;
+  }, [transcriptCues, transcriptOpen, transcriptTab, videoCurrentTime]);
   const activeCue = activeCueIndex >= 0 ? transcriptCues[activeCueIndex] : null;
   const activeCueEnd = activeCueIndex >= 0
     ? (transcriptCues[activeCueIndex + 1]?.startSeconds ?? activeCue!.startSeconds + 8)
@@ -293,17 +331,18 @@ export default function TrainingReplayPage() {
       )
     : -1;
   const activeWordIndex = activeCue
-    ? transcriptCues
-        .slice(0, activeCueIndex)
-        .reduce((count, cue) => count + cue.text.trim().split(/\s+/).filter(Boolean).length, 0)
-      + activeWordInCue
+    ? (cueWordOffsets[activeCueIndex] ?? 0) + activeWordInCue
     : -1;
+
+  transcriptTrackingActiveRef.current = transcriptOpen && transcriptTab === "transcript";
 
   useEffect(() => {
     const iframe = vimeoPlayerRef.current;
     if (!iframe || !isVimeoReplay || !embedUrl) return;
     const player = new Player(iframe);
-    const update = ({ seconds }: { seconds: number }) => setVideoCurrentTime(seconds);
+    const update = ({ seconds }: { seconds: number }) => {
+      if (transcriptTrackingActiveRef.current) setVideoCurrentTime(seconds);
+    };
     vimeoPlayerApiRef.current = player;
     player.on("timeupdate", update);
     if (Number.isFinite(initialTime) && initialTime > 0) {
@@ -369,6 +408,18 @@ export default function TrainingReplayPage() {
     setConfirmDeleteId(null);
     lastScrolledWordRef.current = null;
   }, [openedFromTranscriptSearch, slug]);
+
+  useEffect(() => {
+    if (!slug || !replay?.hasTranscript) return;
+    const timer = window.setTimeout(() => {
+      void queryClient.prefetchQuery({
+        queryKey: transcriptQueryKey,
+        queryFn: () => api(`/api/training/replays/${slug}/transcript`),
+        staleTime: 5 * 60_000,
+      });
+    }, 1_500);
+    return () => window.clearTimeout(timer);
+  }, [queryClient, replay?.hasTranscript, slug]);
 
   const seekToChapter = (seconds: number) => {
     if (isVimeoReplay) {
@@ -638,6 +689,7 @@ export default function TrainingReplayPage() {
                 ref={isVimeoReplay ? vimeoPlayerRef : undefined}
                 src={embedUrl}
                 className="h-full w-full"
+                loading="eager"
                 allow="autoplay; fullscreen; picture-in-picture"
                 allowFullScreen
                 title={replay.title}
@@ -658,7 +710,7 @@ export default function TrainingReplayPage() {
         )}
 
         <div className="mx-auto max-w-[780px]">
-          {transcriptText && (
+          {hasTranscript && (
             <div className="mx-auto mb-8 mt-8 w-full overflow-hidden rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 via-white to-violet-50/70 shadow-[0_14px_36px_-24px_rgba(37,99,235,.5)]">
               <button
                 type="button"
@@ -712,7 +764,12 @@ export default function TrainingReplayPage() {
                   </div>
 
                   <div ref={transcriptScrollContainerRef} className="max-h-[360px] overflow-y-auto">
-                    {transcriptTab === "chapters" ? (
+                    {isTranscriptLoading ? (
+                      <div className="flex items-center justify-center gap-2 px-5 py-10 text-sm font-medium text-slate-500">
+                        <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                        Loading transcript…
+                      </div>
+                    ) : transcriptTab === "chapters" ? (
                       <div className="p-3">
                         {chapters.length > 0 ? (
                           <div className="space-y-1">

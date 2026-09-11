@@ -15278,13 +15278,15 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       const userId = req.session.userId as string;
       const replay = await storage.getPublishedTrainingReplayBySlug(req.params.slug);
       if (!replay) return res.status(404).json({ message: "Not found" });
-      const [resources, progress] = await Promise.all([
+      const [resources, progress, comments] = await Promise.all([
         storage.getTrainingReplayResources(replay.id),
         storage.getTrainingReplayProgress(userId, replay.id),
+        storage.getTrainingReplayComments(replay.id),
       ]);
-      const comments = await storage.getTrainingReplayComments(replay.id);
+      const { transcriptText, transcriptCues: _transcriptCues, ...replayDetail } = replay;
       res.json({
-        ...replay,
+        ...replayDetail,
+        hasTranscript: !!transcriptText,
         resources,
         comments: comments.map((comment) => ({
           ...comment,
@@ -15294,6 +15296,18 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         completedAt: progress?.completedAt ?? null,
       });
     } catch { res.status(500).json({ message: "Failed to load replay" }); }
+  });
+  app.get("/api/training/replays/:slug/transcript", requireAdmin, async (req, res) => {
+    try {
+      const replay = await storage.getPublishedTrainingReplayBySlug(req.params.slug);
+      if (!replay) return res.status(404).json({ message: "Not found" });
+      res.json({
+        transcriptText: replay.transcriptText ?? null,
+        transcriptCues: replay.transcriptCues ?? [],
+      });
+    } catch {
+      res.status(500).json({ message: "Failed to load transcript" });
+    }
   });
   app.post("/api/training/replays/:slug/comments", requireAdmin, async (req, res) => {
     const parsed = z.object({
