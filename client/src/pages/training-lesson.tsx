@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import Player from "@vimeo/player";
 import {
@@ -198,15 +198,16 @@ export default function TrainingLessonPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/training/courses", courseIdentifier] });
       queryClient.invalidateQueries({ queryKey: ["/api/training/courses"] });
       if (variables.completed && nextLesson) {
-        const nextModule = courseData?.modules.find((module) =>
-          module.lessons.some((candidate) => candidate.id === nextLesson.id),
-        );
+        const nextModule = moduleForLesson(nextLesson);
         if (courseData && nextModule) setLocation(trainingLessonPath(courseData.course, nextModule, nextLesson));
       }
     },
   });
 
-  const moduleTree = courseData ? buildCourseModuleTree(courseData.modules) : [];
+  const moduleTree = useMemo(
+    () => courseData ? buildCourseModuleTree(courseData.modules) : [],
+    [courseData?.modules],
+  );
 
   useEffect(() => {
     if (courseData && !courseModulesInitializedRef.current) {
@@ -225,8 +226,33 @@ export default function TrainingLessonPage() {
   const nextLesson = currentIndex < allLessons.length - 1 ? allLessons[currentIndex + 1] : null;
   const currentLesson = allLessons[currentIndex];
   const isCompleted = currentLesson?.completed ?? false;
+
+  // Keep the learner's position visible in a deep import. This is intentionally
+  // additive: opening a lesson never closes sections the learner opened.
+  useEffect(() => {
+    if (!currentLesson || moduleTree.length === 0) return;
+    const ancestors: string[] = [];
+    const findPath = (nodes: CourseModuleTree<CourseModule>[], trail: string[]): boolean => {
+      for (const node of nodes) {
+        const nextTrail = [...trail, node.id];
+        if (node.lessons.some((item) => item.id === currentLesson.id || item.slug === lessonIdentifier)) {
+          ancestors.push(...nextTrail);
+          return true;
+        }
+        if (findPath(node.children, nextTrail)) return true;
+      }
+      return false;
+    };
+    findPath(moduleTree, []);
+    if (ancestors.length) {
+      setExpandedCourseModules((current) => new Set([...current, ...ancestors]));
+    }
+  }, [currentLesson?.id, lessonIdentifier, moduleTree]);
+
   const moduleForLesson = (candidate: CourseLesson | null | undefined) =>
-    courseData?.modules.find((module) => module.lessons.some((lesson) => lesson.id === candidate?.id));
+    flattenCourseModuleTree(moduleTree).find((module) =>
+      module.lessons.some((lesson) => lesson.id === candidate?.id || lesson.slug === candidate?.slug),
+    );
 
   // Progress stats
   const completedCount = allLessons.filter((l) => l.completed).length;
@@ -316,7 +342,7 @@ export default function TrainingLessonPage() {
   };
 
   // Find current module for breadcrumb
-  const currentModule = courseData?.modules.find((m) =>
+  const currentModule = flattenCourseModuleTree(moduleTree).find((m) =>
     m.lessons.some((l) => l.id === lesson?.id || l.slug === lessonIdentifier)
   );
 
@@ -334,7 +360,7 @@ export default function TrainingLessonPage() {
     module: CourseModuleTree<CourseModule>,
     depth = 0,
     collapsed = courseNavCollapsed,
-    moduleNumber = 1,
+    moduleNumber = "1",
   ) => {
     const isModuleExpanded = expandedCourseModules.has(module.id);
     const getModuleLessons = (node: CourseModuleTree<CourseModule>): CourseLesson[] => [
@@ -354,8 +380,15 @@ export default function TrainingLessonPage() {
     });
     const openModule = () => setExpandedCourseModules((current) => new Set(current).add(module.id));
 
+    const hasChildren = module.children.length > 0;
+    const moduleTone = depth === 0
+      ? "border-amber-300/35 bg-white/[0.045]"
+      : depth === 1
+        ? "border-sky-300/30 bg-sky-300/[0.035]"
+        : "border-violet-300/25 bg-violet-300/[0.03]";
+
     return (
-      <div key={module.id} className="mb-1" style={depth ? { marginLeft: `${depth * 10}px` } : undefined}>
+      <div key={module.id} className={cn("mb-2", depth > 0 && "ml-3 border-l border-white/10 pl-2")}>
         {collapsed && (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -376,41 +409,48 @@ export default function TrainingLessonPage() {
                 {isModuleComplete ? (
                   <CheckCircle2 className="h-4 w-4 text-emerald-400" />
                 ) : (
-                  moduleNumber
+                  <span>{moduleNumber.split(".")[moduleNumber.split(".").length - 1]}</span>
                 )}
               </button>
             </TooltipTrigger>
             <TooltipContent side="right">{module.title}</TooltipContent>
           </Tooltip>
         )}
-        <div className={cn("px-2 py-1.5", collapsed && "hidden")}>
+        <div className={cn(
+          "rounded-lg border px-2.5 py-2 transition-colors",
+          moduleTone,
+          isCurrentModule && "border-amber-300/45 bg-amber-300/[0.08]",
+          collapsed && "hidden",
+        )}>
           <button
             type="button"
-            className="flex w-full items-center gap-1.5 text-left text-white/75 transition-colors hover:text-white"
+            className="flex w-full items-start gap-2 text-left text-white/75 transition-colors hover:text-white"
             onClick={toggleModule}
             aria-expanded={isModuleExpanded}
             aria-label={`${isModuleExpanded ? "Collapse" : "Expand"} ${module.title}`}
           >
-            {isModuleExpanded ? (
-              <ChevronDown className="h-3 w-3 shrink-0" />
-            ) : (
-              <ChevronRight className="h-3 w-3 shrink-0" />
-            )}
-            <p
-              className="min-w-0 flex-1 text-[10px] font-bold uppercase tracking-widest whitespace-normal break-words"
-              style={{ color: "#ffffff" }}
-            >
-              {module.title}
-            </p>
-            {!isModuleExpanded && isModuleComplete && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span title="Module Complete" className="flex shrink-0">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" aria-label="Module complete" />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="right">Module Complete</TooltipContent>
-              </Tooltip>
+            <span className={cn(
+              "mt-0.5 flex h-5 min-w-5 items-center justify-center rounded-md border text-[10px] font-bold tabular-nums",
+              depth === 0 ? "border-amber-300/40 bg-amber-300/10 text-amber-200" :
+                depth === 1 ? "border-sky-300/35 bg-sky-300/10 text-sky-200" :
+                  "border-violet-300/35 bg-violet-300/10 text-violet-200",
+            )}>{moduleNumber}</span>
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-1.5">
+                {isModuleExpanded
+                  ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-white/50" />
+                  : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-white/50" />}
+                <span className="min-w-0 text-[11px] font-semibold leading-snug text-white/95">
+                  {module.title}
+                </span>
+              </span>
+              <span className="mt-1 block pl-5 text-[9px] uppercase tracking-[0.16em] text-white/40">
+                {module.lessons.length} {module.lessons.length === 1 ? "lesson" : "lessons"}
+                {hasChildren && ` · ${module.children.length} ${module.children.length === 1 ? "section" : "sections"}`}
+              </span>
+            </span>
+            {isModuleComplete && (
+              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" aria-label="Module complete" />
             )}
           </button>
         </div>
@@ -422,12 +462,14 @@ export default function TrainingLessonPage() {
             key={lesson.id}
             onClick={() => courseData && setLocation(trainingLessonPath(courseData.course, module, lesson))}
             className={cn(
-              "flex items-start gap-2 w-full px-2 py-1.5 rounded-md text-left transition-colors",
+              "group relative mt-1 flex w-full items-start gap-2 rounded-md border border-transparent px-3 py-2 text-left transition-colors",
               collapsed && "justify-center px-1",
-              isActive ? "bg-amber-500/20 text-amber-100" : "bg-white/5 hover:bg-white/10",
+              isActive
+                ? "border-amber-300/40 bg-amber-400/15 text-amber-50 shadow-[inset_3px_0_0_#fbbf24]"
+                : "text-white/72 hover:border-white/10 hover:bg-white/[0.08] hover:text-white",
             )}
-            style={!isActive ? { color: "#ffffff" } : undefined}
             title={collapsed ? lesson.title : undefined}
+            aria-current={isActive ? "page" : undefined}
           >
             {lesson.completed ? (
               <CheckCircle2 className="mt-0.5 h-3 w-3 text-emerald-400 shrink-0" />
@@ -439,7 +481,12 @@ export default function TrainingLessonPage() {
                   : "border-amber-300/90 bg-amber-300/20",
               )} />
             )}
-            {!collapsed && <span className="whitespace-normal break-words text-[12px] leading-snug">{lesson.title}</span>}
+            {!collapsed && (
+              <span className={cn(
+                "min-w-0 whitespace-normal break-words text-[12px] leading-snug",
+                isActive ? "font-semibold" : "font-medium",
+              )}>{lesson.title}</span>
+            )}
           </button>
         );
         return collapsed ? (
@@ -452,7 +499,7 @@ export default function TrainingLessonPage() {
         ) : lessonButton;
         })}
         {isModuleExpanded && module.children.map((child, index) => (
-          renderModuleNavigation(child, depth + 1, collapsed, index + 1)
+          renderModuleNavigation(child, depth + 1, collapsed, `${moduleNumber}.${index + 1}`)
         ))}
       </div>
     );
@@ -481,12 +528,15 @@ export default function TrainingLessonPage() {
             className="absolute inset-0 bg-slate-950/50"
             onClick={() => setMobileNavOpen(false)}
           />
-          <aside
-            className="relative flex h-full w-[min(18rem,85vw)] flex-col overflow-y-auto shadow-2xl"
+           <aside
+             className="relative flex h-full w-[min(22rem,88vw)] flex-col overflow-y-auto shadow-2xl"
             style={{ background: SIDEBAR_BG }}
           >
-            <div className="flex items-center justify-between border-b px-4 py-4" style={{ borderColor: SIDEBAR_BDR }}>
-              <span className="text-sm font-semibold text-amber-100">Course navigation</span>
+             <div className="flex items-center justify-between border-b px-4 py-4" style={{ borderColor: SIDEBAR_BDR }}>
+               <div>
+                 <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300/75">Your roadmap</p>
+                 <span className="mt-1 block text-sm font-semibold text-amber-50">Course navigation</span>
+               </div>
               <button
                 type="button"
                 aria-label="Close course navigation"
@@ -505,7 +555,7 @@ export default function TrainingLessonPage() {
       <aside
         className={cn(
           "hidden shrink-0 flex-col overflow-y-auto transition-[width] duration-200 lg:flex",
-          courseNavCollapsed ? "w-14" : "w-[320px]",
+           courseNavCollapsed ? "w-14" : "w-[360px]",
         )}
         style={{ background: SIDEBAR_BG, borderRight: `1px solid ${SIDEBAR_BDR}` }}
       >
@@ -570,7 +620,13 @@ export default function TrainingLessonPage() {
 
         {/* Module / lesson tree */}
         <TooltipProvider delayDuration={200}>
-          <nav className="flex-1 py-2 px-2 space-y-0.5 overflow-y-auto">
+           <nav className="flex-1 overflow-y-auto px-3 py-3">
+             {!courseNavCollapsed && (
+               <div className="mb-3 flex items-center justify-between px-1 text-[9px] font-bold uppercase tracking-[0.2em] text-white/35">
+                 <span>Your roadmap</span>
+                 <span>{completedCount}/{totalCount}</span>
+               </div>
+             )}
             {moduleTree.map((module) => renderModuleNavigation(module))}
           </nav>
         </TooltipProvider>
