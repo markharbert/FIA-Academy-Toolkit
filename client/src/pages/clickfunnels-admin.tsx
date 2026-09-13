@@ -132,7 +132,22 @@ interface RecurringRevenueSnapshot {
   history: Array<{ month: string; label: string; mrr: number; cashCollected: number }>;
   performance: { periodLabel: string; effectiveChurnRate: number; grossMrrChurnRate: number; netMrrRetention: number; newMrr: number; churnedMrr: number };
   offers: Array<{ name: string; activeSubscriptions: number; mrr: number; newMrr: number; churnedMrr: number; effectiveChurnRate: number | null; cancellationRate: number | null; confidence: string }>;
+  details: {
+    trialing: RecurringRevenueContact[];
+    atRisk: RecurringRevenueContact[];
+  };
   methodology: string;
+}
+
+interface RecurringRevenueContact {
+  id: string;
+  name: string;
+  email: string | null;
+  offers: string[];
+  mrr: number;
+  billingStatus: string;
+  relevantDate: string | null;
+  contactUrl: string | null;
 }
 
 interface CfReconciliationRun {
@@ -806,8 +821,9 @@ function MemberHealthTab() {
 }
 
 function RecurringRevenueTab() {
+  const [detailPanel, setDetailPanel] = useState<"trialing" | "atRisk" | null>(null);
   const query = useQuery<RecurringRevenueSnapshot>({
-    queryKey: ["/api/admin/cf/recurring-revenue"],
+    queryKey: ["/api/admin/cf/recurring-revenue", "contact-details"],
     staleTime: 15 * 60 * 1000,
     refetchInterval: 15 * 60 * 1000,
     refetchIntervalInBackground: true,
@@ -821,13 +837,19 @@ function RecurringRevenueTab() {
   const snapshot = query.data;
   const money = (value: number) => new Intl.NumberFormat(undefined, { style: "currency", currency: snapshot?.currency || "USD", maximumFractionDigits: 0 }).format(value);
   const pct = (value: number | null) => value == null ? "—" : `${value.toFixed(1)}%`;
-  const metric = (label: string, value: string, detail: string, tone: string, icon: ReactNode) => (
-    <div className="group rounded-xl border border-slate-200/80 bg-card p-4 shadow-sm transition-transform hover:-translate-y-0.5 dark:border-slate-800">
+  const metric = (label: string, value: string, detail: string, tone: string, icon: ReactNode, onClick?: () => void) => {
+    const content = <>
       <div className="flex items-center justify-between"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p><span className={`rounded-md p-1.5 ${tone}`}>{icon}</span></div>
       {query.isLoading ? <div className="mt-3 h-8 w-28 animate-pulse rounded bg-muted" /> : <p className="mt-2 text-2xl font-bold tracking-tight">{value}</p>}
-      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
-    </div>
-  );
+      <div className="mt-1 flex items-center justify-between gap-2"><p className="text-xs text-muted-foreground">{detail}</p>{onClick && <span className="text-[10px] font-semibold uppercase tracking-wide text-primary">View people</span>}</div>
+    </>;
+    const className = `group w-full rounded-xl border border-slate-200/80 bg-card p-4 text-left shadow-sm transition-all dark:border-slate-800 ${onClick ? "cursor-pointer hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" : ""}`;
+    return onClick
+      ? <button type="button" className={className} onClick={onClick}>{content}</button>
+      : <div className={className}>{content}</div>;
+  };
+  const panelContacts = detailPanel && snapshot ? snapshot.details[detailPanel] : [];
+  const panelIsTrialing = detailPanel === "trialing";
   return <div className="space-y-6">
     <div className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
       <div><div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-primary"><span className="h-1.5 w-1.5 rounded-full bg-primary" />Revenue operations</div><h2 className="text-2xl font-bold tracking-tight">Recurring Revenue</h2><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Subscription health, cash collection, and offer-level retention in one operating view.</p></div>
@@ -837,8 +859,8 @@ function RecurringRevenueTab() {
     {!snapshot ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[1,2,3,4].map((item) => <div key={item} className="h-32 animate-pulse rounded-xl bg-muted" />)}</div> : <>
       <section><div className="mb-3 flex items-center justify-between"><h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Current run-rate</h3><span className="text-xs text-muted-foreground">As of {formatDateTime(snapshot.syncedAt)}</span></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {metric("MRR", money(snapshot.current.mrr), "Paying · excludes trials", "bg-primary/10 text-primary", <DollarSign className="h-4 w-4" />)}
-        {metric("Trialing", String(snapshot.current.trialingCount), `${money(snapshot.current.trialingMrr)} potential`, "bg-amber-500/10 text-amber-700 dark:text-amber-300", <Clock className="h-4 w-4" />)}
-        {metric("At risk", String(snapshot.current.atRiskCount), `${money(snapshot.current.atRiskMrr)} past due`, "bg-rose-500/10 text-rose-700 dark:text-rose-300", <ShieldAlert className="h-4 w-4" />)}
+        {metric("Trialing", String(snapshot.current.trialingCount), `${money(snapshot.current.trialingMrr)} potential`, "bg-amber-500/10 text-amber-700 dark:text-amber-300", <Clock className="h-4 w-4" />, () => setDetailPanel("trialing"))}
+        {metric("At risk", String(snapshot.current.atRiskCount), `${money(snapshot.current.atRiskMrr)} past due`, "bg-rose-500/10 text-rose-700 dark:text-rose-300", <ShieldAlert className="h-4 w-4" />, () => setDetailPanel("atRisk"))}
         {metric("Active subscriptions", String(snapshot.current.activeSubscriptions), `${snapshot.current.activeSubscribers} subscribers`, "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300", <CheckCircle2 className="h-4 w-4" />)}
       </div></section>
       <section><div className="mb-3 flex items-center gap-2"><CalendarDays className="h-4 w-4 text-primary" /><h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">This month · {snapshot.month.label}</h3></div><div className="grid gap-3 md:grid-cols-3">
@@ -849,6 +871,39 @@ function RecurringRevenueTab() {
       <Card><CardHeader className="pb-3"><CardTitle className="text-base">Offers · {snapshot.month.label}</CardTitle><CardDescription>Subscription mix and retention signals by offer.</CardDescription></CardHeader><CardContent><div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[900px] text-sm"><thead className="border-b bg-muted/50 text-left text-[10px] uppercase tracking-wide text-muted-foreground"><tr><th className="px-3 py-3">Offer</th><th className="px-3 py-3 text-right">Active subs</th><th className="px-3 py-3 text-right">MRR</th><th className="px-3 py-3 text-right">New MRR</th><th className="px-3 py-3 text-right">Churned MRR</th><th className="px-3 py-3 text-right">Effective churn</th><th className="px-3 py-3 text-right">Cancellation</th><th className="px-3 py-3">Confidence</th></tr></thead><tbody className="divide-y">{snapshot.offers.map((offer) => <tr key={offer.name} className="transition-colors hover:bg-muted/30"><td className="max-w-[240px] truncate px-3 py-3 font-medium">{offer.name}</td><td className="px-3 py-3 text-right">{offer.activeSubscriptions}</td><td className="px-3 py-3 text-right font-medium">{money(offer.mrr)}</td><td className="px-3 py-3 text-right">{money(offer.newMrr)}</td><td className="px-3 py-3 text-right">{money(offer.churnedMrr)}</td><td className="px-3 py-3 text-right">{pct(offer.effectiveChurnRate)}</td><td className="px-3 py-3 text-right">{pct(offer.cancellationRate)}</td><td className="px-3 py-3"><Badge variant="outline" className={offer.confidence.toLowerCase().includes("invoice") ? "border-amber-300 text-amber-700" : "border-emerald-300 text-emerald-700"}>{offer.confidence}</Badge></td></tr>)}</tbody></table></div></CardContent></Card>
       <div className="flex items-start gap-2 border-t pt-4 text-xs text-muted-foreground"><CircleHelp className="mt-0.5 h-3.5 w-3.5 shrink-0" /><p>{snapshot.methodology}</p></div>
     </>}
+    <Sheet open={detailPanel !== null} onOpenChange={(open) => !open && setDetailPanel(null)}>
+      <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
+        <SheetHeader className="border-b pb-5 text-left">
+          <div className={`mb-2 flex h-10 w-10 items-center justify-center rounded-xl ${panelIsTrialing ? "bg-amber-500/10 text-amber-700 dark:text-amber-300" : "bg-rose-500/10 text-rose-700 dark:text-rose-300"}`}>
+            {panelIsTrialing ? <Clock className="h-5 w-5" /> : <ShieldAlert className="h-5 w-5" />}
+          </div>
+          <SheetTitle>{panelIsTrialing ? "Contacts currently trialing" : "Past-due contacts"}</SheetTitle>
+          <SheetDescription>{panelContacts.length} {panelContacts.length === 1 ? "person" : "people"} · data refreshes automatically every 15 minutes</SheetDescription>
+        </SheetHeader>
+        <div className="space-y-3 py-5">
+          {panelContacts.map((contact) => (
+            <div key={contact.id} className="rounded-xl border bg-card p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-foreground">{contact.name}</p>
+                  {contact.email && <p className="mt-0.5 truncate text-sm text-muted-foreground">{contact.email}</p>}
+                </div>
+                <Badge variant="outline" className={panelIsTrialing ? "shrink-0 border-amber-300 text-amber-700 dark:text-amber-300" : "shrink-0 border-rose-300 text-rose-700 dark:text-rose-300"}>
+                  {panelIsTrialing ? "Trialing" : contact.billingStatus}
+                </Badge>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-3 rounded-lg bg-muted/40 p-3 text-sm">
+                <div><p className="text-xs text-muted-foreground">Monthly value</p><p className="mt-1 font-semibold">{money(contact.mrr)}</p></div>
+                <div><p className="text-xs text-muted-foreground">{panelIsTrialing ? "Trial ends" : "Payment due"}</p><p className="mt-1 font-semibold">{contact.relevantDate ? formatDateTime(contact.relevantDate) : "Not available"}</p></div>
+              </div>
+              <p className="mt-3 text-xs text-muted-foreground">{contact.offers.join(" · ")}</p>
+              {contact.contactUrl && <Button asChild variant="outline" className="mt-4 w-full"><a href={contact.contactUrl} target="_blank" rel="noreferrer">Open contact in ClickFunnels<ExternalLink className="ml-2 h-3.5 w-3.5" /></a></Button>}
+            </div>
+          ))}
+          {!panelContacts.length && <div className="rounded-xl border border-dashed py-12 text-center text-sm text-muted-foreground">No matching contacts in the current snapshot.</div>}
+        </div>
+      </SheetContent>
+    </Sheet>
   </div>;
 }
 

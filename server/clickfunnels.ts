@@ -57,7 +57,22 @@ export interface CfRecurringRevenueSnapshot {
     cancellationRate: number | null;
     confidence: string;
   }>;
+  details: {
+    trialing: CfRecurringRevenueContact[];
+    atRisk: CfRecurringRevenueContact[];
+  };
   methodology: string;
+}
+
+export interface CfRecurringRevenueContact {
+  id: string;
+  name: string;
+  email: string | null;
+  offers: string[];
+  mrr: number;
+  billingStatus: string;
+  relevantDate: string | null;
+  contactUrl: string | null;
 }
 
 const CF_REPORT_PAGE_LIMIT = 100;
@@ -281,14 +296,55 @@ async function buildCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenueSnap
     };
   }).sort((a, b) => b.mrr - a.mrr || b.activeSubscriptions - a.activeSubscriptions);
 
+  const contactDetails = (
+    sourceOrders: any[],
+    relevantDateFor: (order: any) => Date | null,
+  ): CfRecurringRevenueContact[] => {
+    const contacts = new Map<string, CfRecurringRevenueContact>();
+    for (const order of sourceOrders) {
+      const contact = order.contact || {};
+      const contactId = String(order.contact_id || contact.id || order.id);
+      const existing = contacts.get(contactId);
+      const itemNames = getValues(order).map((item) => item.name);
+      const firstName = String(contact.first_name || "").trim();
+      const lastName = String(contact.last_name || "").trim();
+      const displayName = [firstName, lastName].filter(Boolean).join(" ")
+        || String(contact.email_address || "").trim()
+        || "Unnamed contact";
+      const publicId = String(contact.public_id || "").trim();
+      const relevantDate = relevantDateFor(order);
+      if (existing) {
+        existing.mrr = roundMoney(existing.mrr + orderMrr(order));
+        existing.offers = [...new Set([...existing.offers, ...itemNames])];
+        if (!existing.relevantDate && relevantDate) existing.relevantDate = relevantDate.toISOString();
+        continue;
+      }
+      contacts.set(contactId, {
+        id: contactId,
+        name: displayName,
+        email: contact.email_address ? String(contact.email_address) : null,
+        offers: [...new Set(itemNames)],
+        mrr: roundMoney(orderMrr(order)),
+        billingStatus: String(order.billing_status || "unknown").replace(/[-_]/g, " "),
+        relevantDate: relevantDate?.toISOString() || null,
+        contactUrl: publicId ? `https://${CF_WORKSPACE_DOMAIN}/contacts/${encodeURIComponent(publicId)}` : null,
+      });
+    }
+    return [...contacts.values()].sort((a, b) => a.name.localeCompare(b.name));
+  };
+  const trialingDetails = contactDetails(trialingOrders, (order) => asDate(order.trial_end_at));
+  const atRiskDetails = contactDetails(atRiskOrders, (order) =>
+    firstDate(order.paid_until, order.renewal_at, order.next_charge_at)
+  );
+
   return {
     syncedAt: now,
     currency,
     current: {
       mrr: roundMoney(payingOrders.reduce((sum, order) => sum + orderMrr(order), 0)),
-      trialingCount: trialingOrders.length,
+      trialingCount: trialingDetails.length,
       trialingMrr: roundMoney(trialingOrders.reduce((sum, order) => sum + orderMrr(order), 0)),
-      atRiskCount: atRiskOrders.length,
+      atRiskCount: atRiskDetails.length,
       atRiskMrr: roundMoney(atRiskOrders.reduce((sum, order) => sum + orderMrr(order), 0)),
       activeSubscriptions: activeOrders.length,
       activeSubscribers: new Set(activeOrders.map((order) => String(order.contact_id || order.contact?.id || "")).filter(Boolean)).size,
@@ -309,6 +365,10 @@ async function buildCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenueSnap
       churnedMrr: roundMoney(churnedMrr),
     },
     offers,
+    details: {
+      trialing: trialingDetails,
+      atRisk: atRiskDetails,
+    },
     methodology: `MRR normalizes current recurring order prices to a monthly run-rate, so historical MRR is an estimate when a subscription changed price. Cash uses invoices currently marked paid; refunded and partially refunded invoices are excluded. Churn compares subscriptions active at the start of the month. Reporting is limited to ${currency}; no one-time orders are included.`,
   };
 }
