@@ -38,6 +38,7 @@ export interface CfRecurringRevenueSnapshot {
     label: string;
     collected: number;
     expected: number;
+    expectedAtRisk: number;
     projected: number;
   };
   history: Array<{ month: string; label: string; mrr: number; cashCollected: number }>;
@@ -116,13 +117,42 @@ function firstDate(...values: unknown[]): Date | null {
     .sort((a, b) => a.getTime() - b.getTime())[0] || null;
 }
 
-function recurringItemValues(order: any): Array<{ name: string; amount: number; mrr: number; currency: string }> {
+type RecurringItemValue = {
+  name: string;
+  amount: number;
+  mrr: number;
+  currency: string;
+  confidence: "Direct" | "Invoice-derived";
+};
+
+function inferBillingInterval(orderInvoices: any[]): "months" | "years" | "weeks" | "days" | null {
+  const dates = orderInvoices
+    .map((invoice) => firstDate(invoice.due_at, invoice.created_at))
+    .filter((date): date is Date => date !== null)
+    .sort((a, b) => a.getTime() - b.getTime());
+  if (dates.length < 2) return null;
+  const gaps = dates.slice(1).map((date, index) =>
+    (date.getTime() - dates[index].getTime()) / (24 * 60 * 60 * 1000)
+  ).filter((days) => days > 0);
+  if (!gaps.length) return null;
+  const sorted = [...gaps].sort((a, b) => a - b);
+  const medianDays = sorted[Math.floor(sorted.length / 2)];
+  if (medianDays >= 25 && medianDays <= 35) return "months";
+  if (medianDays >= 350 && medianDays <= 380) return "years";
+  if (medianDays >= 6 && medianDays <= 8) return "weeks";
+  if (medianDays >= 0.5 && medianDays <= 1.5) return "days";
+  return null;
+}
+
+function recurringItemValues(order: any, orderInvoices: any[] = []): RecurringItemValue[] {
+  const inferredInterval = inferBillingInterval(orderInvoices);
   return (Array.isArray(order.line_items) ? order.line_items : []).flatMap((item: any) => {
     const price = item.products_price || {};
     const amount = Number(price.amount);
     const intervalCount = Math.max(1, Number(price.interval_count) || 1);
     const quantity = Math.max(1, Number(item.quantity) || 1);
-    const interval = String(price.interval || "").toLowerCase();
+    const directInterval = String(price.interval || "").toLowerCase();
+    const interval = directInterval || inferredInterval || "";
     if (!Number.isFinite(amount) || amount < 0 || !interval) return [];
     const fullCharge = amount * quantity;
     let mrr = fullCharge;
@@ -136,6 +166,7 @@ function recurringItemValues(order: any): Array<{ name: string; amount: number; 
       amount: fullCharge,
       mrr,
       currency: String(price.currency || order.currency || "usd").toUpperCase(),
+      confidence: directInterval ? "Direct" : "Invoice-derived",
     }];
   });
 }
@@ -189,10 +220,14 @@ async function buildCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenueSnap
     "ClickFunnels order sync",
   );
   const subscriptionOrders = allOrders.filter((order) =>
-    order.order_type === "subscription-order" && recurringItemValues(order).length > 0
+    order.order_type === "subscription-order" &&
+    (Array.isArray(order.line_items) ? order.line_items : []).some((item: any) =>
+      Number.isFinite(Number(item.products_price?.amount)) && Number(item.products_price?.amount) >= 0
+    )
   );
 
   const invoices: any[] = [];
+  const invoicesByOrder = new Map<string, any[]>();
   let invoiceCursor = 0;
   const workerCount = Math.min(8, subscriptionOrders.length);
   await Promise.all(Array.from({ length: workerCount }, async () => {
@@ -203,19 +238,20 @@ async function buildCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenueSnap
         headers,
         `ClickFunnels invoices for order ${order.id}`,
       );
+      invoicesByOrder.set(String(order.id), orderInvoices);
       invoices.push(...orderInvoices);
     }
   }));
 
   const currencyCounts = new Map<string, number>();
   for (const order of subscriptionOrders) {
-    for (const item of recurringItemValues(order)) {
+    for (const item of recurringItemValues(order, invoicesByOrder.get(String(order.id)))) {
       currencyCounts.set(item.currency, (currencyCounts.get(item.currency) || 0) + 1);
     }
   }
   const currency = [...currencyCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "USD";
   const orders = subscriptionOrders.filter((order) =>
-    recurringItemValues(order).some((item) => item.currency === currency)
+    recurringItemValues(order, invoicesByOrder.get(String(order.id))).some((item) => item.currency === currency)
   );
 
   const now = new Date();
@@ -223,7 +259,8 @@ async function buildCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenueSnap
   const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
   const monthEnd = new Date(nextMonthStart.getTime() - 1);
   const periodLabel = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(now);
-  const getValues = (order: any) => recurringItemValues(order).filter((item) => item.currency === currency);
+  const getValues = (order: any) =>
+    recurringItemValues(order, invoicesByOrder.get(String(order.id))).filter((item) => item.currency === currency);
   const orderMrr = (order: any) => getValues(order).reduce((sum, item) => sum + item.mrr, 0);
   const orderCharge = (order: any) => getValues(order).reduce((sum, item) => sum + item.amount, 0);
   const activeOrders = orders.filter((order) => {
@@ -248,6 +285,12 @@ async function buildCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenueSnap
       : sum;
   }, 0);
   const expected = payingOrders.reduce((sum, order) => {
+    const chargeAt = firstDate(order.next_charge_at, order.renewal_at);
+    return chargeAt && chargeAt > now && chargeAt < nextMonthStart
+      ? sum + orderCharge(order)
+      : sum;
+  }, 0);
+  const expectedAtRisk = atRiskOrders.reduce((sum, order) => {
     const chargeAt = firstDate(order.next_charge_at, order.renewal_at);
     return chargeAt && chargeAt > now && chargeAt < nextMonthStart
       ? sum + orderCharge(order)
@@ -304,7 +347,9 @@ async function buildCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenueSnap
       churnedMrr: roundMoney(ended.reduce((sum, order) => sum + mrrForOffer(order), 0)),
       effectiveChurnRate: starting.length ? roundMoney(ended.length / starting.length * 100) : null,
       cancellationRate: starting.length ? roundMoney(cancellations.length / starting.length * 100) : null,
-      confidence: "Order + invoice",
+      confidence: orders.some((order) =>
+        getValues(order).some((item) => item.name === name && item.confidence === "Invoice-derived")
+      ) ? "Invoice-derived" : "Direct",
     };
   }).sort((a, b) => b.mrr - a.mrr || b.activeSubscriptions - a.activeSubscriptions);
 
@@ -325,12 +370,18 @@ async function buildCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenueSnap
     return !!startedAt && startedAt <= instant && (!endedAt || endedAt > instant);
   };
   const buildPeriod = (label: string, start: Date, end: Date): CfRecurringRevenuePeriod => {
-    const starting = orders.filter((order) => isOrderActiveAt(order, start));
-    const activeAtEnd = orders.filter((order) => isServiceActiveAt(order, end));
-    const ended = orders.filter((order) => {
-      const endedAt = firstDate(order.churned_at, order.canceled_at);
+    const allTime = label === "All time";
+    const starting = orders.filter((order) => {
+      if (!allTime) return isOrderActiveAt(order, start);
       const revenueStart = asDate(order.trial_end_at) || firstDate(order.activated_at, order.created_at);
-      return endedAt && revenueStart && revenueStart <= endedAt && endedAt >= start && endedAt <= end;
+      return !!revenueStart && revenueStart <= end;
+    });
+    const activeAtEnd = end >= now
+      ? activeOrders
+      : orders.filter((order) => isServiceActiveAt(order, end));
+    const ended = starting.filter((order) => {
+      const endedAt = firstDate(order.churned_at, order.canceled_at);
+      return endedAt && endedAt >= start && endedAt <= end;
     });
     const added = orders.filter((order) => {
       const revenueStart = asDate(order.trial_end_at) || firstDate(order.activated_at, order.created_at);
@@ -348,32 +399,32 @@ async function buildCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenueSnap
       const offerEnded = ended.filter(containsOffer);
       const offerAdded = added.filter(containsOffer);
       const cancellations = offerEnded.filter((order) => !!order.canceled_at);
-      const offerBaseCount = offerStarting.length + offerAdded.length;
       return {
         name,
         activeSubscriptions: offerActive.length,
         mrr: roundMoney(offerActive.filter((order) => {
+          if (end >= now) return !order.in_trial;
           const trialEndsAt = asDate(order.trial_end_at);
           return !trialEndsAt || trialEndsAt <= end;
         }).reduce((sum, order) => sum + mrrForOffer(order), 0)),
         newMrr: roundMoney(offerAdded.reduce((sum, order) => sum + mrrForOffer(order), 0)),
         churnedMrr: roundMoney(offerEnded.reduce((sum, order) => sum + mrrForOffer(order), 0)),
-        effectiveChurnRate: offerBaseCount ? roundMoney(offerEnded.length / offerBaseCount * 100) : null,
-        cancellationRate: offerBaseCount ? roundMoney(cancellations.length / offerBaseCount * 100) : null,
-        confidence: "Order + invoice",
+        effectiveChurnRate: offerStarting.length ? roundMoney(offerEnded.length / offerStarting.length * 100) : null,
+        cancellationRate: offerStarting.length ? roundMoney(cancellations.length / offerStarting.length * 100) : null,
+        confidence: orders.some((order) =>
+          getValues(order).some((item) => item.name === name && item.confidence === "Invoice-derived")
+        ) ? "Invoice-derived" : "Direct",
       };
     }).sort((a, b) => b.mrr - a.mrr || b.activeSubscriptions - a.activeSubscriptions);
     const dateLabel = formatRange(start, end);
-    const periodBaseCount = starting.length + added.length;
-    const periodBaseMrr = periodStartingMrr + periodNewMrr;
     return {
       label,
       dateLabel,
       performance: {
         periodLabel: dateLabel,
-        effectiveChurnRate: periodBaseCount ? roundMoney(ended.length / periodBaseCount * 100) : 0,
-        grossMrrChurnRate: periodBaseMrr ? roundMoney(periodChurnedMrr / periodBaseMrr * 100) : 0,
-        netMrrRetention: periodBaseMrr ? roundMoney(Math.max(0, periodBaseMrr - periodChurnedMrr) / periodBaseMrr * 100) : 100,
+        effectiveChurnRate: starting.length ? roundMoney(ended.length / starting.length * 100) : 0,
+        grossMrrChurnRate: periodStartingMrr ? roundMoney(periodChurnedMrr / periodStartingMrr * 100) : 0,
+        netMrrRetention: periodStartingMrr ? roundMoney(Math.max(0, periodStartingMrr - periodChurnedMrr) / periodStartingMrr * 100) : 100,
         newMrr: roundMoney(periodNewMrr),
         churnedMrr: roundMoney(periodChurnedMrr),
       },
@@ -447,31 +498,25 @@ async function buildCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenueSnap
       trialingMrr: roundMoney(trialingOrders.reduce((sum, order) => sum + orderMrr(order), 0)),
       atRiskCount: atRiskDetails.length,
       atRiskMrr: roundMoney(atRiskOrders.reduce((sum, order) => sum + orderMrr(order), 0)),
-      activeSubscriptions: activeOrders.length,
+      activeSubscriptions: activeOrders.reduce((sum, order) => sum + getValues(order).length, 0),
       activeSubscribers: new Set(activeOrders.map((order) => String(order.contact_id || order.contact?.id || "")).filter(Boolean)).size,
     },
     month: {
       label: periodLabel,
       collected: roundMoney(collected),
       expected: roundMoney(expected),
+      expectedAtRisk: roundMoney(expectedAtRisk),
       projected: roundMoney(collected + expected),
     },
     history,
-    performance: {
-      periodLabel,
-      effectiveChurnRate: activeAtMonthStart.length ? roundMoney(endedThisMonth.length / activeAtMonthStart.length * 100) : 0,
-      grossMrrChurnRate: startingMrr ? roundMoney(churnedMrr / startingMrr * 100) : 0,
-      netMrrRetention: startingMrr ? roundMoney(Math.max(0, startingMrr - churnedMrr) / startingMrr * 100) : 100,
-      newMrr: roundMoney(newMrr),
-      churnedMrr: roundMoney(churnedMrr),
-    },
-    offers,
+    performance: periods.thisMonth.performance,
+    offers: periods.thisMonth.offers,
     periods,
     details: {
       trialing: trialingDetails,
       atRisk: atRiskDetails,
     },
-    methodology: `MRR normalizes current recurring order prices to a monthly run-rate, so historical MRR is an estimate when a subscription changed price. Cash uses invoices currently marked paid; refunded and partially refunded invoices are excluded. Churn compares subscriptions active at the start of the month. Reporting is limited to ${currency}; no one-time orders are included.`,
+    methodology: `Revenue is calculated from subscription orders and invoices—not ClickFunnels funnel stats—so totals can differ from funnel attribution when subscriptions renew, cancel, upgrade, downgrade, or sell through multiple funnels. Historical MRR is estimated from the current order price when ClickFunnels does not preserve a past plan change. Reporting is limited to ${currency}; one-time orders are excluded.`,
   };
 }
 
@@ -495,7 +540,7 @@ function loadPersistentRecurringRevenueCache(): Promise<void> {
       const result = await db.execute(sql`
         SELECT snapshot, refreshed_at
         FROM cf_recurring_revenue_cache
-        WHERE cache_key = 'workspace-periods'
+        WHERE cache_key = 'workspace-periods-v2'
         LIMIT 1
       `);
       const row = (result as any).rows?.[0];
@@ -504,6 +549,7 @@ function loadPersistentRecurringRevenueCache(): Promise<void> {
         snapshot?.current &&
         Array.isArray(snapshot.history) &&
         snapshot.periods?.thisMonth &&
+        typeof snapshot.month?.expectedAtRisk === "number" &&
         Array.isArray(snapshot.details?.trialing) &&
         Array.isArray(snapshot.details?.atRisk)
       ) {
@@ -526,7 +572,7 @@ async function persistRecurringRevenueCache(snapshot: CfRecurringRevenueSnapshot
   try {
     await db.execute(sql`
       INSERT INTO cf_recurring_revenue_cache (cache_key, snapshot, refreshed_at)
-      VALUES ('workspace-periods', ${JSON.stringify(snapshot)}::jsonb, NOW())
+      VALUES ('workspace-periods-v2', ${JSON.stringify(snapshot)}::jsonb, NOW())
       ON CONFLICT (cache_key) DO UPDATE SET
         snapshot = EXCLUDED.snapshot,
         refreshed_at = EXCLUDED.refreshed_at

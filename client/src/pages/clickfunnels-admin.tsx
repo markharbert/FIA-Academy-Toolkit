@@ -128,7 +128,7 @@ interface RecurringRevenueSnapshot {
   syncedAt: string;
   currency: string;
   current: { mrr: number; trialingCount: number; trialingMrr: number; atRiskCount: number; atRiskMrr: number; activeSubscriptions: number; activeSubscribers: number };
-  month: { label: string; collected: number; expected: number; projected: number };
+  month: { label: string; collected: number; expected: number; expectedAtRisk: number; projected: number };
   history: Array<{ month: string; label: string; mrr: number; cashCollected: number }>;
   performance: { periodLabel: string; effectiveChurnRate: number; grossMrrChurnRate: number; netMrrRetention: number; newMrr: number; churnedMrr: number };
   offers: Array<{ name: string; activeSubscriptions: number; mrr: number; newMrr: number; churnedMrr: number; effectiveChurnRate: number | null; cancellationRate: number | null; confidence: string }>;
@@ -849,9 +849,10 @@ function RecurringRevenueTab() {
   const selectedPeriod = snapshot?.periods?.[revenuePeriod];
   const money = (value: number) => new Intl.NumberFormat(undefined, { style: "currency", currency: snapshot?.currency || "USD", maximumFractionDigits: 0 }).format(value);
   const pct = (value: number | null) => value == null ? "—" : `${value.toFixed(1)}%`;
+  const infoIcon = (text: string) => <CircleHelp aria-label={text} title={text} className="h-3 w-3 shrink-0 text-muted-foreground/80" />;
   const metric = (label: string, value: string, detail: string, tone: string, icon: ReactNode, onClick?: () => void) => {
     const content = <>
-      <div className="flex items-center justify-between"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p><span className={`rounded-md p-1.5 ${tone}`}>{icon}</span></div>
+      <div className="flex items-center justify-between"><p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}{infoIcon(`${label} calculation details`)}</p><span className={`rounded-md p-1.5 ${tone}`}>{icon}</span></div>
       {query.isLoading ? <div className="mt-3 h-8 w-28 animate-pulse rounded bg-muted" /> : <p className="mt-2 text-2xl font-bold tracking-tight">{value}</p>}
       <div className="mt-1 flex items-center justify-between gap-2"><p className="text-xs text-muted-foreground">{detail}</p>{onClick && <span className="text-[10px] font-semibold uppercase tracking-wide text-primary">View people</span>}</div>
     </>;
@@ -864,7 +865,7 @@ function RecurringRevenueTab() {
   const panelIsTrialing = detailPanel === "trialing";
   return <div className="space-y-6">
     <div className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
-      <div><div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-primary"><span className="h-1.5 w-1.5 rounded-full bg-primary" />Revenue operations</div><h2 className="text-2xl font-bold tracking-tight">Recurring Revenue</h2><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Subscription health, cash collection, and offer-level retention in one operating view.</p></div>
+      <div><div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-primary"><span className="h-1.5 w-1.5 rounded-full bg-primary" />Revenue operations</div><h2 className="text-2xl font-bold tracking-tight">Recurring Revenue</h2><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Offer-level MRR, subscriptions, and churn calculated from subscription orders and invoices.</p></div>
       <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">{query.isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <span className="h-2 w-2 rounded-full bg-emerald-500" />}Updates automatically every 15 minutes</div>
     </div>
     {query.isError && !snapshot && <div className="flex items-start gap-3 rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-900 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /><div><p className="font-semibold">Revenue sync is temporarily unavailable</p><p className="mt-1">The dashboard will retry automatically. No action is needed.</p></div></div>}
@@ -876,11 +877,48 @@ function RecurringRevenueTab() {
         {metric("Active subscriptions", String(snapshot.current.activeSubscriptions), `${snapshot.current.activeSubscribers} subscribers`, "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300", <CheckCircle2 className="h-4 w-4" />)}
       </div></section>
       <section><div className="mb-3 flex items-center gap-2"><CalendarDays className="h-4 w-4 text-primary" /><h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">This month · {snapshot.month.label}</h3></div><div className="grid gap-3 md:grid-cols-3">
-        {[[ "Collected so far", money(snapshot.month.collected), "Actual paid invoices" ], [ "Expected rest of month", money(snapshot.month.expected), "Includes recurring invoices" ], [ "Projected month total", money(snapshot.month.projected), "Collected + expected" ]].map(([label, value, detail]) => <div key={label} className="rounded-xl border bg-muted/20 p-4"><p className="text-xs font-medium text-muted-foreground">{label}</p><p className="mt-2 text-xl font-bold">{value}</p><p className="mt-1 text-xs text-muted-foreground">{detail}</p></div>)}
+        {[[ "Collected so far", money(snapshot.month.collected), "Actual paid invoices" ], [ "Expected rest of month", money(snapshot.month.expected), `Incl. ${money(snapshot.month.expectedAtRisk)} at-risk` ], [ "Projected month total", money(snapshot.month.projected), "Collected + expected" ]].map(([label, value, detail]) => <div key={label} className="rounded-xl border bg-muted/20 p-4"><p className="flex items-center gap-1 text-xs font-medium text-muted-foreground">{label}{infoIcon(`${label} calculation details`)}</p><p className="mt-2 text-xl font-bold">{value}</p><p className="mt-1 text-xs text-muted-foreground">{detail}</p></div>)}
       </div></section>
       <Card className="overflow-hidden"><CardHeader className="border-b pb-4"><CardTitle className="flex items-center gap-2 text-base"><TrendingUp className="h-4 w-4 text-primary" />MRR & cash collected</CardTitle><CardDescription>Last 12 months of estimated recurring run-rate and paid invoices.</CardDescription></CardHeader><CardContent className="h-80 pt-6"><ResponsiveContainer width="100%" height="100%"><ComposedChart data={snapshot.history} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" /><XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} /><YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11 }} tickFormatter={(value) => `${snapshot.currency} ${Number(value) / 1000}k`} /><Tooltip formatter={(value: number) => money(value)} contentStyle={{ borderRadius: 10, border: "1px solid hsl(var(--border))", background: "hsl(var(--card))" }} /><Legend wrapperStyle={{ fontSize: 12 }} /><Bar dataKey="cashCollected" name="Cash collected" fill="hsl(var(--primary) / .25)" radius={[4,4,0,0]} /><Line type="monotone" dataKey="mrr" name="MRR run-rate" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={{ r: 3, fill: "hsl(var(--primary))" }} /></ComposedChart></ResponsiveContainer></CardContent></Card>
-      {selectedPeriod && <section><div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Performance overview</h3><div className="flex items-center gap-3"><select aria-label="Revenue reporting period" value={revenuePeriod} onChange={(event) => setRevenuePeriod(event.target.value as RevenuePeriodKey)} className="h-9 rounded-lg border border-slate-300 bg-card px-3 pr-8 text-sm font-medium text-foreground shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700"><option value="thisMonth">This month</option><option value="lastMonth">Last month</option><option value="last3Months">Last 3 months</option><option value="last12Months">Last 12 months</option><option value="allTime">All time</option></select><span className="text-xs text-muted-foreground">{selectedPeriod.dateLabel}</span></div></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{[[ "Effective churn", pct(selectedPeriod.performance.effectiveChurnRate) ], [ "Gross MRR churn", pct(selectedPeriod.performance.grossMrrChurnRate) ], [ "Gross MRR retention", pct(selectedPeriod.performance.netMrrRetention) ], [ "New MRR", money(selectedPeriod.performance.newMrr) ], [ "Churned MRR", money(selectedPeriod.performance.churnedMrr) ]].map(([label, value]) => <div key={label} className="rounded-xl border bg-card p-4"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p><p className="mt-2 text-xl font-bold">{value}</p></div>)}</div></section>}
-      {selectedPeriod && <Card><CardHeader className="pb-3"><CardTitle className="text-base">Offers · {selectedPeriod.dateLabel}</CardTitle><CardDescription>Subscription mix and retention signals by offer.</CardDescription></CardHeader><CardContent><div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[900px] text-sm"><thead className="border-b bg-muted/50 text-left text-[10px] uppercase tracking-wide text-muted-foreground"><tr><th className="px-3 py-3">Offer</th><th className="px-3 py-3 text-right">Active subs</th><th className="px-3 py-3 text-right">MRR</th><th className="px-3 py-3 text-right">New MRR</th><th className="px-3 py-3 text-right">Churned MRR</th><th className="px-3 py-3 text-right">Effective churn</th><th className="px-3 py-3 text-right">Cancellation</th><th className="px-3 py-3">Confidence</th></tr></thead><tbody className="divide-y">{selectedPeriod.offers.map((offer) => <tr key={offer.name} className="transition-colors hover:bg-muted/30"><td className="max-w-[240px] truncate px-3 py-3 font-medium">{offer.name}</td><td className="px-3 py-3 text-right">{offer.activeSubscriptions}</td><td className="px-3 py-3 text-right font-medium">{money(offer.mrr)}</td><td className="px-3 py-3 text-right">{money(offer.newMrr)}</td><td className="px-3 py-3 text-right">{money(offer.churnedMrr)}</td><td className="px-3 py-3 text-right">{pct(offer.effectiveChurnRate)}</td><td className="px-3 py-3 text-right">{pct(offer.cancellationRate)}</td><td className="px-3 py-3"><Badge variant="outline" className={offer.confidence.toLowerCase().includes("invoice") ? "border-amber-300 text-amber-700" : "border-emerald-300 text-emerald-700"}>{offer.confidence}</Badge></td></tr>)}</tbody></table></div></CardContent></Card>}
+      {selectedPeriod && <section><div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Performance overview</h3><div className="flex items-center gap-3"><select aria-label="Revenue reporting period" value={revenuePeriod} onChange={(event) => setRevenuePeriod(event.target.value as RevenuePeriodKey)} className="h-9 rounded-lg border border-slate-300 bg-card px-3 pr-8 text-sm font-medium text-foreground shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700"><option value="thisMonth">This month</option><option value="lastMonth">Last month</option><option value="last3Months">Last 3 months</option><option value="last12Months">Last 12 months</option><option value="allTime">All time</option></select><span className="text-xs text-muted-foreground">{selectedPeriod.dateLabel}</span></div></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{[[ "Effective churn", pct(selectedPeriod.performance.effectiveChurnRate) ], [ "Gross MRR churn", pct(selectedPeriod.performance.grossMrrChurnRate) ], [ "Net MRR retention", pct(selectedPeriod.performance.netMrrRetention) ], [ "New MRR", money(selectedPeriod.performance.newMrr) ], [ "Churned MRR", money(selectedPeriod.performance.churnedMrr) ]].map(([label, value]) => <div key={label} className="rounded-xl border bg-card p-4"><p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}{infoIcon(`${label} uses the selected period`)}</p><p className="mt-2 text-xl font-bold">{value}</p></div>)}</div></section>}
+      {selectedPeriod && <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Offers · {selectedPeriod.dateLabel}</CardTitle>
+          <CardDescription>Subscription mix and retention signals by offer.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto rounded-lg border">
+            <table className="w-full min-w-[900px] text-sm">
+              <thead className="border-b bg-muted/50 text-left text-[10px] uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  {[
+                    ["Offer", "Recurring product attached to a subscription order"],
+                    ["Active subs", "Active recurring offer lines at the end of the selected period"],
+                    ["MRR", "Recurring prices normalized to a monthly amount"],
+                    ["New MRR", "MRR that began during the selected period"],
+                    ["Churned MRR", "Beginning-period MRR that ended during the selected period"],
+                    ["Effective churn", "Churned subscriptions divided by subscriptions active at period start"],
+                    ["Cancellation", "Canceled subscriptions divided by subscriptions active at period start"],
+                    ["Confidence", "Direct uses the order billing interval; Invoice-derived uses observed invoice cadence"],
+                  ].map(([label, help], index) => <th key={label} className={`px-3 py-3 ${index > 0 && index < 7 ? "text-right" : ""}`}><span className={`flex items-center gap-1 ${index > 0 && index < 7 ? "justify-end" : ""}`}>{label}{infoIcon(help)}</span></th>)}
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {selectedPeriod.offers.map((offer) => <tr key={offer.name} className="transition-colors hover:bg-muted/30">
+                  <td className="max-w-[240px] truncate px-3 py-3 font-medium">{offer.name}</td>
+                  <td className="px-3 py-3 text-right">{offer.activeSubscriptions}</td>
+                  <td className="px-3 py-3 text-right font-medium">{money(offer.mrr)}</td>
+                  <td className="px-3 py-3 text-right">{money(offer.newMrr)}</td>
+                  <td className="px-3 py-3 text-right">{money(offer.churnedMrr)}</td>
+                  <td className="px-3 py-3 text-right">{pct(offer.effectiveChurnRate)}</td>
+                  <td className="px-3 py-3 text-right">{pct(offer.cancellationRate)}</td>
+                  <td className="px-3 py-3"><Badge variant="outline" className={offer.confidence === "Invoice-derived" ? "border-amber-300 text-amber-700 dark:text-amber-300" : "border-emerald-300 text-emerald-700 dark:text-emerald-300"}>{offer.confidence}</Badge></td>
+                </tr>)}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>}
       <div className="flex items-start gap-2 border-t pt-4 text-xs text-muted-foreground"><CircleHelp className="mt-0.5 h-3.5 w-3.5 shrink-0" /><p>{snapshot.methodology}</p></div>
     </>}
     <Sheet open={detailPanel !== null} onOpenChange={(open) => !open && setDetailPanel(null)}>
