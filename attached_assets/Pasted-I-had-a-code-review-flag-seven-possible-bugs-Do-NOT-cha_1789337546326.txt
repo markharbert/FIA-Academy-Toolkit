@@ -1,0 +1,26 @@
+I had a code review flag seven possible bugs. Do NOT change any code yet. Your job right now is to verify each claim against the current code and tell me whether it is actually true.
+
+For each item below:
+- Open the named file and function and check whether the described problem is really present in the current code.
+- Reply with one of: CONFIRMED, NOT AN ISSUE, or PARTIAL, and a one or two sentence explanation of what the code actually does at that spot.
+- If CONFIRMED or PARTIAL, describe the smallest safe fix you would make, but do not apply it yet.
+
+After you have gone through all seven, give me a short summary table (item number, verdict, proposed fix) and then ask me which ones you should fix. Wait for my approval before editing anything.
+
+Here are the claims to verify:
+
+1. server/clickfunnels.ts, parseCfWebhookEvent - Claim: the contact ID is resolved as data.contact_id, then data.id, then data.contact.id, and data.id is actually the enrollment record's id, not the contact id, so a payload missing data.contact_id can store the wrong id and mis-provision or fail to match a member. Verify whether data.id can be reached as a contact-id source and whether that value is the enrollment id in real payloads.
+
+2. server/clickfunnels.ts, checkCfEnrollmentByEmail fast path - Claim: after fetching enrollments filtered by contact_id, the code uses data[0] without confirming that record belongs to the requested contact, so if ClickFunnels ignored the contact filter it would read the wrong member's status. Verify whether there is any check that the returned enrollment's contact id matches knownContactId.
+
+3. server/clickfunnels.ts, verifyCfWebhookSignature - Claim: the check assumes a raw hex signature, so if ClickFunnels sends the signature with an algorithm prefix (for example "sha256=" then the hash), every webhook would fail verification. Verify the exact format the comparison expects, and if you can, check ClickFunnels documentation or a real header for the actual format they send.
+
+4. server/placementScheduler.ts, allResolved and the lock-in logic - Claim: monitoring locks in as soon as no inbox status is "not_found", which means if every inbox returns "error" at the same time (a transient outage), it treats that as final, saves an all-error placement result, and stops checking. Verify whether an all-error tick would lock in and stop monitoring, and whether a definitive placement is required before lock-in.
+
+5. server/clickfunnels.ts - Claim: getAllCfEnrollments and findEnrollmentByEmail loop while there is a next link with no page cap, unlike getCfCommercialSnapshot which caps at 100 pages, so a malformed next link could loop forever. Verify whether those two loops have any upper bound.
+
+6. server/ai.ts, transcribeAudio - Claim: when a large uploaded file times out in the PROCESSING state and the function throws, the uploaded file is never deleted, because the cleanup only wraps the generateContent call, not the upload lifecycle. Verify whether the processing-timeout throw path leaves the uploaded file undeleted.
+
+7. server/ai.ts, scoreTranscript - Claim: the five part scores are summed without checking they are numbers, so if the model omits one, totalScore becomes NaN and the score screen breaks. Verify whether there is any numeric validation or clamping on the individual part scores before they are summed.
+
+Remember: verify and report only. No code changes until I approve.
