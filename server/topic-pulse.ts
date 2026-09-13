@@ -415,8 +415,12 @@ export interface GenerateTopicsResult {
   creditsUsed: number;
 }
 
+export function buildTopicCacheKey(input: TopicSearchInput): string {
+  return `${input.seedQuery}:${input.region || "global"}:${input.videoType || "all"}`;
+}
+
 export async function generateTopics(input: TopicSearchInput, runId: string, userId?: string, creditBudget?: number): Promise<GenerateTopicsResult> {
-  const cacheKey = `${input.seedQuery}:${input.region || "global"}:${input.videoType || "all"}`;
+  const cacheKey = buildTopicCacheKey(input);
   const cached = topicCache.get(cacheKey);
   
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {

@@ -56,6 +56,7 @@ import { runCfMembershipReconciliation } from "./cfMembershipReconciliation";
 import { listVimeoProjects, listVimeoVideos, searchVimeoVideos, extractVimeoVideoId, listVimeoTextTracks, fetchVimeoTranscript, getVimeoVideoDurationMinutes, getVimeoVideoThumbnail, getVimeoVideoDownload, syncVimeoChapters, type VimeoChapterInput } from "./vimeo";
 import { FIA_EVENT_CALENDAR_ID, FIA_EVENT_CALENDAR_NAME, FIA_EVENT_CALENDAR_SUBSCRIBE_URL, FIA_EVENT_CALENDAR_TIMEZONE, GoogleCalendarError, getTrainingCalendarEvents } from "./googleCalendar";
 import { enqueueImportedReplayTranscripts } from "./trainingReplayTranscriptWorker";
+import { createTopicPulseSearchHandler } from "./topic-pulse-search-route";
 
 const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
@@ -5472,102 +5473,22 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/topic-pulse/search", requireAuth, async (req: Request, res: Response) => {
-    try {
-      const parsed = topicSearchInputSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
-      }
-
-      const credits = await storage.getVideoTrendsCredits(req.session.userId!);
-      
-      if (credits.remaining < 1) {
-        const resetsAt = new Date(credits.resetsAt);
-        const daysRemaining = Math.ceil((resetsAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
-        return res.status(403).json({ 
-          message: `You've used all your Topic Pulse searches for this month. Your searches will reset in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'}.`,
-          creditsRemaining: credits.remaining,
-          resetsAt: credits.resetsAt,
-        });
-      }
-
-      // The member allowance is measured in searches, not underlying keyword API calls.
-      // Reserve exactly one search up front so concurrent requests cannot exceed the limit.
-      const reservation = await storage.reserveVideoTrendsCredits(req.session.userId!, 1);
-
-      if (!reservation.success) {
-        const resetsAt = new Date(credits.resetsAt);
-        const daysRemaining = Math.ceil((resetsAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
-        return res.status(402).json({
-          message: `No Topic Pulse searches remain this month. Your searches will reset in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'}.`,
-          creditsRemaining: credits.remaining,
-          resetsAt: credits.resetsAt,
-        });
-      }
-
-      // From this point on, the reservation is held. Any failure must refund it.
-      let reservationSettled = false;
-      const userId = req.session.userId!;
-
-      try {
-        const startTime = Date.now();
-        
-        const run = await storage.createTopicRun({
-          userId,
-          seedQuery: parsed.data.seedQuery,
-          settingsJson: {
-            affiliateProduct: parsed.data.affiliateProduct,
-            audienceLevel: parsed.data.audienceLevel,
-            tonePreference: parsed.data.tonePreference,
-            videoType: parsed.data.videoType,
-            region: parsed.data.region,
-            recencyDays: parsed.data.recencyDays,
-          },
-          status: "processing",
-        });
-
-        const result = await generateTopics(parsed.data, run.id, userId);
-        console.log(`[TopicPulse] Used 1 monthly search for user ${userId}; keyword API credits used: ${result.creditsUsed}`);
-        reservationSettled = true;
-
-        const createdTopics = await storage.createTopics(result.topics);
-
-        const runtimeMs = Date.now() - startTime;
-        await storage.updateTopicRun(run.id, {
-          status: "complete",
-          runtimeMs,
-          topicCount: createdTopics.length,
-        });
-
-        res.json({
-          runId: run.id,
-          topics: createdTopics,
-          runtimeMs,
-          creditsUsed: result.creditsUsed,
-        });
-        logUserAction({
-          userId,
-          actionType: "topic_searched",
-          actionLabel: ActionLabels.topic_searched,
-          entityType: "topic_run",
-          entityId: run.id,
-          metadata: { topicCount: createdTopics.length, creditsUsed: result.creditsUsed },
-          req,
-        });
-      } catch (innerErr) {
-        if (!reservationSettled) {
-          await storage.refundVideoTrendsCredits(userId, 1).catch(refundErr => {
-            console.error(`[TopicPulse] Failed to refund search allowance for user ${userId}:`, refundErr);
-          });
-          console.warn(`[TopicPulse] Refunded 1 monthly search for user ${userId} after error`);
-        }
-        throw innerErr;
-      }
-    } catch (err) {
-      console.error("[TopicPulse] Search error:", err);
-      res.status(500).json({ message: "Failed to search topics" });
-    }
-  });
+  app.post("/api/topic-pulse/search", requireAuth, createTopicPulseSearchHandler({
+    storage,
+    parseInput: input => topicSearchInputSchema.safeParse(input),
+    generateTopics,
+    logSearch: ({ userId, runId, topicCount, creditsUsed, req }) => {
+      logUserAction({
+        userId,
+        actionType: "topic_searched",
+        actionLabel: ActionLabels.topic_searched,
+        entityType: "topic_run",
+        entityId: runId,
+        metadata: { topicCount, creditsUsed },
+        req,
+      });
+    },
+  }));
 
   app.get("/api/topic-pulse/runs/:runId/topics", requireAuth, async (req: Request, res: Response) => {
     try {
