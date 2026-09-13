@@ -806,11 +806,12 @@ function MemberHealthTab() {
 }
 
 function RecurringRevenueTab() {
-  const [hasLoaded, setHasLoaded] = useState(false);
   const query = useQuery<RecurringRevenueSnapshot>({
     queryKey: ["/api/admin/cf/recurring-revenue"],
-    enabled: hasLoaded,
-    staleTime: 0,
+    staleTime: 15 * 60 * 1000,
+    refetchInterval: 15 * 60 * 1000,
+    refetchIntervalInBackground: true,
+    retry: 2,
     queryFn: async () => {
       const response = await apiRequest("POST", "/api/admin/cf/recurring-revenue");
       if (!response.ok) throw new Error("Recurring revenue sync could not be completed");
@@ -820,10 +821,6 @@ function RecurringRevenueTab() {
   const snapshot = query.data;
   const money = (value: number) => new Intl.NumberFormat(undefined, { style: "currency", currency: snapshot?.currency || "USD", maximumFractionDigits: 0 }).format(value);
   const pct = (value: number | null) => value == null ? "—" : `${value.toFixed(1)}%`;
-  const refresh = () => {
-    if (!hasLoaded) setHasLoaded(true);
-    else query.refetch();
-  };
   const metric = (label: string, value: string, detail: string, tone: string, icon: ReactNode) => (
     <div className="group rounded-xl border border-slate-200/80 bg-card p-4 shadow-sm transition-transform hover:-translate-y-0.5 dark:border-slate-800">
       <div className="flex items-center justify-between"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p><span className={`rounded-md p-1.5 ${tone}`}>{icon}</span></div>
@@ -834,10 +831,10 @@ function RecurringRevenueTab() {
   return <div className="space-y-6">
     <div className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
       <div><div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-primary"><span className="h-1.5 w-1.5 rounded-full bg-primary" />Revenue operations</div><h2 className="text-2xl font-bold tracking-tight">Recurring Revenue</h2><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Subscription health, cash collection, and offer-level retention in one operating view.</p></div>
-      <Button variant="outline" onClick={refresh} disabled={query.isFetching} className="shrink-0">{query.isFetching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCw className="mr-2 h-4 w-4" />}{snapshot ? "Refresh data" : "Load revenue data"}</Button>
+      <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">{query.isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <span className="h-2 w-2 rounded-full bg-emerald-500" />}Updates automatically every 15 minutes</div>
     </div>
-    {query.isError && <div className="flex items-start gap-3 rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-900 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /><div><p className="font-semibold">Revenue sync failed</p><p className="mt-1">ClickFunnels did not return a complete recurring revenue snapshot. Try the read-only refresh again.</p><Button size="sm" variant="outline" className="mt-3" onClick={refresh}>Try again</Button></div></div>}
-    {!snapshot ? (query.isLoading ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[1,2,3,4].map((item) => <div key={item} className="h-32 animate-pulse rounded-xl bg-muted" />)}</div> : <Card className="border-dashed"><CardContent className="py-14 text-center"><DollarSign className="mx-auto h-8 w-8 text-primary/60" /><p className="mt-3 font-semibold">No revenue snapshot loaded</p><p className="mt-1 text-sm text-muted-foreground">Run a manual refresh to inspect current subscription health.</p></CardContent></Card>) : <>
+    {query.isError && !snapshot && <div className="flex items-start gap-3 rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-900 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /><div><p className="font-semibold">Revenue sync is temporarily unavailable</p><p className="mt-1">The dashboard will retry automatically. No action is needed.</p></div></div>}
+    {!snapshot ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[1,2,3,4].map((item) => <div key={item} className="h-32 animate-pulse rounded-xl bg-muted" />)}</div> : <>
       <section><div className="mb-3 flex items-center justify-between"><h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Current run-rate</h3><span className="text-xs text-muted-foreground">As of {formatDateTime(snapshot.syncedAt)}</span></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {metric("MRR", money(snapshot.current.mrr), "Paying · excludes trials", "bg-primary/10 text-primary", <DollarSign className="h-4 w-4" />)}
         {metric("Trialing", String(snapshot.current.trialingCount), `${money(snapshot.current.trialingMrr)} potential`, "bg-amber-500/10 text-amber-700 dark:text-amber-300", <Clock className="h-4 w-4" />)}

@@ -315,6 +315,7 @@ async function buildCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenueSnap
 
 let recurringRevenueCache: { snapshot: CfRecurringRevenueSnapshot; expiresAt: number } | null = null;
 let recurringRevenueInFlight: Promise<CfRecurringRevenueSnapshot> | null = null;
+const RECURRING_REVENUE_CACHE_MS = 15 * 60 * 1000;
 
 export async function getCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenueSnapshot> {
   if (recurringRevenueCache && recurringRevenueCache.expiresAt > Date.now()) {
@@ -324,8 +325,12 @@ export async function getCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenu
 
   recurringRevenueInFlight = buildCfRecurringRevenueSnapshot()
     .then((snapshot) => {
-      recurringRevenueCache = { snapshot, expiresAt: Date.now() + 30_000 };
+      recurringRevenueCache = { snapshot, expiresAt: Date.now() + RECURRING_REVENUE_CACHE_MS };
       return snapshot;
+    })
+    .catch((error) => {
+      if (recurringRevenueCache) return recurringRevenueCache.snapshot;
+      throw error;
     })
     .finally(() => {
       recurringRevenueInFlight = null;
