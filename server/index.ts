@@ -10,6 +10,7 @@ import { configureEmailSender } from "./email-sendgrid";
 import { startYouTubeAnalyticsScheduler } from "./youtubeAnalyticsScheduler";
 import { startCfMembershipReconciliationScheduler } from "./cfMembershipReconciliation";
 import { startTrainingReplayTranscriptWorker } from "./trainingReplayTranscriptWorker";
+import { startCfRecurringRevenueScheduler } from "./clickfunnels";
 import { db, pool } from "./db";
 import { sql, eq, and } from "drizzle-orm";
 import { teleprompterScripts, teleprompterRecordings } from "@shared/schema";
@@ -96,6 +97,7 @@ export function log(message: string, source = "express") {
 
 const SENSITIVE_LOG_PATHS = [
   "/api/inbox-analyzer/",
+  "/api/admin/cf/recurring-revenue",
 ];
 
 app.use((req, res, next) => {
@@ -1097,6 +1099,7 @@ async function runStartupMigrations() {
     },
     () => {
       log(`serving on port ${port}`);
+      startCfRecurringRevenueScheduler();
 
       // Keep the deployment healthy first. These database checks are additive and
       // can safely finish after the HTTP server starts accepting health checks.

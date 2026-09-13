@@ -2,6 +2,8 @@ import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { storage } from "./storage";
 import { sendAccessRestoredEmail, isEmailConfigured } from "./email";
+import { db } from "./db";
+import { sql } from "drizzle-orm";
 
 // Strip any accidental protocol prefix and trailing slash.
 const normalizeCfDomain = (value: string) => value
@@ -376,26 +378,109 @@ async function buildCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenueSnap
 let recurringRevenueCache: { snapshot: CfRecurringRevenueSnapshot; expiresAt: number } | null = null;
 let recurringRevenueInFlight: Promise<CfRecurringRevenueSnapshot> | null = null;
 const RECURRING_REVENUE_CACHE_MS = 15 * 60 * 1000;
+let recurringRevenueSchedulerStarted = false;
+let recurringRevenuePersistentLoad: Promise<void> | null = null;
 
-export async function getCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenueSnapshot> {
-  if (recurringRevenueCache && recurringRevenueCache.expiresAt > Date.now()) {
-    return recurringRevenueCache.snapshot;
+function loadPersistentRecurringRevenueCache(): Promise<void> {
+  if (recurringRevenuePersistentLoad) return recurringRevenuePersistentLoad;
+  recurringRevenuePersistentLoad = (async () => {
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS cf_recurring_revenue_cache (
+          cache_key TEXT PRIMARY KEY,
+          snapshot JSONB NOT NULL,
+          refreshed_at TIMESTAMPTZ NOT NULL
+        )
+      `);
+      const result = await db.execute(sql`
+        SELECT snapshot, refreshed_at
+        FROM cf_recurring_revenue_cache
+        WHERE cache_key = 'workspace'
+        LIMIT 1
+      `);
+      const row = (result as any).rows?.[0];
+      const snapshot = row?.snapshot as CfRecurringRevenueSnapshot | undefined;
+      if (
+        snapshot?.current &&
+        Array.isArray(snapshot.history) &&
+        Array.isArray(snapshot.details?.trialing) &&
+        Array.isArray(snapshot.details?.atRisk)
+      ) {
+        recurringRevenueCache = {
+          snapshot: { ...snapshot, syncedAt: new Date(snapshot.syncedAt) },
+          // Treat persisted data as immediately available but stale so startup
+          // refreshes it without making an admin wait.
+          expiresAt: 0,
+        };
+        console.log("[CF Recurring Revenue] restored cached snapshot from PostgreSQL");
+      }
+    } catch (error: any) {
+      console.error("[CF Recurring Revenue] could not restore persistent cache:", error?.message || error);
+    }
+  })();
+  return recurringRevenuePersistentLoad;
+}
+
+async function persistRecurringRevenueCache(snapshot: CfRecurringRevenueSnapshot): Promise<void> {
+  try {
+    await db.execute(sql`
+      INSERT INTO cf_recurring_revenue_cache (cache_key, snapshot, refreshed_at)
+      VALUES ('workspace', ${JSON.stringify(snapshot)}::jsonb, NOW())
+      ON CONFLICT (cache_key) DO UPDATE SET
+        snapshot = EXCLUDED.snapshot,
+        refreshed_at = EXCLUDED.refreshed_at
+    `);
+  } catch (error: any) {
+    console.error("[CF Recurring Revenue] could not persist cache:", error?.message || error);
   }
+}
+
+async function refreshCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenueSnapshot> {
   if (recurringRevenueInFlight) return recurringRevenueInFlight;
 
   recurringRevenueInFlight = buildCfRecurringRevenueSnapshot()
     .then((snapshot) => {
       recurringRevenueCache = { snapshot, expiresAt: Date.now() + RECURRING_REVENUE_CACHE_MS };
+      void persistRecurringRevenueCache(snapshot);
       return snapshot;
-    })
-    .catch((error) => {
-      if (recurringRevenueCache) return recurringRevenueCache.snapshot;
-      throw error;
     })
     .finally(() => {
       recurringRevenueInFlight = null;
     });
   return recurringRevenueInFlight;
+}
+
+export async function getCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenueSnapshot> {
+  await loadPersistentRecurringRevenueCache();
+  if (recurringRevenueCache) {
+    if (recurringRevenueCache.expiresAt <= Date.now()) {
+      void refreshCfRecurringRevenueSnapshot().catch((error) => {
+        console.error("[CF Recurring Revenue] Background refresh failed; serving cached snapshot:", error?.message || error);
+      });
+    }
+    return recurringRevenueCache.snapshot;
+  }
+  return refreshCfRecurringRevenueSnapshot();
+}
+
+export function startCfRecurringRevenueScheduler(): void {
+  if (recurringRevenueSchedulerStarted) return;
+  recurringRevenueSchedulerStarted = true;
+  console.log("[CF Recurring Revenue] background cache starting (refreshes every 15 minutes)");
+
+  const refresh = () => {
+    const startedAt = Date.now();
+    void refreshCfRecurringRevenueSnapshot()
+      .then((snapshot) => {
+        console.log(`[CF Recurring Revenue] cache refreshed in ${Date.now() - startedAt}ms (${snapshot.current.activeSubscriptions} active subscriptions)`);
+      })
+      .catch((error) => {
+        console.error("[CF Recurring Revenue] cache refresh failed:", error?.message || error);
+      });
+  };
+
+  void loadPersistentRecurringRevenueCache().finally(refresh);
+  setInterval(refresh, RECURRING_REVENUE_CACHE_MS).unref();
 }
 
 // Verify the HMAC signature ClickFunnels sends on every webhook
