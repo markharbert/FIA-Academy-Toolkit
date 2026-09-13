@@ -177,8 +177,16 @@ export function parseCfWebhookEvent(body: any): CfWebhookEvent {
     data.contact?.email ||
     null;
 
+  const dataIdIsContactId =
+    eventType.startsWith("contact.") ||
+    eventType.startsWith("contacts/");
   const contactId: string | null =
-    String(data.contact_id || data.id || data.contact?.id || "") || null;
+    String(
+      data.contact_id ||
+        data.contact?.id ||
+        (dataIdIsContactId ? data.id : "") ||
+        ""
+    ) || null;
 
   // Course ID – present in enrollment events
   const courseId: string | null =
@@ -350,8 +358,16 @@ async function findEnrollmentByEmail(
   let nextUrl: string | null =
     `${baseUrl}/courses/${courseId}/enrollments?per=20`;
   let page = 0;
+  const visitedUrls = new Set<string>();
 
   while (nextUrl) {
+    if (page >= 100) {
+      throw new Error("CF API enrollment pagination exceeded 100 pages");
+    }
+    if (visitedUrls.has(nextUrl)) {
+      throw new Error("CF API enrollment pagination returned a repeated next URL");
+    }
+    visitedUrls.add(nextUrl);
     page++;
     console.log(`[CF API] Paginating enrollments page ${page}:`, nextUrl);
     const r: Response = await fetch(nextUrl, { headers });
@@ -413,7 +429,14 @@ export async function checkCfEnrollmentByEmail(
       console.log(`[CF API] No enrollment for contact ${knownContactId}`);
       return { enrolled: false, contactId: knownContactId };
     }
-    const enrollment = data[0];
+    const enrollment = data.find((candidate: any) => {
+      const returnedContactId = candidate?.contact_id ?? candidate?.contact?.id;
+      return returnedContactId != null && String(returnedContactId) === knownContactId;
+    });
+    if (!enrollment) {
+      console.warn(`[CF API] Enrollment response did not contain contact ${knownContactId}`);
+      return { enrolled: false, contactId: knownContactId };
+    }
     const contact = enrollment.contact ?? {};
     const active = isEnrollmentActive(enrollment);
     console.log(`[CF API] Fast path result — contact ${knownContactId}, active: ${active}`);
@@ -515,8 +538,16 @@ export async function getAllCfEnrollments(): Promise<CfEnrollmentRecord[]> {
   const results: CfEnrollmentRecord[] = [];
   let nextUrl: string | null = `${baseUrl}/courses/${CF_COURSE_ID}/enrollments?per=20`;
   let page = 0;
+  const visitedUrls = new Set<string>();
 
   while (nextUrl) {
+    if (page >= 100) {
+      throw new Error("CF API enrollment import exceeded 100 pages");
+    }
+    if (visitedUrls.has(nextUrl)) {
+      throw new Error("CF API enrollment import returned a repeated next URL");
+    }
+    visitedUrls.add(nextUrl);
     page++;
     console.log(`[CF Import] Fetching enrollments page ${page}:`, nextUrl);
     const r = await fetch(nextUrl, { headers });

@@ -97,3 +97,26 @@ test("parses malformed webhook payloads without inventing a membership identity"
   assert.equal(parsed.courseId, null);
   assert.ok(parsed.occurredAt instanceof Date);
 });
+
+test("does not treat an enrollment record ID as a contact ID", () => {
+  const parsed = parseCfWebhookEvent({
+    event_type: "courses/enrollment.created",
+    data: {
+      id: "enrollment-123",
+      course_id: "course-123",
+      email_address: "member@example.com",
+    },
+  });
+  assert.equal(parsed.contactId, null);
+});
+
+test("still accepts the resource ID for contact events", () => {
+  const parsed = parseCfWebhookEvent({
+    event_type: "contact.created",
+    data: {
+      id: "contact-123",
+      email_address: "member@example.com",
+    },
+  });
+  assert.equal(parsed.contactId, "contact-123");
+});

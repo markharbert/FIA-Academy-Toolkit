@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import OpenAI from "openai";
-import type { ScoreResult, GoalType } from "@shared/schema";
+import { scoreResultSchema, type ScoreResult, type GoalType } from "@shared/schema";
 import fs from "fs";
 import path from "path";
 
@@ -394,30 +394,28 @@ export async function transcribeAudio(audioPath: string): Promise<string> {
     }
     
     console.log(`[AI] File uploaded: ${file.name}, state: ${file.state}`);
-    
-    let attempts = 0;
-    const maxAttempts = 30;
-    while (file.state === "PROCESSING" && attempts < maxAttempts) {
-      console.log(`[AI] File still processing, waiting...`);
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      const fileStatus = await gemini.files.get({ name: file.name! });
-      if ('file' in fileStatus && fileStatus.file) {
-        file = fileStatus.file as typeof file;
-      } else {
-        file = fileStatus as typeof file;
-      }
-      attempts++;
-    }
-    
-    if (file.state !== "ACTIVE") {
-      throw new Error(`File upload failed or timed out. State: ${file.state}`);
-    }
-    
-    console.log(`[AI] File ready: ${file.uri}`);
-    
-    const fileName = file.name!;
-    
+    const fileName = file.name;
     try {
+      let attempts = 0;
+      const maxAttempts = 30;
+      while (file.state === "PROCESSING" && attempts < maxAttempts) {
+        console.log(`[AI] File still processing, waiting...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const fileStatus = await gemini.files.get({ name: file.name! });
+        if ('file' in fileStatus && fileStatus.file) {
+          file = fileStatus.file as typeof file;
+        } else {
+          file = fileStatus as typeof file;
+        }
+        attempts++;
+      }
+
+      if (file.state !== "ACTIVE") {
+        throw new Error(`File upload failed or timed out. State: ${file.state}`);
+      }
+
+      console.log(`[AI] File ready: ${file.uri}`);
+
       response = await gemini.models.generateContent({
         model: "gemini-flash-latest",
         contents: [
@@ -438,11 +436,13 @@ export async function transcribeAudio(audioPath: string): Promise<string> {
         ],
       });
     } finally {
-      try {
-        await gemini.files.delete({ name: fileName });
-        console.log(`[AI] Cleaned up uploaded file: ${fileName}`);
-      } catch (cleanupErr) {
-        console.warn(`[AI] Failed to clean up uploaded file:`, cleanupErr);
+      if (fileName) {
+        try {
+          await gemini.files.delete({ name: fileName });
+          console.log(`[AI] Cleaned up uploaded file: ${fileName}`);
+        } catch (cleanupErr) {
+          console.warn(`[AI] Failed to clean up uploaded file:`, cleanupErr);
+        }
       }
     }
   } else {
@@ -698,19 +698,32 @@ Respond with a JSON object matching this exact structure:
     throw new Error("No response from AI");
   }
 
-  const result = JSON.parse(content) as ScoreResult;
-  
-  // Ensure totalScore equals sum of part scores
-  const calculatedTotal = 
-    result.partScores.hook + 
-    result.partScores.setHook + 
-    result.partScores.firstCTA + 
-    result.partScores.content + 
-    result.partScores.finalCTA;
-  
-  result.totalScore = Math.min(calculatedTotal, 100);
-  
-  return result;
+  const parsed: unknown = JSON.parse(content);
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("AI returned an invalid score result");
+  }
+
+  const rawPartScores = (parsed as { partScores?: unknown }).partScores;
+  if (!rawPartScores || typeof rawPartScores !== "object") {
+    throw new Error("AI returned an invalid partScores result");
+  }
+
+  const scoreKeys = ["hook", "setHook", "firstCTA", "content", "finalCTA"] as const;
+  const partScores = {} as ScoreResult["partScores"];
+  for (const key of scoreKeys) {
+    const value = (rawPartScores as Record<string, unknown>)[key];
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new Error(`AI returned an invalid ${key} score`);
+    }
+    partScores[key] = Math.min(20, Math.max(0, value));
+  }
+
+  const totalScore = scoreKeys.reduce((sum, key) => sum + partScores[key], 0);
+  return scoreResultSchema.parse({
+    ...parsed,
+    partScores,
+    totalScore,
+  });
 }
 
 export async function generateTitle(transcript: string): Promise<string> {
