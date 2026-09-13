@@ -262,7 +262,7 @@ export default function TopicPulsePage() {
   const [msgVisible, setMsgVisible] = useState(true);
   const apiDoneRef = useRef(false);
   const startTimeRef = useRef(0);
-  const MIN_MS = 20000;
+  const MIN_MS = 7000;
 
   const { data: runsData, isLoading: runsLoading } = useQuery<RunsPage>({
     queryKey: ["/api/topic-pulse/runs", runsPage],
@@ -380,12 +380,12 @@ export default function TopicPulsePage() {
       const runId = typeof apiDoneRef.current === "string" ? apiDoneRef.current : null;
       const done = runId !== null;
 
-      // Progress curve: spreads across 20s, holds at 88% until API + min time
+      // Progress curve: reaches 88% by the minimum display time, then waits for the API.
       let target: number;
-      if (elapsed < 4000)       target = (elapsed / 4000) * 35;
-      else if (elapsed < 9000)  target = 35 + ((elapsed - 4000) / 5000) * 25;
-      else if (elapsed < 15000) target = 60 + ((elapsed - 9000) / 6000) * 20;
-      else if (elapsed < 20000) target = 80 + ((elapsed - 15000) / 5000) * 8;
+      if (elapsed < 1500)      target = (elapsed / 1500) * 35;
+      else if (elapsed < 3500) target = 35 + ((elapsed - 1500) / 2000) * 25;
+      else if (elapsed < 5500) target = 60 + ((elapsed - 3500) / 2000) * 20;
+      else if (elapsed < 7000) target = 80 + ((elapsed - 5500) / 1500) * 8;
       else                      target = 88;
 
       if (done && elapsed >= MIN_MS) {

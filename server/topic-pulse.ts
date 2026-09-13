@@ -240,7 +240,7 @@ async function getPlatformKeywordData(
 function generateKeywordVariations(seed: string): string[] {
   const variations: string[] = [seed];
   const prefixes = ["best", "top", "how to", "what is", "why"];
-  const suffixes = ["review", "vs", "tutorial", "for beginners", "guide", "tips", "2025"];
+  const suffixes = ["review", "vs", "tutorial", "for beginners", "guide", "tips", String(new Date().getFullYear())];
   
   for (const prefix of prefixes) {
     variations.push(`${prefix} ${seed}`);
@@ -299,12 +299,6 @@ function generateWhyText(query: string, signals: DemandSignals): string {
   
   if (signals.autocompletePresent) {
     parts.push("This topic appears in YouTube autocomplete, indicating active search demand.");
-  }
-  
-  if (signals.freshnessScore > 60) {
-    parts.push("Many recent videos on this topic suggest ongoing interest.");
-  } else if (signals.freshnessScore < 30) {
-    parts.push("Fewer recent videos could mean an opportunity to create fresh content.");
   }
   
   if (signals.competitionScore < 40) {
@@ -422,7 +416,7 @@ export interface GenerateTopicsResult {
 }
 
 export async function generateTopics(input: TopicSearchInput, runId: string, userId?: string, creditBudget?: number): Promise<GenerateTopicsResult> {
-  const cacheKey = `${input.seedQuery}:${input.region || "global"}`;
+  const cacheKey = `${input.seedQuery}:${input.region || "global"}:${input.videoType || "all"}`;
   const cached = topicCache.get(cacheKey);
   
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
@@ -457,7 +451,6 @@ export async function generateTopics(input: TopicSearchInput, runId: string, use
     const signals: DemandSignals = {
       autocompletePresent: autocompleteSuggestions.includes(query),
       trendDirection,
-      freshnessScore: 50,
       competitionScore,
     };
     

@@ -565,6 +565,7 @@ export interface IStorage {
   }>;
   getUrgentTasksForUser(userId: string, hoursAhead?: number): Promise<Array<ProjectTask & { projectName: string; projectColor: string }>>;
   getAllOpenTasksForUser(userId: string, limit?: number): Promise<Array<ProjectTask & { projectName: string; projectColor: string }>>;
+  countCompletedTopLevelTasksSince(userId: string, since: Date): Promise<number>;
   getAllTasksWithDueDatesForUser(userId: string): Promise<Array<ProjectTask & { projectName: string }>>;
   getUserByIcalToken(token: string): Promise<User | null>;
   rotateIcalToken(userId: string): Promise<string>;
@@ -3897,6 +3898,18 @@ export class DatabaseStorage implements IStorage {
       projectName: r.project_name,
       projectColor: r.project_color,
     }));
+  }
+
+  async countCompletedTopLevelTasksSince(userId: string, since: Date): Promise<number> {
+    const result = await db.execute(sql`
+      SELECT COUNT(*)::int AS count
+      FROM project_tasks
+      WHERE user_id = ${userId}
+        AND status = 'done'
+        AND parent_task_id IS NULL
+        AND completed_at >= ${since}
+    `);
+    return Number(result.rows[0]?.count ?? 0);
   }
 
   async getAllTasksWithDueDatesForUser(userId: string): Promise<Array<ProjectTask & { projectName: string }>> {

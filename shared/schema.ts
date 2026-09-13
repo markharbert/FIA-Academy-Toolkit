@@ -586,7 +586,7 @@ export type TopicRun = typeof topicRuns.$inferSelect;
 export const demandSignalsSchema = z.object({
   autocompletePresent: z.boolean(),
   trendDirection: z.enum(trendDirections),
-  freshnessScore: z.number().min(0).max(100),
+  freshnessScore: z.number().min(0).max(100).optional(),
   competitionScore: z.number().min(0).max(100),
   avgChannelSize: z.number().optional(),
   topVideoViews: z.array(z.number()).optional(),

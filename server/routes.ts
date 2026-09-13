@@ -5527,24 +5527,21 @@ export async function registerRoutes(
         const resetsAt = new Date(credits.resetsAt);
         const daysRemaining = Math.ceil((resetsAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
         return res.status(403).json({ 
-          message: `You've used all your Video Trends credits for this month. Your credits will reset in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'}.`,
+          message: `You've used all your Topic Pulse searches for this month. Your searches will reset in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'}.`,
           creditsRemaining: credits.remaining,
           resetsAt: credits.resetsAt,
         });
       }
 
-      // Atomically reserve a worst-case credit budget BEFORE any paid keyword lookups.
-      // Max possible uncached keywords per search: 15 (autocomplete) + 20 (variations) = 35.
-      // We cap the reservation at the user's remaining balance so the reserve always fits.
-      const MAX_TOPIC_PULSE_KEYWORDS = 35;
-      const reserveAmount = Math.min(MAX_TOPIC_PULSE_KEYWORDS, credits.remaining);
-      const reservation = await storage.reserveVideoTrendsCredits(req.session.userId!, reserveAmount);
+      // The member allowance is measured in searches, not underlying keyword API calls.
+      // Reserve exactly one search up front so concurrent requests cannot exceed the limit.
+      const reservation = await storage.reserveVideoTrendsCredits(req.session.userId!, 1);
 
       if (!reservation.success) {
         const resetsAt = new Date(credits.resetsAt);
         const daysRemaining = Math.ceil((resetsAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
         return res.status(402).json({
-          message: `Insufficient credits to start this search. Your credits will reset in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'}.`,
+          message: `No Topic Pulse searches remain this month. Your searches will reset in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'}.`,
           creditsRemaining: credits.remaining,
           resetsAt: credits.resetsAt,
         });
@@ -5571,18 +5568,8 @@ export async function registerRoutes(
           status: "processing",
         });
 
-        // Pass the reserved amount as the hard budget cap for paid keyword lookups.
-        // Actual usage will always be 0 ≤ creditsUsed ≤ reserveAmount.
-        const result = await generateTopics(parsed.data, run.id, userId, reserveAmount);
-
-        // Settle reservation: refund the unused portion (reserved - actual usage).
-        const refundAmount = reserveAmount - result.creditsUsed;
-        if (refundAmount > 0) {
-          await storage.refundVideoTrendsCredits(userId, refundAmount);
-          console.log(`[TopicPulse] Reserved ${reserveAmount}, used ${result.creditsUsed}, refunded ${refundAmount} for user ${userId}`);
-        } else {
-          console.log(`[TopicPulse] Reserved and used ${reserveAmount} credits for user ${userId}`);
-        }
+        const result = await generateTopics(parsed.data, run.id, userId);
+        console.log(`[TopicPulse] Used 1 monthly search for user ${userId}; keyword API credits used: ${result.creditsUsed}`);
         reservationSettled = true;
 
         const createdTopics = await storage.createTopics(result.topics);
@@ -5611,11 +5598,10 @@ export async function registerRoutes(
         });
       } catch (innerErr) {
         if (!reservationSettled) {
-          // Refund the full reservation since no paid work was successfully completed.
-          await storage.refundVideoTrendsCredits(userId, reserveAmount).catch(refundErr => {
-            console.error(`[TopicPulse] Failed to refund reservation of ${reserveAmount} for user ${userId}:`, refundErr);
+          await storage.refundVideoTrendsCredits(userId, 1).catch(refundErr => {
+            console.error(`[TopicPulse] Failed to refund search allowance for user ${userId}:`, refundErr);
           });
-          console.warn(`[TopicPulse] Refunded full reservation of ${reserveAmount} for user ${userId} after error`);
+          console.warn(`[TopicPulse] Refunded 1 monthly search for user ${userId} after error`);
         }
         throw innerErr;
       }

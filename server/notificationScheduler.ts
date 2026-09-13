@@ -9,21 +9,33 @@ import {
   weeklyDmoSummaryEmail,
 } from "./email-templates";
 import type { NotificationPreferences } from "@shared/schema";
+import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function nowInTz(tz: string): Date {
-  return new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
+type ZonedClock = {
+  hour: number;
+  dayOfWeek: number;
+  dateString: string;
+};
+
+export function zonedClock(now: Date, tz: string): ZonedClock {
+  return {
+    hour: Number(formatInTimeZone(now, tz, "H")),
+    dayOfWeek: Number(formatInTimeZone(now, tz, "i")) % 7,
+    dateString: formatInTimeZone(now, tz, "yyyy-MM-dd"),
+  };
 }
 
-function startOfTodayInTz(tz: string): Date {
-  const d = nowInTz(tz);
-  d.setHours(0, 0, 0, 0);
-  return d;
+export function startOfTodayInTz(tz: string, now = new Date()): Date {
+  return fromZonedTime(`${zonedClock(now, tz).dateString}T00:00:00`, tz);
 }
 
-function todayStringInTz(tz: string): string {
-  return nowInTz(tz).toISOString().slice(0, 10);
+function startOfDaysAgoInTz(tz: string, daysAgo: number, now = new Date()): Date {
+  const today = zonedClock(now, tz).dateString;
+  const calendarDate = new Date(`${today}T12:00:00Z`);
+  calendarDate.setUTCDate(calendarDate.getUTCDate() - daysAgo);
+  return fromZonedTime(`${calendarDate.toISOString().slice(0, 10)}T00:00:00`, tz);
 }
 
 // ── Tick ─────────────────────────────────────────────────────────────────────
@@ -43,10 +55,9 @@ async function tick() {
       const p: NotificationPreferences = prefs.preferences;
 
       const tz = user.timezone || "America/New_York";
-      const nowLocal = nowInTz(tz);
-      const currentHour = nowLocal.getHours();
-      const currentDow = nowLocal.getDay(); // 0 = Sunday
-      const todayStr = todayStringInTz(tz);
+      const now = new Date();
+      const { hour: currentHour, dayOfWeek: currentDow, dateString: todayStr } = zonedClock(now, tz);
+      const todayStartedAt = startOfTodayInTz(tz, now);
 
       // ── Task due reminders ────────────────────────────────────────────────
       if (p.taskDueReminders?.enabled) {
@@ -56,19 +67,19 @@ async function tick() {
 
         const allTasks = await storage.getAllOpenTasksForUser(user.id);
         const dueSoon = allTasks.filter(t => {
-          if (!t.dueDate || t.status === "done") return false;
+          if (!t.dueDate || t.status === "done" || t.parentTaskId) return false;
           const d = new Date(t.dueDate).getTime();
           return d >= windowStart && d <= windowEnd;
         });
 
         if (dueSoon.length > 0) {
-          const alreadySent = await storage.hasNotificationBeenSent(user.id, "task_due_reminder", "batch", startOfTodayInTz(tz));
+          const alreadySent = await storage.hasNotificationBeenSent(user.id, "task_due_reminder", "batch", todayStartedAt);
           if (!alreadySent) {
             const tpl = taskDueReminderEmail({
               firstName: user.firstName,
               tasks: dueSoon.map(t => ({
                 title: t.title,
-                projectName: (t as any).projectName ?? "Unknown project",
+                projectName: t.projectName,
                 dueDate: t.dueDate
                   ? new Date(t.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })
                   : "",
@@ -88,13 +99,13 @@ async function tick() {
           return new Date(t.dueDate) < new Date();
         });
         if (overdue.length > 0) {
-          const alreadySent = await storage.hasNotificationBeenSent(user.id, "overdue_alert", "batch", startOfTodayInTz(tz));
+          const alreadySent = await storage.hasNotificationBeenSent(user.id, "overdue_alert", "batch", todayStartedAt);
           if (!alreadySent) {
             const tpl = overdueAlertEmail({
               firstName: user.firstName,
               tasks: overdue.map(t => ({
                 title: t.title,
-                projectName: (t as any).projectName ?? "Unknown project",
+                projectName: t.projectName,
                 daysOverdue: Math.round((Date.now() - new Date(t.dueDate!).getTime()) / 86_400_000),
               })),
             }, resources);
@@ -111,7 +122,7 @@ async function tick() {
           if (!project.dueDate || project.status !== "active") continue;
           const daysLeft = Math.ceil((new Date(project.dueDate).getTime() - Date.now()) / 86_400_000);
           if (daysLeft !== 3 && daysLeft !== 1) continue;
-          const alreadySent = await storage.hasNotificationBeenSent(user.id, "project_due_reminder", `${project.id}:${daysLeft}`, startOfTodayInTz(tz));
+          const alreadySent = await storage.hasNotificationBeenSent(user.id, "project_due_reminder", `${project.id}:${daysLeft}`, todayStartedAt);
           if (!alreadySent) {
             const tpl = projectDueReminderEmail({
               firstName: user.firstName,
@@ -128,13 +139,16 @@ async function tick() {
       // ── Weekly project digest ─────────────────────────────────────────────
       if (p.weeklyProjectDigest?.enabled) {
         const { dayOfWeek = 1, hour = 8 } = p.weeklyProjectDigest;
-        if (currentDow === dayOfWeek && currentHour === hour) {
-          const alreadySent = await storage.hasNotificationBeenSent(user.id, "weekly_project_digest", todayStr, startOfTodayInTz(tz));
+        if (currentDow === dayOfWeek && currentHour >= hour) {
+          const alreadySent = await storage.hasNotificationBeenSent(user.id, "weekly_project_digest", todayStr, todayStartedAt);
           if (!alreadySent) {
             const projects = await storage.getProjectsForUser(user.id);
             const allTasks = await storage.getAllOpenTasksForUser(user.id);
             const openTasks = allTasks.filter(t => t.status !== "done" && !t.parentTaskId).length;
-            const doneTasks = 0;
+            const doneTasks = await storage.countCompletedTopLevelTasksSince(
+              user.id,
+              startOfDaysAgoInTz(tz, 6, now),
+            );
             const overdueCount = allTasks.filter(t => t.status !== "done" && t.dueDate && new Date(t.dueDate) < new Date() && !t.parentTaskId).length;
             const tpl = weeklyProjectDigestEmail({
               firstName: user.firstName,
@@ -143,7 +157,7 @@ async function tick() {
               overdueCount,
               projects: projects.filter(pr => pr.status === "active").map(pr => ({
                 name: pr.name,
-                openTasks: allTasks.filter(t => (t as any).projectId === pr.id && t.status !== "done" && !t.parentTaskId).length,
+                openTasks: allTasks.filter(t => t.projectId === pr.id && t.status !== "done" && !t.parentTaskId).length,
               })),
             }, resources);
             await sendEmail({ to: user.email, ...tpl });
@@ -155,8 +169,8 @@ async function tick() {
       // ── DMO streak at risk ────────────────────────────────────────────────
       if (p.dmoStreakAtRisk?.enabled) {
         const atRiskHour = p.dmoStreakAtRisk.hour ?? 19;
-        if (currentHour === atRiskHour) {
-          const alreadySent = await storage.hasNotificationBeenSent(user.id, "dmo_streak_at_risk", todayStr, startOfTodayInTz(tz));
+        if (currentHour >= atRiskHour) {
+          const alreadySent = await storage.hasNotificationBeenSent(user.id, "dmo_streak_at_risk", todayStr, todayStartedAt);
           if (!alreadySent) {
             const dmoResult = await storage.getDmoStreak(user.id);
             const todayEntry = await storage.getDmoEntry(user.id, todayStr);
@@ -172,8 +186,8 @@ async function tick() {
       // ── Weekly DMO summary ────────────────────────────────────────────────
       if (p.weeklyDmoSummary?.enabled) {
         const { dayOfWeek = 0, hour = 18 } = p.weeklyDmoSummary;
-        if (currentDow === dayOfWeek && currentHour === hour) {
-          const alreadySent = await storage.hasNotificationBeenSent(user.id, "weekly_dmo_summary", todayStr, startOfTodayInTz(tz));
+        if (currentDow === dayOfWeek && currentHour >= hour) {
+          const alreadySent = await storage.hasNotificationBeenSent(user.id, "weekly_dmo_summary", todayStr, todayStartedAt);
           if (!alreadySent) {
             const dmoResult = await storage.getDmoStreak(user.id);
             const weekEntries = await storage.getDmoEntriesForWeek(user.id, tz);
