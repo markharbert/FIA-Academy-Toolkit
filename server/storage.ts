@@ -81,6 +81,15 @@ export function normalizeEmail(email: string | null | undefined): string | null 
   return email.trim().toLowerCase();
 }
 
+export function weekDateRangeInTz(tz: string, now = new Date()): { startKey: string; endKey: string } {
+  const endKey = todayKeyInTz(safeTimezone(tz), now);
+  const calendarDate = new Date(`${endKey}T12:00:00Z`);
+  return {
+    startKey: addDaysToKey(endKey, -calendarDate.getUTCDay()),
+    endKey,
+  };
+}
+
 export type CfReconciliationEnrollment = {
   contactId: string;
   email: string;
@@ -680,7 +689,7 @@ export interface IStorage {
   logNotification(userId: string, type: string, refId: string | null): Promise<void>;
   getAllUsersForNotifications(): Promise<Array<{ id: string; email: string | null; displayName: string | null; firstName: string | null; timezone: string }>>;
   getAdminUsersForNotifications(): Promise<Array<{ id: string; email: string | null; displayName: string | null; firstName: string | null }>>;
-  getDmoEntriesForWeek(userId: string, tz: string): Promise<import("@shared/schema").DmoEntry[]>;
+  getDmoEntriesForWeek(userId: string, tz: string, now?: Date): Promise<import("@shared/schema").DmoEntry[]>;
 
   // Email template overrides
   getEmailTemplateOverride(key: string): Promise<{ subjectOverride: string | null; htmlOverride: string | null } | null>;
@@ -5306,13 +5315,8 @@ export class DatabaseStorage implements IStorage {
     await pool.query('DELETE FROM email_resource_links WHERE id = $1', [id]);
   }
 
-  async getDmoEntriesForWeek(userId: string, tz: string): Promise<import("@shared/schema").DmoEntry[]> {
-    const now = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
-    startOfWeek.setHours(0, 0, 0, 0);
-    const startKey = startOfWeek.toISOString().slice(0, 10);
-    const endKey = now.toISOString().slice(0, 10);
+  async getDmoEntriesForWeek(userId: string, tz: string, now = new Date()): Promise<import("@shared/schema").DmoEntry[]> {
+    const { startKey, endKey } = weekDateRangeInTz(tz, now);
     return db.select().from(dmoEntries)
       .where(and(
         eq(dmoEntries.userId, userId),

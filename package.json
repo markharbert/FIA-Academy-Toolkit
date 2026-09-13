@@ -13,6 +13,7 @@
     "test:swipe-api": "node --import tsx --test server/swipe-api.contract.test.ts",
     "test:course-builder": "node --import tsx --test server/course-structure.test.ts",
     "test:cf-import": "node --import tsx --test server/cf-import-client.test.ts",
+    "test:notification-scheduler": "node --import tsx --test server/notificationScheduler.test.ts",
     "test:lesson-editor": "vitest run client/src/pages/admin-lesson-editor.test.tsx"
   },
   "dependencies": {
