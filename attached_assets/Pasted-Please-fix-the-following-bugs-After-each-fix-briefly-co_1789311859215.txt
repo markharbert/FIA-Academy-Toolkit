@@ -1,0 +1,33 @@
+Please fix the following bugs. After each fix, briefly confirm what you changed. Do not refactor unrelated code.
+
+1. server/notificationScheduler.ts - Weekly project digest reports 0 done tasks.
+In the weekly project digest section, doneTasks is hardcoded to 0. Replace it with the real count of tasks completed by this user in the last 7 days (status "done", not a subtask, completed within the past week in the user's time zone). If there is no existing storage method for completed-task counts, add one and use it.
+
+2. server/notificationScheduler.ts - Time-of-day notifications get missed when the app sleeps or restarts.
+The scheduler uses an in-memory hourly interval, so weekly digests, weekly DMO summaries, and DMO streak-at-risk emails only fire if a tick lands in the exact target clock hour. Make these resilient to sleeping and restarts. Add catch-up logic so that when a tick runs, it also sends any time-of-day notification whose target hour has already passed today but was not yet sent (using the existing per-day dedup log so nothing double-sends). The goal: if the target hour was missed, the next tick that day still delivers it once.
+
+3. server/notificationScheduler.ts - Time zone helpers are off by the user's UTC offset and assume a UTC server.
+Replace the nowInTz, startOfTodayInTz, and todayStringInTz helpers with an implementation that computes the user's correct wall-clock hour, day of week, and calendar date, and a correct absolute start-of-day instant for the user's time zone, without relying on the server running in UTC. Use Intl.DateTimeFormat with the IANA time zone (or a small date library already in the project) rather than the toLocaleString-then-new-Date approach. Verify dedup still works across the day boundary.
+
+4. server/notificationScheduler.ts - Subtasks are handled inconsistently.
+The overdue-alert and weekly-digest filters exclude subtasks (parentTaskId set), but the task-due-soon reminder does not. Make all three consistent: exclude subtasks from due-soon reminders too, so a subtask never triggers a due-soon email while being ignored for overdue.
+
+5. server/notificationScheduler.ts - Confirm project fields on notification tasks.
+The weekly digest reads projectId and projectName off each task via an any cast. Confirm the task objects returned by the notification storage query actually include projectId and projectName. If they do not, update that query to include them so per-project open-task counts and project names are correct instead of 0 and "Unknown project".
+
+6. server/topic-pulse.ts - Research cache key ignores the video-type filter.
+generateTopics caches by seedQuery and region only, but the topic set is filtered by input.videoType before caching. Include videoType in the cache key so a run generated with one intent filter is never served for a different filter.
+
+7. server/topic-pulse.ts + the Topic Pulse search route - Verify monthly search credits.
+Confirm how a member's monthly search count is decremented when they run a search. It must decrement by one per search the member runs, regardless of whether the underlying keyword data came from cache (creditsUsed 0). If it currently decrements by the keyword-API creditsUsed value, change it so cached searches still count as one search against the member's monthly allowance.
+
+8. server/topic-pulse.ts - Stale year in keyword variations.
+generateKeywordVariations appends the literal "2025" as a suffix. Change it to use the current year dynamically.
+
+9. server/topic-pulse.ts - Dead freshness signal.
+freshnessScore is hardcoded to 50, so the freshness branches in generateWhyText never run and freshness never affects the opportunity score. Either implement a real freshness signal from YouTube results, or remove the freshness branches and the freshness score component so the "why this topic" text does not imply data that does not exist. Prefer removing it cleanly if real freshness data is not readily available.
+
+10. client/src/pages/topic-pulse.tsx - Loading overlay minimum is too long.
+The search overlay enforces a 20-second minimum display (MIN_MS). Reduce it to about 6000 to 8000 ms so results show sooner when the API is fast.
+
+For each change, keep existing behavior intact where I did not ask for a change, and tell me if any fix needs a database migration.
