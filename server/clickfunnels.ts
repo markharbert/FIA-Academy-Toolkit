@@ -20,71 +20,317 @@ const CF_WEBHOOK_SECRET = process.env.CF_WEBHOOK_SECRET || "";
 // whitespace before creating Customer Center SSO tokens.
 const CF_SSO_JWT_SECRET = (process.env.CF_SSO_JWT_SECRET || "").trim();
 
-export interface CfCommercialSnapshot {
+export interface CfRecurringRevenueSnapshot {
   syncedAt: Date;
-  orderCount: number;
-  revenue: number;
-  offers: Array<{ name: string; orders: number; revenue: number }>;
-  attribution: Array<{ source: string; campaign: string; orders: number; revenue: number }>;
-  orders: Array<{ id: string; contactId: string | null; offer: string; createdAt: string | null; amount: number; source: string | null; campaign: string | null }>;
+  currency: string;
+  current: {
+    mrr: number;
+    trialingCount: number;
+    trialingMrr: number;
+    atRiskCount: number;
+    atRiskMrr: number;
+    activeSubscriptions: number;
+    activeSubscribers: number;
+  };
+  month: {
+    label: string;
+    collected: number;
+    expected: number;
+    projected: number;
+  };
+  history: Array<{ month: string; label: string; mrr: number; cashCollected: number }>;
+  performance: {
+    periodLabel: string;
+    effectiveChurnRate: number;
+    grossMrrChurnRate: number;
+    netMrrRetention: number;
+    newMrr: number;
+    churnedMrr: number;
+  };
+  offers: Array<{
+    name: string;
+    activeSubscriptions: number;
+    mrr: number;
+    newMrr: number;
+    churnedMrr: number;
+    effectiveChurnRate: number | null;
+    cancellationRate: number | null;
+    confidence: string;
+  }>;
+  methodology: string;
 }
 
-const FIA_PRODUCT_RE = /fearless\s+influencer\s+academy/i;
+const CF_REPORT_PAGE_LIMIT = 100;
+const AT_RISK_BILLING_STATUSES = new Set([
+  "past_due",
+  "past-due",
+  "unpaid",
+  "failed",
+  "payment_failed",
+  "payment-failed",
+  "requires_action",
+  "requires-action",
+]);
 
-// Read-only commercial reporting. This intentionally stays narrow: it never
-// creates, updates, or cancels orders, subscriptions, products, or contacts.
-export async function getCfCommercialSnapshot(memberContactIds?: Set<string>): Promise<CfCommercialSnapshot> {
+function roundMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function asDate(value: unknown): Date | null {
+  if (typeof value !== "string" || !value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function firstDate(...values: unknown[]): Date | null {
+  return values
+    .map(asDate)
+    .filter((value): value is Date => value !== null)
+    .sort((a, b) => a.getTime() - b.getTime())[0] || null;
+}
+
+function recurringItemValues(order: any): Array<{ name: string; amount: number; mrr: number; currency: string }> {
+  return (Array.isArray(order.line_items) ? order.line_items : []).flatMap((item: any) => {
+    const price = item.products_price || {};
+    const amount = Number(price.amount);
+    const intervalCount = Math.max(1, Number(price.interval_count) || 1);
+    const quantity = Math.max(1, Number(item.quantity) || 1);
+    const interval = String(price.interval || "").toLowerCase();
+    if (!Number.isFinite(amount) || amount < 0 || !interval) return [];
+    const fullCharge = amount * quantity;
+    let mrr = fullCharge;
+    if (interval.startsWith("year")) mrr = fullCharge / (12 * intervalCount);
+    else if (interval.startsWith("month")) mrr = fullCharge / intervalCount;
+    else if (interval.startsWith("week")) mrr = fullCharge * 52 / (12 * intervalCount);
+    else if (interval.startsWith("day")) mrr = fullCharge * 365.25 / (12 * intervalCount);
+    else return [];
+    return [{
+      name: String(item.original_product?.name || item.products_variant?.name || "Unnamed offer"),
+      amount: fullCharge,
+      mrr,
+      currency: String(price.currency || order.currency || "usd").toUpperCase(),
+    }];
+  });
+}
+
+async function fetchCfPages(url: string, headers: Record<string, string>, label: string): Promise<any[]> {
+  const rows: any[] = [];
+  const visited = new Set<string>();
+  let nextUrl: string | null = url;
+  let page = 0;
+  while (nextUrl) {
+    if (page >= CF_REPORT_PAGE_LIMIT) throw new Error(`${label} exceeded ${CF_REPORT_PAGE_LIMIT} pages`);
+    if (visited.has(nextUrl)) throw new Error(`${label} returned a repeated next URL`);
+    visited.add(nextUrl);
+    page++;
+    const response: Response = await fetch(nextUrl, {
+      headers,
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!response.ok) throw new Error(`${label} failed: ${response.status}`);
+    const body = await response.json();
+    rows.push(...(Array.isArray(body) ? body : body.data || []));
+    const link: string = response.headers.get("link") || "";
+    const nextMatch: RegExpMatchArray | null = link.match(/<([^>]+)>;\s*rel="next"/);
+    nextUrl = nextMatch?.[1] || null;
+  }
+  return rows;
+}
+
+function isOrderActiveAt(order: any, instant: Date): boolean {
+  const startedAt = firstDate(order.activated_at, order.created_at);
+  const endedAt = firstDate(order.churned_at, order.canceled_at);
+  const trialEndsAt = asDate(order.trial_end_at);
+  return (
+    !!startedAt &&
+    startedAt <= instant &&
+    (!endedAt || endedAt > instant) &&
+    (!trialEndsAt || trialEndsAt <= instant)
+  );
+}
+
+// Read-only subscription reporting built from ClickFunnels orders and invoices.
+async function buildCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenueSnapshot> {
   if (!CF_API_TOKEN || !CF_WORKSPACE_DOMAIN || !CF_WORKSPACE_ID) {
     throw new Error("CF_API_TOKEN, CF_WORKSPACE_DOMAIN, and CF_WORKSPACE_ID must be configured");
   }
   const headers = { Authorization: `Bearer ${CF_API_TOKEN}`, Accept: "application/json" };
-  let nextUrl: string | null = `https://${CF_WORKSPACE_DOMAIN}/api/v2/workspaces/${CF_WORKSPACE_ID}/orders?sort_order=desc`;
-  const orders: any[] = [];
-  let pages = 0;
-  while (nextUrl && pages < 100) {
-    pages++;
-    const response = await fetch(nextUrl, { headers });
-    if (!response.ok) throw new Error(`ClickFunnels order sync failed: ${response.status}`);
-    const body = await response.json();
-    orders.push(...(Array.isArray(body) ? body : body.data || []));
-    const link = response.headers.get("link") || "";
-    nextUrl = link.match(/<([^>]+)>;\s*rel="next"/)?.[1] || null;
-  }
-  const recentCutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
-  const offerMap = new Map<string, { orders: number; revenue: number }>();
-  const attributionMap = new Map<string, { source: string; campaign: string; orders: number; revenue: number }>();
-  const orderDetails: Array<{ id: string; contactId: string | null; offer: string; createdAt: string | null; amount: number; source: string | null; campaign: string | null }> = [];
-  let revenue = 0;
-  for (const order of orders) {
-    if (!order.created_at || new Date(order.created_at).getTime() < recentCutoff) continue;
-    const contactId = order.contact_id ? String(order.contact_id) : order.contact?.id ? String(order.contact.id) : null;
-    if (!contactId || (memberContactIds && !memberContactIds.has(contactId))) continue;
-    const fiaItems = (order.line_items || []).filter((item: any) => FIA_PRODUCT_RE.test(String(item.original_product?.name || item.products_variant?.name || "")));
-    for (const item of fiaItems) {
-      const offer = String(item.original_product?.name || item.products_variant?.name);
-      const amount = (Number(item.products_price?.amount || 0) || 0) * (Number(item.quantity || 1) || 1);
-      revenue += amount;
-      const offerEntry = offerMap.get(offer) || { orders: 0, revenue: 0 };
-      offerEntry.orders++; offerEntry.revenue += amount; offerMap.set(offer, offerEntry);
-      const visit = order.last_visit_with_utm || order.contact?.last_visit_with_utm || order.utm || {};
-      const source = String(visit.utm_source || order.utm_source || "");
-      const campaign = String(visit.utm_campaign || order.utm_campaign || "");
-      orderDetails.push({ id: `${order.id || order.public_id}:${item.id || item.public_id}`, contactId, offer, createdAt: order.created_at || null, amount, source: source || null, campaign: campaign || null });
-      if (source || campaign) {
-        const key = `${source}|${campaign}`;
-        const entry = attributionMap.get(key) || { source: source || "Direct / unknown", campaign: campaign || "No campaign", orders: 0, revenue: 0 };
-        entry.orders++; entry.revenue += amount; attributionMap.set(key, entry);
-      }
+  const apiBase = `https://${CF_WORKSPACE_DOMAIN}/api/v2`;
+  const allOrders = await fetchCfPages(
+    `${apiBase}/workspaces/${CF_WORKSPACE_ID}/orders?sort_order=desc&per=100`,
+    headers,
+    "ClickFunnels order sync",
+  );
+  const subscriptionOrders = allOrders.filter((order) =>
+    order.order_type === "subscription-order" && recurringItemValues(order).length > 0
+  );
+
+  const invoices: any[] = [];
+  let invoiceCursor = 0;
+  const workerCount = Math.min(8, subscriptionOrders.length);
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (invoiceCursor < subscriptionOrders.length) {
+      const order = subscriptionOrders[invoiceCursor++];
+      const orderInvoices = await fetchCfPages(
+        `${apiBase}/orders/${order.id}/invoices?per=100`,
+        headers,
+        `ClickFunnels invoices for order ${order.id}`,
+      );
+      invoices.push(...orderInvoices);
+    }
+  }));
+
+  const currencyCounts = new Map<string, number>();
+  for (const order of subscriptionOrders) {
+    for (const item of recurringItemValues(order)) {
+      currencyCounts.set(item.currency, (currencyCounts.get(item.currency) || 0) + 1);
     }
   }
+  const currency = [...currencyCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "USD";
+  const orders = subscriptionOrders.filter((order) =>
+    recurringItemValues(order).some((item) => item.currency === currency)
+  );
+
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const monthEnd = new Date(nextMonthStart.getTime() - 1);
+  const periodLabel = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(now);
+  const getValues = (order: any) => recurringItemValues(order).filter((item) => item.currency === currency);
+  const orderMrr = (order: any) => getValues(order).reduce((sum, item) => sum + item.mrr, 0);
+  const orderCharge = (order: any) => getValues(order).reduce((sum, item) => sum + item.amount, 0);
+  const activeOrders = orders.filter((order) => {
+    const endedAt = firstDate(order.churned_at, order.canceled_at);
+    return order.service_status === "active" && (!endedAt || endedAt > now);
+  });
+  const payingOrders = activeOrders.filter((order) => !order.in_trial);
+  const trialingOrders = activeOrders.filter((order) => !!order.in_trial);
+  const atRiskOrders = payingOrders.filter((order) =>
+    AT_RISK_BILLING_STATUSES.has(String(order.billing_status || "").toLowerCase())
+  );
+
+  const paidInvoices = invoices.filter((invoice) =>
+    String(invoice.currency || "usd").toUpperCase() === currency &&
+    String(invoice.status || "").toLowerCase() === "paid" &&
+    asDate(invoice.paid_at)
+  );
+  const collected = paidInvoices.reduce((sum, invoice) => {
+    const paidAt = asDate(invoice.paid_at)!;
+    return paidAt >= monthStart && paidAt < nextMonthStart
+      ? sum + (Number(invoice.total_amount) || 0)
+      : sum;
+  }, 0);
+  const expected = payingOrders.reduce((sum, order) => {
+    const chargeAt = firstDate(order.next_charge_at, order.renewal_at);
+    return chargeAt && chargeAt > now && chargeAt < nextMonthStart
+      ? sum + orderCharge(order)
+      : sum;
+  }, 0);
+
+  const history = Array.from({ length: 12 }, (_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - (11 - index), 1);
+    const next = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+    const end = new Date(next.getTime() - 1);
+    const mrr = orders
+      .filter((order) => isOrderActiveAt(order, end))
+      .reduce((sum, order) => sum + orderMrr(order), 0);
+    const cashCollected = paidInvoices.reduce((sum, invoice) => {
+      const paidAt = asDate(invoice.paid_at)!;
+      return paidAt >= date && paidAt < next ? sum + (Number(invoice.total_amount) || 0) : sum;
+    }, 0);
+    return {
+      month: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`,
+      label: new Intl.DateTimeFormat("en-US", { month: "short", year: "2-digit" }).format(date),
+      mrr: roundMoney(mrr),
+      cashCollected: roundMoney(cashCollected),
+    };
+  });
+
+  const activeAtMonthStart = orders.filter((order) => isOrderActiveAt(order, monthStart));
+  const startingMrr = activeAtMonthStart.reduce((sum, order) => sum + orderMrr(order), 0);
+  const endedThisMonth = activeAtMonthStart.filter((order) => {
+    const endedAt = firstDate(order.churned_at, order.canceled_at);
+    return endedAt && endedAt >= monthStart && endedAt < nextMonthStart;
+  });
+  const newThisMonth = orders.filter((order) => {
+    const revenueStart = asDate(order.trial_end_at) || firstDate(order.activated_at, order.created_at);
+    return !order.in_trial && revenueStart && revenueStart >= monthStart && revenueStart < nextMonthStart;
+  });
+  const churnedMrr = endedThisMonth.reduce((sum, order) => sum + orderMrr(order), 0);
+  const newMrr = newThisMonth.reduce((sum, order) => sum + orderMrr(order), 0);
+
+  const offerNames = new Set(orders.flatMap((order) => getValues(order).map((item) => item.name)));
+  const offers = [...offerNames].map((name) => {
+    const containsOffer = (order: any) => getValues(order).some((item) => item.name === name);
+    const mrrForOffer = (order: any) =>
+      getValues(order).filter((item) => item.name === name).reduce((sum, item) => sum + item.mrr, 0);
+    const starting = activeAtMonthStart.filter(containsOffer);
+    const active = activeOrders.filter(containsOffer);
+    const ended = endedThisMonth.filter(containsOffer);
+    const added = newThisMonth.filter(containsOffer);
+    const cancellations = ended.filter((order) => !!order.canceled_at);
+    return {
+      name,
+      activeSubscriptions: active.length,
+      mrr: roundMoney(active.filter((order) => !order.in_trial).reduce((sum, order) => sum + mrrForOffer(order), 0)),
+      newMrr: roundMoney(added.reduce((sum, order) => sum + mrrForOffer(order), 0)),
+      churnedMrr: roundMoney(ended.reduce((sum, order) => sum + mrrForOffer(order), 0)),
+      effectiveChurnRate: starting.length ? roundMoney(ended.length / starting.length * 100) : null,
+      cancellationRate: starting.length ? roundMoney(cancellations.length / starting.length * 100) : null,
+      confidence: "Order + invoice",
+    };
+  }).sort((a, b) => b.mrr - a.mrr || b.activeSubscriptions - a.activeSubscriptions);
+
   return {
-    syncedAt: new Date(),
-    orderCount: orderDetails.length,
-    revenue,
-    offers: Array.from(offerMap, ([name, value]) => ({ name, ...value })).sort((a, b) => b.revenue - a.revenue),
-    attribution: Array.from(attributionMap.values()).sort((a, b) => b.orders - a.orders),
-    orders: orderDetails,
+    syncedAt: now,
+    currency,
+    current: {
+      mrr: roundMoney(payingOrders.reduce((sum, order) => sum + orderMrr(order), 0)),
+      trialingCount: trialingOrders.length,
+      trialingMrr: roundMoney(trialingOrders.reduce((sum, order) => sum + orderMrr(order), 0)),
+      atRiskCount: atRiskOrders.length,
+      atRiskMrr: roundMoney(atRiskOrders.reduce((sum, order) => sum + orderMrr(order), 0)),
+      activeSubscriptions: activeOrders.length,
+      activeSubscribers: new Set(activeOrders.map((order) => String(order.contact_id || order.contact?.id || "")).filter(Boolean)).size,
+    },
+    month: {
+      label: periodLabel,
+      collected: roundMoney(collected),
+      expected: roundMoney(expected),
+      projected: roundMoney(collected + expected),
+    },
+    history,
+    performance: {
+      periodLabel,
+      effectiveChurnRate: activeAtMonthStart.length ? roundMoney(endedThisMonth.length / activeAtMonthStart.length * 100) : 0,
+      grossMrrChurnRate: startingMrr ? roundMoney(churnedMrr / startingMrr * 100) : 0,
+      netMrrRetention: startingMrr ? roundMoney(Math.max(0, startingMrr - churnedMrr) / startingMrr * 100) : 100,
+      newMrr: roundMoney(newMrr),
+      churnedMrr: roundMoney(churnedMrr),
+    },
+    offers,
+    methodology: `MRR normalizes current recurring order prices to a monthly run-rate, so historical MRR is an estimate when a subscription changed price. Cash uses invoices currently marked paid; refunded and partially refunded invoices are excluded. Churn compares subscriptions active at the start of the month. Reporting is limited to ${currency}; no one-time orders are included.`,
   };
+}
+
+let recurringRevenueCache: { snapshot: CfRecurringRevenueSnapshot; expiresAt: number } | null = null;
+let recurringRevenueInFlight: Promise<CfRecurringRevenueSnapshot> | null = null;
+
+export async function getCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenueSnapshot> {
+  if (recurringRevenueCache && recurringRevenueCache.expiresAt > Date.now()) {
+    return recurringRevenueCache.snapshot;
+  }
+  if (recurringRevenueInFlight) return recurringRevenueInFlight;
+
+  recurringRevenueInFlight = buildCfRecurringRevenueSnapshot()
+    .then((snapshot) => {
+      recurringRevenueCache = { snapshot, expiresAt: Date.now() + 30_000 };
+      return snapshot;
+    })
+    .finally(() => {
+      recurringRevenueInFlight = null;
+    });
+  return recurringRevenueInFlight;
 }
 
 // Verify the HMAC signature ClickFunnels sends on every webhook

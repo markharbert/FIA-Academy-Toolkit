@@ -44,7 +44,7 @@ import {
   parseCfWebhookEvent,
   handleCfEnrollmentEvent,
   checkCfEnrollmentByEmail,
-  getCfCommercialSnapshot,
+  getCfRecurringRevenueSnapshot,
   CF_WORKSPACE_DOMAIN,
   CF_SSO_DOMAIN,
   CF_API_TOKEN,
@@ -1999,55 +1999,13 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/admin/cf/commercial-sync", requireAdmin, async (_req: Request, res: Response) => {
+  app.post("/api/admin/cf/recurring-revenue", requireAdmin, async (_req: Request, res: Response) => {
     try {
-      // A manual refresh keeps third-party reporting intentional and avoids
-      // background API load. It is strictly read-only in ClickFunnels.
-      const health = await storage.getMemberHealth();
-      const memberContactIds = new Set(health.map((member) => member.cfContactId).filter((id): id is string => !!id));
-      const snapshot = await getCfCommercialSnapshot(memberContactIds);
-      const memberByContactId = new Map(health.filter((member) => member.cfContactId).map((member) => [member.cfContactId!, { name: member.displayName, email: member.email }]));
-      // This ledger is exclusively for the current FIA-only reporting view.
-      // Replace any earlier broad rows rather than preserving stale records.
-      await db.execute(sql`DELETE FROM cf_commercial_orders`);
-      for (const order of snapshot.orders) {
-        await db.execute(sql`
-          INSERT INTO cf_commercial_orders (
-            cf_order_id, cf_contact_id, offer_name, order_date, amount, attribution_source, attribution_campaign, synced_at
-          ) VALUES (
-            ${order.id}, ${order.contactId}, ${order.offer}, ${order.createdAt ? new Date(order.createdAt) : null},
-            ${String(order.amount)}, ${order.source}, ${order.campaign}, NOW()
-          )
-          ON CONFLICT (cf_order_id) DO UPDATE SET
-            cf_contact_id = EXCLUDED.cf_contact_id, offer_name = EXCLUDED.offer_name, order_date = EXCLUDED.order_date,
-            amount = EXCLUDED.amount, attribution_source = EXCLUDED.attribution_source,
-            attribution_campaign = EXCLUDED.attribution_campaign, synced_at = NOW()
-        `);
-      }
-      const offerByContactId = new Map(snapshot.orders.filter((order) => order.contactId).map((order) => [order.contactId!, order.offer]));
-      const cohortMap = new Map<string, { month: string; offer: string; members: number; activated: number; retained: number; churned: number }>();
-      for (const member of health) {
-        if (!member.cfEnrolledAt) continue;
-        const month = member.cfEnrolledAt.toISOString().slice(0, 7);
-        const offer = member.cfContactId ? offerByContactId.get(member.cfContactId) || "Unattributed product" : "Unattributed product";
-        const key = `${month}|${offer}`;
-        const cohort = cohortMap.get(key) || { month, offer, members: 0, activated: 0, retained: 0, churned: 0 };
-        cohort.members++;
-        if (member.lastLoginAt) cohort.activated++;
-        if (member.cfEnrolled && member.lastActivityAt && member.lastActivityAt >= new Date(member.cfEnrolledAt.getTime() + 30 * 24 * 60 * 60 * 1000)) cohort.retained++;
-        if (!member.cfEnrolled) cohort.churned++;
-        cohortMap.set(key, cohort);
-      }
-      const { orders, ...summary } = snapshot;
-      const payments = orders.map((order) => ({
-        ...order,
-        memberName: memberByContactId.get(order.contactId || "")?.name || null,
-        memberEmail: memberByContactId.get(order.contactId || "")?.email || null,
-      }));
-      res.json({ ...summary, orders: payments, cohorts: Array.from(cohortMap.values()).sort((a, b) => b.month.localeCompare(a.month)) });
+      // Manual, read-only refresh: no ClickFunnels records are modified.
+      res.json(await getCfRecurringRevenueSnapshot());
     } catch (err: any) {
-      console.error("[CF Admin] Commercial sync error:", err?.message || err);
-      res.status(502).json({ message: err?.message || "ClickFunnels commercial sync failed" });
+      console.error("[CF Admin] Recurring revenue sync error:", err?.message || err);
+      res.status(502).json({ message: err?.message || "ClickFunnels recurring revenue sync failed" });
     }
   });
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -15,8 +15,10 @@ import {
   Loader2, CheckCircle, AlertCircle, Users, Copy, ExternalLink,
   Webhook, UserCheck, UserX, Zap, Key, Search, Clock, RotateCw, Link,
   Activity, Ban, CheckCircle2, Folder, KeyRound, LogIn, LogOut, Shield, ShieldOff, UserCog, Video, Download,
+  DollarSign, TrendingUp, ShieldAlert, CircleHelp, CalendarDays,
 } from "lucide-react";
 import { CourseImportCard } from "@/components/cf-course-import";
+import { CartesianGrid, ComposedChart, Bar, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -122,12 +124,15 @@ interface MemberHealthRecord {
   dmoDays30: number; meaningfulActions30: number; segment: "not_started" | "active" | "engaged" | "at_risk"; reasons: string[];
 }
 
-interface CommercialSnapshot {
-  syncedAt: string; orderCount: number; revenue: number;
-  offers: Array<{ name: string; orders: number; revenue: number }>;
-  attribution: Array<{ source: string; campaign: string; orders: number; revenue: number }>;
-  orders: Array<{ id: string; contactId: string | null; memberName?: string | null; memberEmail?: string | null; offer: string; createdAt: string | null; amount: number; source: string | null; campaign: string | null }>;
-  cohorts: Array<{ month: string; offer: string; members: number; activated: number; retained: number; churned: number }>;
+interface RecurringRevenueSnapshot {
+  syncedAt: string;
+  currency: string;
+  current: { mrr: number; trialingCount: number; trialingMrr: number; atRiskCount: number; atRiskMrr: number; activeSubscriptions: number; activeSubscribers: number };
+  month: { label: string; collected: number; expected: number; projected: number };
+  history: Array<{ month: string; label: string; mrr: number; cashCollected: number }>;
+  performance: { periodLabel: string; effectiveChurnRate: number; grossMrrChurnRate: number; netMrrRetention: number; newMrr: number; churnedMrr: number };
+  offers: Array<{ name: string; activeSubscriptions: number; mrr: number; newMrr: number; churnedMrr: number; effectiveChurnRate: number | null; cancellationRate: number | null; confidence: string }>;
+  methodology: string;
 }
 
 interface CfReconciliationRun {
@@ -800,25 +805,53 @@ function MemberHealthTab() {
   </div>;
 }
 
-function CommercialInsightsTab() {
+function RecurringRevenueTab() {
   const [hasLoaded, setHasLoaded] = useState(false);
-  const query = useQuery<CommercialSnapshot>({
-    queryKey: ["/api/admin/cf/commercial-sync"],
+  const query = useQuery<RecurringRevenueSnapshot>({
+    queryKey: ["/api/admin/cf/recurring-revenue"],
     enabled: hasLoaded,
     staleTime: 0,
-    refetchInterval: hasLoaded ? 30000 : false,
     queryFn: async () => {
-      const response = await apiRequest("POST", "/api/admin/cf/commercial-sync");
-      if (!response.ok) throw new Error("Commercial sync could not be completed");
-      return response.json() as Promise<CommercialSnapshot>;
+      const response = await apiRequest("POST", "/api/admin/cf/recurring-revenue");
+      if (!response.ok) throw new Error("Recurring revenue sync could not be completed");
+      return response.json() as Promise<RecurringRevenueSnapshot>;
     },
   });
   const snapshot = query.data;
-  const money = (value: number) => new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value);
-  return <div className="space-y-5">
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="text-xl font-semibold">Commercial Insights</h2><p className="mt-1 text-sm text-muted-foreground">A read-only view of recent Fearless Influencer Academy payments from known members.</p></div><Button onClick={() => { setHasLoaded(true); query.refetch(); }} disabled={query.isFetching}>{query.isFetching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCw className="mr-2 h-4 w-4" />}{snapshot ? "Refresh FIA payments" : "Load FIA payments"}</Button></div>
-    {query.isError && <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">The Fearless Influencer Academy payment refresh could not complete. Check that the configured ClickFunnels token can read recent order details.</div>}
-    {!snapshot ? <Card className="border-dashed"><CardContent className="py-10 text-center text-sm text-muted-foreground">Run a read-only refresh to see only recent Fearless Influencer Academy payments from known members.</CardContent></Card> : <><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><div className="rounded-xl border bg-card p-4"><p className="text-sm text-muted-foreground">FIA payments · last 90 days</p><p className="mt-1 text-2xl font-bold">{snapshot.orderCount}</p></div><div className="rounded-xl border bg-card p-4"><p className="text-sm text-muted-foreground">Recorded payment value</p><p className="mt-1 text-2xl font-bold">{money(snapshot.revenue)}</p></div><div className="rounded-xl border bg-card p-4"><p className="text-sm text-muted-foreground">Last refresh</p><p className="mt-1 text-base font-semibold">{formatDateTime(snapshot.syncedAt)}</p></div></div><Card><CardHeader className="pb-3"><CardTitle className="text-base">Recent FIA payment activity</CardTitle><CardDescription>Updates automatically every 30 seconds while this view is open. Showing the newest payments first.</CardDescription></CardHeader><CardContent><div className="max-h-80 space-y-2 overflow-y-auto pr-2">{snapshot.orders.length ? snapshot.orders.slice().sort((a, b) => Date.parse(b.createdAt || "") - Date.parse(a.createdAt || "")).map((payment) => <div key={payment.id} className="flex items-center justify-between gap-4 rounded-md border px-3 py-3 text-sm"><div className="min-w-0"><p className="truncate font-medium">{payment.memberName || payment.memberEmail || "Known Academy member"}</p><p className="truncate text-xs text-muted-foreground">{payment.offer} · {payment.createdAt ? formatDateTime(payment.createdAt) : "Date unavailable"}{payment.source ? ` · ${payment.source}${payment.campaign ? ` / ${payment.campaign}` : ""}` : ""}</p></div><span className="shrink-0 font-semibold">{money(payment.amount)}</span></div>) : <p className="py-8 text-center text-sm text-muted-foreground">No matching FIA member payments were found in the last 90 days.</p>}</div></CardContent></Card><div className="grid gap-5 lg:grid-cols-2"><Card><CardHeader className="pb-3"><CardTitle className="text-base">Fearless Influencer Academy</CardTitle><CardDescription>Only exact FIA product matches from the last 90 days are included.</CardDescription></CardHeader><CardContent className="space-y-2">{snapshot.offers.map((offer) => <div key={offer.name} className="flex justify-between gap-3 rounded-md border px-3 py-2 text-sm"><span className="truncate">{offer.name}</span><span className="shrink-0 font-medium">{offer.orders} · {money(offer.revenue)}</span></div>)}</CardContent></Card><Card><CardHeader className="pb-3"><CardTitle className="text-base">Reliable attribution</CardTitle><CardDescription>Shown only when ClickFunnels provided UTM source or campaign data for an FIA payment.</CardDescription></CardHeader><CardContent className="space-y-2">{snapshot.attribution.length ? snapshot.attribution.slice(0, 8).map((item) => <div key={`${item.source}-${item.campaign}`} className="flex justify-between gap-3 rounded-md border px-3 py-2 text-sm"><span className="truncate">{item.source} · {item.campaign}</span><span className="shrink-0 font-medium">{item.orders} payments</span></div>) : <p className="text-sm text-muted-foreground">No reliable campaign attribution was returned for recent FIA payments.</p>}</CardContent></Card></div><Card><CardHeader className="pb-3"><CardTitle className="text-base">Enrollment cohorts</CardTitle><CardDescription>Activation is a Toolkit login. Retention means the member remained active at least 30 days after enrollment. Churn reflects currently inactive ClickFunnels access.</CardDescription></CardHeader><CardContent><div className="overflow-x-auto rounded-md border"><table className="w-full min-w-[760px] text-sm"><thead className="border-b bg-muted/50 text-left text-xs text-muted-foreground"><tr><th className="px-3 py-3">Enrollment month</th><th className="px-3 py-3">Offer</th><th className="px-3 py-3">Members</th><th className="px-3 py-3">Activated</th><th className="px-3 py-3">Retained</th><th className="px-3 py-3">Churned</th></tr></thead><tbody className="divide-y">{snapshot.cohorts.map((cohort) => <tr key={`${cohort.month}-${cohort.offer}`}><td className="px-3 py-2">{cohort.month}</td><td className="max-w-64 truncate px-3 py-2">{cohort.offer}</td><td className="px-3 py-2">{cohort.members}</td><td className="px-3 py-2">{cohort.activated}</td><td className="px-3 py-2">{cohort.retained}</td><td className="px-3 py-2">{cohort.churned}</td></tr>)}</tbody></table></div></CardContent></Card></>}
+  const money = (value: number) => new Intl.NumberFormat(undefined, { style: "currency", currency: snapshot?.currency || "USD", maximumFractionDigits: 0 }).format(value);
+  const pct = (value: number | null) => value == null ? "—" : `${value.toFixed(1)}%`;
+  const refresh = () => {
+    if (!hasLoaded) setHasLoaded(true);
+    else query.refetch();
+  };
+  const metric = (label: string, value: string, detail: string, tone: string, icon: ReactNode) => (
+    <div className="group rounded-xl border border-slate-200/80 bg-card p-4 shadow-sm transition-transform hover:-translate-y-0.5 dark:border-slate-800">
+      <div className="flex items-center justify-between"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p><span className={`rounded-md p-1.5 ${tone}`}>{icon}</span></div>
+      {query.isLoading ? <div className="mt-3 h-8 w-28 animate-pulse rounded bg-muted" /> : <p className="mt-2 text-2xl font-bold tracking-tight">{value}</p>}
+      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+    </div>
+  );
+  return <div className="space-y-6">
+    <div className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
+      <div><div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-primary"><span className="h-1.5 w-1.5 rounded-full bg-primary" />Revenue operations</div><h2 className="text-2xl font-bold tracking-tight">Recurring Revenue</h2><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Subscription health, cash collection, and offer-level retention in one operating view.</p></div>
+      <Button variant="outline" onClick={refresh} disabled={query.isFetching} className="shrink-0">{query.isFetching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCw className="mr-2 h-4 w-4" />}{snapshot ? "Refresh data" : "Load revenue data"}</Button>
+    </div>
+    {query.isError && <div className="flex items-start gap-3 rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-900 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /><div><p className="font-semibold">Revenue sync failed</p><p className="mt-1">ClickFunnels did not return a complete recurring revenue snapshot. Try the read-only refresh again.</p><Button size="sm" variant="outline" className="mt-3" onClick={refresh}>Try again</Button></div></div>}
+    {!snapshot ? (query.isLoading ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[1,2,3,4].map((item) => <div key={item} className="h-32 animate-pulse rounded-xl bg-muted" />)}</div> : <Card className="border-dashed"><CardContent className="py-14 text-center"><DollarSign className="mx-auto h-8 w-8 text-primary/60" /><p className="mt-3 font-semibold">No revenue snapshot loaded</p><p className="mt-1 text-sm text-muted-foreground">Run a manual refresh to inspect current subscription health.</p></CardContent></Card>) : <>
+      <section><div className="mb-3 flex items-center justify-between"><h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Current run-rate</h3><span className="text-xs text-muted-foreground">As of {formatDateTime(snapshot.syncedAt)}</span></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {metric("MRR", money(snapshot.current.mrr), "Paying · excludes trials", "bg-primary/10 text-primary", <DollarSign className="h-4 w-4" />)}
+        {metric("Trialing", String(snapshot.current.trialingCount), `${money(snapshot.current.trialingMrr)} potential`, "bg-amber-500/10 text-amber-700 dark:text-amber-300", <Clock className="h-4 w-4" />)}
+        {metric("At risk", String(snapshot.current.atRiskCount), `${money(snapshot.current.atRiskMrr)} past due`, "bg-rose-500/10 text-rose-700 dark:text-rose-300", <ShieldAlert className="h-4 w-4" />)}
+        {metric("Active subscriptions", String(snapshot.current.activeSubscriptions), `${snapshot.current.activeSubscribers} subscribers`, "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300", <CheckCircle2 className="h-4 w-4" />)}
+      </div></section>
+      <section><div className="mb-3 flex items-center gap-2"><CalendarDays className="h-4 w-4 text-primary" /><h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">This month · {snapshot.month.label}</h3></div><div className="grid gap-3 md:grid-cols-3">
+        {[[ "Collected so far", money(snapshot.month.collected), "Actual paid invoices" ], [ "Expected rest of month", money(snapshot.month.expected), "Includes recurring invoices" ], [ "Projected month total", money(snapshot.month.projected), "Collected + expected" ]].map(([label, value, detail]) => <div key={label} className="rounded-xl border bg-muted/20 p-4"><p className="text-xs font-medium text-muted-foreground">{label}</p><p className="mt-2 text-xl font-bold">{value}</p><p className="mt-1 text-xs text-muted-foreground">{detail}</p></div>)}
+      </div></section>
+      <Card className="overflow-hidden"><CardHeader className="border-b pb-4"><CardTitle className="flex items-center gap-2 text-base"><TrendingUp className="h-4 w-4 text-primary" />MRR & cash collected</CardTitle><CardDescription>Last 12 months of estimated recurring run-rate and paid invoices.</CardDescription></CardHeader><CardContent className="h-80 pt-6"><ResponsiveContainer width="100%" height="100%"><ComposedChart data={snapshot.history} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" /><XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} /><YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11 }} tickFormatter={(value) => `${snapshot.currency} ${Number(value) / 1000}k`} /><Tooltip formatter={(value: number) => money(value)} contentStyle={{ borderRadius: 10, border: "1px solid hsl(var(--border))", background: "hsl(var(--card))" }} /><Legend wrapperStyle={{ fontSize: 12 }} /><Bar dataKey="cashCollected" name="Cash collected" fill="hsl(var(--primary) / .25)" radius={[4,4,0,0]} /><Line type="monotone" dataKey="mrr" name="MRR run-rate" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={{ r: 3, fill: "hsl(var(--primary))" }} /></ComposedChart></ResponsiveContainer></CardContent></Card>
+      <section><div className="mb-3 flex items-center justify-between"><h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Performance overview</h3><span className="text-xs text-muted-foreground">{snapshot.performance.periodLabel}</span></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{[[ "Effective churn", pct(snapshot.performance.effectiveChurnRate) ], [ "Gross MRR churn", pct(snapshot.performance.grossMrrChurnRate) ], [ "Gross MRR retention", pct(snapshot.performance.netMrrRetention) ], [ "New MRR", money(snapshot.performance.newMrr) ], [ "Churned MRR", money(snapshot.performance.churnedMrr) ]].map(([label, value]) => <div key={label} className="rounded-xl border bg-card p-4"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p><p className="mt-2 text-xl font-bold">{value}</p></div>)}</div></section>
+      <Card><CardHeader className="pb-3"><CardTitle className="text-base">Offers · {snapshot.month.label}</CardTitle><CardDescription>Subscription mix and retention signals by offer.</CardDescription></CardHeader><CardContent><div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[900px] text-sm"><thead className="border-b bg-muted/50 text-left text-[10px] uppercase tracking-wide text-muted-foreground"><tr><th className="px-3 py-3">Offer</th><th className="px-3 py-3 text-right">Active subs</th><th className="px-3 py-3 text-right">MRR</th><th className="px-3 py-3 text-right">New MRR</th><th className="px-3 py-3 text-right">Churned MRR</th><th className="px-3 py-3 text-right">Effective churn</th><th className="px-3 py-3 text-right">Cancellation</th><th className="px-3 py-3">Confidence</th></tr></thead><tbody className="divide-y">{snapshot.offers.map((offer) => <tr key={offer.name} className="transition-colors hover:bg-muted/30"><td className="max-w-[240px] truncate px-3 py-3 font-medium">{offer.name}</td><td className="px-3 py-3 text-right">{offer.activeSubscriptions}</td><td className="px-3 py-3 text-right font-medium">{money(offer.mrr)}</td><td className="px-3 py-3 text-right">{money(offer.newMrr)}</td><td className="px-3 py-3 text-right">{money(offer.churnedMrr)}</td><td className="px-3 py-3 text-right">{pct(offer.effectiveChurnRate)}</td><td className="px-3 py-3 text-right">{pct(offer.cancellationRate)}</td><td className="px-3 py-3"><Badge variant="outline" className={offer.confidence.toLowerCase().includes("invoice") ? "border-amber-300 text-amber-700" : "border-emerald-300 text-emerald-700"}>{offer.confidence}</Badge></td></tr>)}</tbody></table></div></CardContent></Card>
+      <div className="flex items-start gap-2 border-t pt-4 text-xs text-muted-foreground"><CircleHelp className="mt-0.5 h-3.5 w-3.5 shrink-0" /><p>{snapshot.methodology}</p></div>
+    </>}
   </div>;
 }
 
@@ -1245,7 +1278,7 @@ export default function ClickFunnelsAdminPage() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="members">Members</TabsTrigger>
           <TabsTrigger value="member-health">Member Health</TabsTrigger>
-          <TabsTrigger value="commercial">Commercial Insights</TabsTrigger>
+          <TabsTrigger value="commercial">Recurring Revenue</TabsTrigger>
           <TabsTrigger value="integration">Integration</TabsTrigger>
           <TabsTrigger value="webhook-activity">Webhook Activity</TabsTrigger>
           <TabsTrigger value="course-import">Course Import</TabsTrigger>
@@ -1260,7 +1293,7 @@ export default function ClickFunnelsAdminPage() {
           <MemberHealthTab />
         </TabsContent>
         <TabsContent value="commercial" className="mt-4">
-          <CommercialInsightsTab />
+          <RecurringRevenueTab />
         </TabsContent>
         <TabsContent value="integration" className="mt-4 space-y-6">
           <CfIntegrationSection />
