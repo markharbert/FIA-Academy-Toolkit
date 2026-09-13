@@ -5,6 +5,8 @@ import {
   extractCfLessonContent,
   extractVideoUrl,
   extractVimeoUrl,
+  recoverSelectedCfLessonTree,
+  type CfTreeNode,
 } from "./cf-import-client";
 
 test("extracts a Vimeo player URL and preserves its private-video token", () => {
@@ -104,4 +106,59 @@ test("authenticated lesson requests retain the browser identity ClickFunnels req
       Accept: "text/html,application/xhtml+xml",
     },
   );
+});
+
+test("recovers one selected lesson without rescanning a large source course", async () => {
+  const sourceCourseOutline: CfTreeNode[] = Array.from({ length: 32 }, (_, moduleIndex) => ({
+    type: "module",
+    cfId: `module-${moduleIndex}`,
+    title: `Module ${moduleIndex}`,
+    published: true,
+    sortOrder: moduleIndex,
+    children: Array.from({ length: 24 }, (_, lessonIndex) => ({
+      type: "lesson" as const,
+      cfId: `lesson-${moduleIndex}-${lessonIndex}`,
+      title: `Lesson ${moduleIndex}-${lessonIndex}`,
+      published: true,
+      sortOrder: lessonIndex,
+      children: [],
+    })),
+  }));
+  const selectedModule = sourceCourseOutline[17];
+  const selectedLesson = selectedModule.children[11];
+  const filteredTree: CfTreeNode[] = [{
+    ...selectedModule,
+    children: [selectedLesson],
+  }];
+  const requestedUrls: string[] = [];
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    requestedUrls.push(url);
+    if (!url.endsWith(`/courses/lessons/${selectedLesson.cfId}`)) {
+      throw new Error(`Unexpected ClickFunnels request: ${url}`);
+    }
+    return new Response(JSON.stringify({
+      data: {
+        body: "<main class=\"lesson-content\"><p>Selected lesson content only.</p></main>",
+      },
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  try {
+    await recoverSelectedCfLessonTree(filteredTree);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(requestedUrls.length, 1);
+  assert.match(requestedUrls[0], /\/courses\/lessons\/lesson-17-11$/);
+  assert.doesNotMatch(requestedUrls.join("\n"), /\/courses\/sections(?:\/|$)/);
+  assert.doesNotMatch(requestedUrls.join("\n"), /\/lessons(?:\?|$)/);
+  assert.equal(filteredTree[0].children[0].recoveryStatus, "partial");
+  assert.match(filteredTree[0].children[0].content ?? "", /Selected lesson content only/);
 });
