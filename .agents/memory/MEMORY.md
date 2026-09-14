@@ -33,3 +33,4 @@
 - [Member notification timing](member-notification-timing.md) — evaluate schedules in each member's IANA timezone and catch up after missed target hours.
 - [Topic Pulse search allowance](topic-pulse-search-allowance.md) — monthly usage counts member searches, not underlying keyword API lookups.
 - [ClickFunnels revenue data](cf-recurring-revenue-data.md) — recurring cadence/statuses and one-time refund statuses require explicit reconciliation rules.
+- [Revenue refresh deployment](revenue-refresh-deployment.md) — 15-minute ClickFunnels refreshes require always-on production compute; Autoscale pauses timers.

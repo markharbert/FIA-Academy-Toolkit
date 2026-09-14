@@ -756,9 +756,10 @@ export async function getCfRegularRevenueSnapshot(): Promise<CfRegularRevenueSna
   await loadPersistentRegularRevenueCache();
   if (regularRevenueCache) {
     if (regularRevenueCache.expiresAt <= Date.now()) {
-      void refreshCfRegularRevenueSnapshot().catch((error) =>
-        console.error("[CF Regular Revenue] background refresh failed; serving cached snapshot:", error?.message || error)
-      );
+      // On a cold start or after a missed refresh, do not label an old
+      // persistent snapshot as current. Coalesce with the scheduler's refresh
+      // and return only after ClickFunnels has supplied a fresh snapshot.
+      return refreshCfRegularRevenueSnapshot();
     }
     return regularRevenueCache.snapshot;
   }
@@ -859,9 +860,9 @@ export async function getCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenu
   await loadPersistentRecurringRevenueCache();
   if (recurringRevenueCache) {
     if (recurringRevenueCache.expiresAt <= Date.now()) {
-      void refreshCfRecurringRevenueSnapshot().catch((error) => {
-        console.error("[CF Recurring Revenue] Background refresh failed; serving cached snapshot:", error?.message || error);
-      });
+      // Coalesce with the background scheduler and wait for a fresh snapshot
+      // rather than returning an old "As of" timestamp to the first admin.
+      return refreshCfRecurringRevenueSnapshot();
     }
     return recurringRevenueCache.snapshot;
   }
