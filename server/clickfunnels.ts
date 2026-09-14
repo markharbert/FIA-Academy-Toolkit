@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import { storage } from "./storage";
 import { sendAccessRestoredEmail, isEmailConfigured } from "./email";
 import { db } from "./db";
+import { allocateLargestRemainder, zonedDateParts, zonedMidnight } from "./cfRegularRevenueMath";
 import { sql } from "drizzle-orm";
 
 // Strip any accidental protocol prefix and trailing slash.
@@ -98,6 +99,7 @@ export interface CfRegularRevenueSnapshot {
     label: string;
     dateLabel: string;
     totalRevenue: number;
+    cashCollected: number;
     orders: number;
     averageOrderValue: number;
     refunded: number;
@@ -542,13 +544,32 @@ async function buildCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenueSnap
   };
 }
 
+type RegularRevenueAllocation = { name: string; amount: number };
+type RegularRevenueEvent = { at: Date; amount: number; offers: RegularRevenueAllocation[] };
 type RegularRevenueOrder = {
-  paidAt: Date | null;
-  refundedAt: Date | null;
-  revenue: number;
-  refunded: number;
-  offers: Array<{ name: string; revenue: number; refundedAmount: number; cashCollected: number }>;
+  grossEvents: RegularRevenueEvent[];
+  refundEvents: RegularRevenueEvent[];
 };
+
+function allocateRegularRevenueOffers(lineItems: any[], total: number): RegularRevenueAllocation[] {
+  const items = lineItems.map((item: any) => ({
+    name: String(
+      item.products_variant?.name
+      || item.products_price?.name
+      || item.description
+      || "Unnamed offer"
+    ),
+    amount: Math.max(0, Number(item.amount ?? item.products_price?.amount) || 0),
+  }));
+  const itemTotal = items.reduce((sum, item) => sum + item.amount, 0);
+  if (!items.length) return [{ name: "Unnamed offer", amount: total }];
+  return items.map((item) => ({
+    name: item.name,
+    amount: itemTotal > 0 ? total * item.amount / itemTotal : total / items.length,
+  }));
+}
+
+const CF_REVENUE_TIME_ZONE = "America/New_York";
 
 async function buildCfRegularRevenueSnapshot(): Promise<CfRegularRevenueSnapshot> {
   if (!CF_API_TOKEN || !CF_WORKSPACE_DOMAIN || !CF_WORKSPACE_ID) {
@@ -561,16 +582,41 @@ async function buildCfRegularRevenueSnapshot(): Promise<CfRegularRevenueSnapshot
     headers,
     "ClickFunnels regular order sync",
   );
-  const oneTimeOrders = allOrders.filter((order) => order.order_type !== "subscription-order");
+  const oneTimeOrders = allOrders.filter((order) =>
+    order.order_type === "one-time-order"
+    && order.live_mode !== false
+    && ["paid", "refunded", "partially-refunded", "partially-paid"]
+      .includes(String(order.billing_status || "").trim().toLowerCase().replaceAll("_", "-"))
+  );
+  const oneTimeOrderIds = new Set(oneTimeOrders.map((order) => String(order.id)));
   const invoicesByOrder = new Map<string, any[]>();
-  let cursor = 0;
-  await Promise.all(Array.from({ length: Math.min(8, oneTimeOrders.length) }, async () => {
-    while (cursor < oneTimeOrders.length) {
-      const order = oneTimeOrders[cursor++];
-      invoicesByOrder.set(String(order.id), await fetchCfPages(
-        `${apiBase}/orders/${order.id}/invoices?per=100`,
+  const allInvoices = await fetchCfPages(
+    `${apiBase}/workspaces/${CF_WORKSPACE_ID}/orders/invoices?sort_order=desc&per=100`,
+    headers,
+    "ClickFunnels regular invoice sync",
+  );
+  for (const invoice of allInvoices) {
+    const orderId = String(invoice.order_id ?? invoice.order?.id ?? "");
+    if (!oneTimeOrderIds.has(orderId)) continue;
+    const orderInvoices = invoicesByOrder.get(orderId) || [];
+    orderInvoices.push(invoice);
+    invoicesByOrder.set(orderId, orderInvoices);
+  }
+
+  const transactionsByOrder = new Map<string, any[]>();
+  const ordersWithRefunds = oneTimeOrders.filter((order) =>
+    (invoicesByOrder.get(String(order.id)) || []).some((invoice) =>
+      String(invoice.status || "").trim().toLowerCase().replaceAll("_", "-").includes("refunded")
+    )
+  );
+  let transactionCursor = 0;
+  await Promise.all(Array.from({ length: Math.min(8, ordersWithRefunds.length) }, async () => {
+    while (transactionCursor < ordersWithRefunds.length) {
+      const order = ordersWithRefunds[transactionCursor++];
+      transactionsByOrder.set(String(order.id), await fetchCfPages(
+        `${apiBase}/orders/${order.id}/transactions?per=100`,
         headers,
-        `ClickFunnels invoices for regular order ${order.id}`,
+        `ClickFunnels transactions for regular order ${order.id}`,
       ));
     }
   }));
@@ -582,130 +628,175 @@ async function buildCfRegularRevenueSnapshot(): Promise<CfRegularRevenueSnapshot
       currencyCounts.set(code, (currencyCounts.get(code) || 0) + 1);
     }
   }
+  if (currencyCounts.size > 1) {
+    throw new Error(
+      `Regular revenue contains multiple eligible currencies (${[...currencyCounts.keys()].sort().join(", ")}); refusing to combine them`
+    );
+  }
   const currency = [...currencyCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "USD";
   const records: RegularRevenueOrder[] = [];
   for (const order of oneTimeOrders) {
     const invoices = (invoicesByOrder.get(String(order.id)) || []).filter((invoice) =>
       String(invoice.currency || order.currency || "usd").toUpperCase() === currency
     );
-    const charged = invoices.filter((invoice) => {
-      const status = String(invoice.status || "").toLowerCase();
-      return ["paid", "refunded", "partially-refunded", "partially_refunded"].includes(status)
-        && firstDate(invoice.paid_at, invoice.created_at);
+    const orderTransactions = transactionsByOrder.get(String(order.id)) || [];
+    const approvedSales = orderTransactions.filter((transaction) =>
+      String(transaction.external_type || "").trim().toLowerCase() === "sale"
+      && String(transaction.result || "").trim().toLowerCase() === "approved"
+      && String(transaction.currency || order.currency || "usd").toUpperCase() === currency
+    );
+    const grossEvents = invoices.flatMap((invoice): RegularRevenueEvent[] => {
+      const status = String(invoice.status || "").trim().toLowerCase().replaceAll("_", "-");
+      const amount = Number(invoice.total_amount) || 0;
+      const matchingSale = approvedSales.find((transaction) =>
+        Math.abs((Number(transaction.amount) || 0) - amount) < 0.005
+      ) || approvedSales[0];
+      const atValue = invoice.paid_at || matchingSale?.created_at;
+      const at = atValue ? new Date(atValue) : null;
+      if (
+        !["paid", "refunded", "partially-refunded"].includes(status)
+        || !at
+        || Number.isNaN(at.getTime())
+        || amount <= 0
+      ) return [];
+      const lineItems = Array.isArray(invoice.line_items) && invoice.line_items.length
+        ? invoice.line_items
+        : (Array.isArray(order.line_items) ? order.line_items : []);
+      return [{ at, amount, offers: allocateRegularRevenueOffers(lineItems, amount) }];
     });
-    const revenue = charged.reduce((sum, invoice) => sum + (Number(invoice.total_amount) || 0), 0);
-    const refunded = invoices.reduce((sum, invoice) => {
-      const status = String(invoice.status || "").toLowerCase();
-      const explicit = Number(invoice.refunded_amount ?? invoice.amount_refunded ?? invoice.refund_amount);
-      if (Number.isFinite(explicit) && explicit > 0) return sum + explicit;
-      return ["refunded", "partially-refunded", "partially_refunded"].includes(status)
-        ? sum + (Number(invoice.total_amount) || 0)
-        : sum;
-    }, 0);
-    if (!charged.length) continue;
-    const paidAt = charged
-      .map((invoice) => firstDate(invoice.paid_at, invoice.created_at))
-      .filter((date): date is Date => date !== null)
-      .sort((a, b) => a.getTime() - b.getTime())[0] || null;
-    const refundedAt = invoices
-      .filter((invoice) => {
-        const status = String(invoice.status || "").toLowerCase();
-        return ["refunded", "partially-refunded", "partially_refunded"].includes(status)
-          || Number(invoice.refunded_amount ?? invoice.amount_refunded ?? invoice.refund_amount) > 0;
-      })
-      .map((invoice) => firstDate(invoice.refunded_at, invoice.updated_at, invoice.paid_at, invoice.created_at))
-      .filter((date): date is Date => date !== null)
-      .sort((a, b) => a.getTime() - b.getTime())[0] || null;
-    const rawItems = (Array.isArray(order.line_items) ? order.line_items : []).map((item: any) => ({
-      name: String(item.original_product?.name || item.products_variant?.name || "Unnamed offer"),
-      amount: Math.max(0, Number(item.products_price?.amount) || 0) * Math.max(1, Number(item.quantity) || 1),
-    }));
-    const itemTotal = rawItems.reduce((sum: number, item: { amount: number }) => sum + item.amount, 0);
-    const refundedAmount = Math.min(revenue, refunded);
-    const cashCollected = revenue - refundedAmount;
-    const offers = rawItems.length
-      ? rawItems.map((item: { name: string; amount: number }) => ({
-          name: item.name,
-          revenue: itemTotal > 0 ? revenue * item.amount / itemTotal : revenue / rawItems.length,
-          refundedAmount: itemTotal > 0 ? refundedAmount * item.amount / itemTotal : refundedAmount / rawItems.length,
-          cashCollected: itemTotal > 0 ? cashCollected * item.amount / itemTotal : cashCollected / rawItems.length,
-        }))
-      : [{ name: "Unnamed offer", revenue, refundedAmount, cashCollected }];
-    records.push({ paidAt, refundedAt, revenue, refunded, offers });
+    if (!grossEvents.length) continue;
+
+    const refundBasis = grossEvents.flatMap((event) => event.offers);
+    const refundBasisTotal = refundBasis.reduce((sum, offer) => sum + offer.amount, 0);
+    const refundEvents = orderTransactions.flatMap((transaction): RegularRevenueEvent[] => {
+      const isApprovedRefund =
+        String(transaction.external_type || "").trim().toLowerCase() === "refund"
+        && String(transaction.result || "").trim().toLowerCase() === "approved"
+        && String(transaction.currency || order.currency || "usd").toUpperCase() === currency;
+      const at = firstDate(transaction.created_at, transaction.updated_at);
+      const amount = Math.abs(Number(transaction.amount) || 0);
+      if (!isApprovedRefund || !at || amount <= 0) return [];
+      const offers = refundBasis.length
+        ? refundBasis.map((offer) => ({
+            name: offer.name,
+            amount: refundBasisTotal > 0 ? amount * offer.amount / refundBasisTotal : amount / refundBasis.length,
+          }))
+        : [{ name: "Unnamed offer", amount }];
+      return [{ at, amount, offers }];
+    });
+    records.push({ grossEvents, refundEvents });
   }
 
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const previousMonthEnd = new Date(monthStart.getTime() - 1);
-  const last3MonthsStart = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-  const last12MonthsStart = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-  const earliest = records.map((record) => record.paidAt).filter((date): date is Date => date !== null).sort((a, b) => a.getTime() - b.getTime())[0] || last12MonthsStart;
-  const allTimeStart = new Date(earliest.getFullYear(), earliest.getMonth(), 1);
+  const nowParts = zonedDateParts(now, CF_REVENUE_TIME_ZONE);
+  const monthStart = zonedMidnight(nowParts.year, nowParts.month - 1, 1, CF_REVENUE_TIME_ZONE);
+  const nextMonthStart = zonedMidnight(nowParts.year, nowParts.month, 1, CF_REVENUE_TIME_ZONE);
+  const previousMonthStart = zonedMidnight(nowParts.year, nowParts.month - 2, 1, CF_REVENUE_TIME_ZONE);
+  const last3MonthsStart = zonedMidnight(nowParts.year, nowParts.month - 3, 1, CF_REVENUE_TIME_ZONE);
+  const last12MonthsStart = zonedMidnight(nowParts.year, nowParts.month - 12, 1, CF_REVENUE_TIME_ZONE);
+  const earliest = records.flatMap((record) => record.grossEvents.map((event) => event.at)).sort((a, b) => a.getTime() - b.getTime())[0] || last12MonthsStart;
+  const earliestParts = zonedDateParts(earliest, CF_REVENUE_TIME_ZONE);
+  const allTimeStart = zonedMidnight(earliestParts.year, earliestParts.month - 1, 1, CF_REVENUE_TIME_ZONE);
   const formatMonth = (date: Date, year = true) =>
-    new Intl.DateTimeFormat("en-US", { month: "short", ...(year ? { year: "numeric" } : {}) }).format(date);
+    new Intl.DateTimeFormat("en-US", { timeZone: CF_REVENUE_TIME_ZONE, month: "short", ...(year ? { year: "numeric" } : {}) }).format(date);
   const formatRange = (start: Date, end: Date) =>
-    start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth()
-      ? new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(start)
-      : start.getFullYear() === end.getFullYear()
-        ? `${formatMonth(start, false)}–${formatMonth(end, false)} ${end.getFullYear()}`
+    zonedDateParts(start, CF_REVENUE_TIME_ZONE).year === zonedDateParts(end, CF_REVENUE_TIME_ZONE).year
+      && zonedDateParts(start, CF_REVENUE_TIME_ZONE).month === zonedDateParts(end, CF_REVENUE_TIME_ZONE).month
+      ? new Intl.DateTimeFormat("en-US", { timeZone: CF_REVENUE_TIME_ZONE, month: "long", year: "numeric" }).format(start)
+      : zonedDateParts(start, CF_REVENUE_TIME_ZONE).year === zonedDateParts(end, CF_REVENUE_TIME_ZONE).year
+        ? `${formatMonth(start, false)}–${formatMonth(end, false)} ${zonedDateParts(end, CF_REVENUE_TIME_ZONE).year}`
         : `${formatMonth(start)}–${formatMonth(end)}`;
-  const buildPeriod = (label: string, start: Date, end: Date) => {
-    const selected = records.filter((record) => record.paidAt && record.paidAt >= start && record.paidAt <= end);
-    const refunded = records.filter((record) => record.refundedAt && record.refundedAt >= start && record.refundedAt <= end);
-    const totalRevenue = selected.reduce((sum, record) => sum + record.revenue, 0);
+  const buildPeriod = (label: string, start: Date, endExclusive: Date) => {
+    const grossEvents = records.flatMap((record) => record.grossEvents
+      .filter((event) => event.at >= start && event.at < endExclusive)
+      .map((event) => ({ record, event })));
+    const refundEvents = records.flatMap((record) => record.refundEvents
+      .filter((event) => event.at >= start && event.at < endExclusive)
+      .map((event) => ({ record, event })));
+    const totalRevenue = grossEvents.reduce((sum, row) => sum + row.event.amount, 0);
+    const refunded = refundEvents.reduce((sum, row) => sum + row.event.amount, 0);
+    const cashCollected = totalRevenue - refunded;
     const offerMap = new Map<string, { orders: Set<RegularRevenueOrder>; refundedOrders: Set<RegularRevenueOrder>; revenue: number; refundedAmount: number; cashCollected: number }>();
-    for (const record of selected) for (const offer of record.offers) {
+    for (const { record, event } of grossEvents) for (const offer of event.offers) {
       const row = offerMap.get(offer.name) || { orders: new Set<RegularRevenueOrder>(), refundedOrders: new Set<RegularRevenueOrder>(), revenue: 0, refundedAmount: 0, cashCollected: 0 };
       row.orders.add(record);
-      if (offer.refundedAmount > 0) row.refundedOrders.add(record);
-      row.revenue += offer.revenue;
-      row.refundedAmount += offer.refundedAmount;
-      row.cashCollected += offer.cashCollected;
+      row.revenue += offer.amount;
+      row.cashCollected += offer.amount;
       offerMap.set(offer.name, row);
+    }
+    for (const { record, event } of refundEvents) for (const offer of event.offers) {
+      const row = offerMap.get(offer.name) || { orders: new Set<RegularRevenueOrder>(), refundedOrders: new Set<RegularRevenueOrder>(), revenue: 0, refundedAmount: 0, cashCollected: 0 };
+      row.refundedOrders.add(record);
+      row.refundedAmount += offer.amount;
+      row.cashCollected -= offer.amount;
+      offerMap.set(offer.name, row);
+    }
+    const rawOffers = [...offerMap.entries()].map(([name, row]) => ({
+      name,
+      orders: row.orders.size,
+      refundedOrders: row.refundedOrders.size,
+      revenue: row.revenue,
+      refundedAmount: row.refundedAmount,
+      averageOrderValue: row.orders.size ? roundMoney(row.revenue / row.orders.size) : 0,
+    }));
+    const reconcileRounded = <T extends { revenue: number; refundedAmount: number }>(
+      rows: T[],
+      field: "revenue" | "refundedAmount",
+      target: number,
+    ) => allocateLargestRemainder(rows.map((row) => row[field]), target);
+    const roundedRevenue = reconcileRounded(rawOffers, "revenue", roundMoney(totalRevenue));
+    const roundedRefunds = reconcileRounded(rawOffers, "refundedAmount", roundMoney(refunded));
+    const offers = rawOffers.map((offer, index) => ({
+      ...offer,
+      revenue: roundedRevenue[index],
+      refundedAmount: roundedRefunds[index],
+      cashCollected: roundMoney(roundedRevenue[index] - roundedRefunds[index]),
+    })).sort((a, b) => b.revenue - a.revenue || b.orders - a.orders);
+    const offerRevenue = roundMoney(offers.reduce((sum, offer) => sum + offer.revenue, 0));
+    const offerRefunds = roundMoney(offers.reduce((sum, offer) => sum + offer.refundedAmount, 0));
+    const offerCash = roundMoney(offers.reduce((sum, offer) => sum + offer.cashCollected, 0));
+    if (offerRevenue !== roundMoney(totalRevenue) || offerRefunds !== roundMoney(refunded) || offerCash !== roundMoney(cashCollected)) {
+      throw new Error(`Regular revenue reconciliation failed for ${label}`);
     }
     return {
       label,
-      dateLabel: formatRange(start, end),
+      dateLabel: formatRange(start, new Date(endExclusive.getTime() - 1)),
       totalRevenue: roundMoney(totalRevenue),
-      orders: selected.length,
-      averageOrderValue: selected.length ? roundMoney(totalRevenue / selected.length) : 0,
-      refunded: roundMoney(refunded.reduce((sum, record) => sum + record.refunded, 0)),
-      offers: [...offerMap.entries()].map(([name, row]) => ({
-        name,
-        orders: row.orders.size,
-        revenue: roundMoney(row.revenue),
-        refundedOrders: row.refundedOrders.size,
-        refundedAmount: roundMoney(row.refundedAmount),
-        cashCollected: roundMoney(row.cashCollected),
-        averageOrderValue: row.orders.size ? roundMoney(row.revenue / row.orders.size) : 0,
-      })).sort((a, b) => b.revenue - a.revenue || b.orders - a.orders),
+      cashCollected: roundMoney(cashCollected),
+      orders: new Set(grossEvents.map((row) => row.record)).size,
+      averageOrderValue: grossEvents.length ? roundMoney(totalRevenue / new Set(grossEvents.map((row) => row.record)).size) : 0,
+      refunded: roundMoney(refunded),
+      offers,
     };
   };
   const history = Array.from({ length: 12 }, (_, index) => {
-    const date = new Date(now.getFullYear(), now.getMonth() - (11 - index), 1);
-    const next = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+    const date = zonedMidnight(nowParts.year, nowParts.month - 12 + index, 1, CF_REVENUE_TIME_ZONE);
+    const next = zonedMidnight(nowParts.year, nowParts.month - 11 + index, 1, CF_REVENUE_TIME_ZONE);
+    const dateParts = zonedDateParts(date, CF_REVENUE_TIME_ZONE);
     return {
-      month: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`,
-      label: new Intl.DateTimeFormat("en-US", { month: "short", year: "2-digit" }).format(date),
-      revenue: roundMoney(records.filter((record) => record.paidAt && record.paidAt >= date && record.paidAt < next).reduce((sum, record) => sum + record.revenue, 0)),
+      month: `${dateParts.year}-${String(dateParts.month).padStart(2, "0")}`,
+      label: new Intl.DateTimeFormat("en-US", { timeZone: CF_REVENUE_TIME_ZONE, month: "short", year: "2-digit" }).format(date),
+      revenue: roundMoney(
+        records.flatMap((record) => record.grossEvents).filter((event) => event.at >= date && event.at < next).reduce((sum, event) => sum + event.amount, 0)
+        - records.flatMap((record) => record.refundEvents).filter((event) => event.at >= date && event.at < next).reduce((sum, event) => sum + event.amount, 0)
+      ),
     };
   });
   const periods = {
-    thisMonth: buildPeriod("This month", monthStart, now),
-    lastMonth: buildPeriod("Last month", previousMonthStart, previousMonthEnd),
-    last3Months: buildPeriod("Last 3 months", last3MonthsStart, now),
-    last12Months: buildPeriod("Last 12 months", last12MonthsStart, now),
-    allTime: buildPeriod("All time", allTimeStart, now),
+    thisMonth: buildPeriod("This month", monthStart, nextMonthStart),
+    lastMonth: buildPeriod("Last month", previousMonthStart, monthStart),
+    last3Months: buildPeriod("Last 3 months", last3MonthsStart, nextMonthStart),
+    last12Months: buildPeriod("Last 12 months", last12MonthsStart, nextMonthStart),
+    allTime: buildPeriod("All time", allTimeStart, nextMonthStart),
   };
   return {
     syncedAt: now,
     currency,
-    collectedToDate: periods.allTime.totalRevenue,
-    month: { label: periods.thisMonth.dateLabel, collected: periods.thisMonth.totalRevenue },
+    collectedToDate: periods.allTime.cashCollected,
+    month: { label: periods.thisMonth.dateLabel, collected: periods.thisMonth.cashCollected },
     history,
     periods,
-    methodology: `Revenue is the original gross value of paid one-time-order invoices, including orders later marked refunded or partially refunded. Offer refunds count orders with any full or partial refund and show the refunded value allocated to that offer. Offer cash collected is gross offer revenue minus ClickFunnels-reported refunds. Refund dollars are allocated proportionally across offers in multi-offer orders. Refunds are not subtracted from total revenue, matching ClickFunnels order reporting. Subscription orders are excluded. Reporting is limited to ${currency}.`,
+    methodology: `Gross revenue comes from paid one-time invoice snapshots. Cash collected is gross revenue received in the period minus approved refund transactions processed in the period. Offer attribution uses invoice line items; refund dollars are allocated proportionally across the refunded order's invoiced offers. Test and subscription orders are excluded. Reporting is limited to ${currency}.`,
   };
 }
 

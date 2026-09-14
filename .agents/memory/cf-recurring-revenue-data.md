@@ -9,8 +9,8 @@ Treat current ClickFunnels service and trial flags as authoritative for present-
 
 **How to apply:** Keep summary totals reconciled to offer-line totals. Count active subscriptions by recurring offer line and subscribers by unique contact. Label safely inferred line cadence as invoice-derived, and never infer cadence from a single invoice.
 
-For regular revenue, treat `paid`, `refunded`, and `partially-refunded` invoices as gross orders. Include their original invoice totals in revenue and order counts, then show refunded invoice value separately rather than subtracting it.
+For regular revenue, use eligible live one-time invoice snapshots for gross receipts and approved refund transactions for exact refund amounts and processing dates. Refunded invoices can lose `paid_at`; only then, use the linked approved sale transaction's `created_at` as the original receipt timestamp.
 
-**Why:** ClickFunnels returns the partial-refund status with a hyphen, and its order report uses gross revenue. Excluding refunded invoices produces net revenue and fewer orders, which will not reconcile with ClickFunnels.
+**Why:** Invoice totals do not change after partial refunds, while `GET /api/v2/orders/:orderId/transactions` exposes exact negative refund adjustments. Live validation also found refunded invoices without `paid_at`, even though the original approved sale transaction remains available.
 
-**How to apply:** Normalize both hyphenated and underscored refund statuses. Keep gross revenue, order count, refunds, and allocated offer revenue separate, and verify offer revenue sums to gross revenue. At offer level, count any fully or partially refunded order once, allocate its refund proportionally in multi-offer orders, and define cash collected as gross allocated revenue minus that refund.
+**How to apply:** Fetch invoices in bulk from `GET /api/v2/workspaces/:workspaceId/orders/invoices`, then fetch transactions only for refunded orders. Attribute offers from historical invoice line items, allocate integer cents by largest remainder, use New York half-open periods, and reject snapshots unless offer gross, refunds, and cash reconcile exactly to period totals. Never combine mixed currencies.

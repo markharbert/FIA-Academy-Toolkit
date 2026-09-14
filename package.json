@@ -14,6 +14,7 @@
     "test:course-builder": "node --import tsx --test server/course-structure.test.ts",
     "test:cf-import": "node --import tsx --test server/cf-import-client.test.ts",
     "test:notification-scheduler": "node --import tsx --test server/notificationScheduler.test.ts",
+    "test:cf-regular-revenue": "node --import tsx --test server/cfRegularRevenueMath.test.ts",
     "test:lesson-editor": "vitest run client/src/pages/admin-lesson-editor.test.tsx",
     "test:topic-pulse": "node --import tsx --test server/topic-pulse-search-route.test.ts"
   },
