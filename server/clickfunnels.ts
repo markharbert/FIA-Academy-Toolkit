@@ -201,7 +201,11 @@ async function fetchCfPages(url: string, headers: Record<string, string>, label:
     page++;
     const response: Response = await fetch(nextUrl, {
       headers,
-      signal: AbortSignal.timeout(30_000),
+      // Revenue refreshes run entirely in the background. ClickFunnels can
+      // occasionally take longer than 30 seconds to return large invoice
+      // pages, so allow the sync to finish rather than discarding the whole
+      // snapshot. This never affects revenue-page response time.
+      signal: AbortSignal.timeout(120_000),
     });
     if (!response.ok) throw new Error(`${label} failed: ${response.status}`);
     const body = await response.json();
@@ -756,10 +760,9 @@ export async function getCfRegularRevenueSnapshot(): Promise<CfRegularRevenueSna
   await loadPersistentRegularRevenueCache();
   if (regularRevenueCache) {
     if (regularRevenueCache.expiresAt <= Date.now()) {
-      // On a cold start or after a missed refresh, do not label an old
-      // persistent snapshot as current. Coalesce with the scheduler's refresh
-      // and return only after ClickFunnels has supplied a fresh snapshot.
-      return refreshCfRegularRevenueSnapshot();
+      void refreshCfRegularRevenueSnapshot().catch((error) =>
+        console.error("[CF Regular Revenue] background refresh failed; serving cached snapshot:", error?.message || error)
+      );
     }
     return regularRevenueCache.snapshot;
   }
@@ -860,9 +863,9 @@ export async function getCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenu
   await loadPersistentRecurringRevenueCache();
   if (recurringRevenueCache) {
     if (recurringRevenueCache.expiresAt <= Date.now()) {
-      // Coalesce with the background scheduler and wait for a fresh snapshot
-      // rather than returning an old "As of" timestamp to the first admin.
-      return refreshCfRecurringRevenueSnapshot();
+      void refreshCfRecurringRevenueSnapshot().catch((error) => {
+        console.error("[CF Recurring Revenue] Background refresh failed; serving cached snapshot:", error?.message || error);
+      });
     }
     return recurringRevenueCache.snapshot;
   }

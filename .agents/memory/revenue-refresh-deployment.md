@@ -7,4 +7,4 @@ Keep production on an always-on VM while Recurring Revenue and Regular Revenue d
 
 **Why:** An Autoscale deployment stops when idle, so interval timers do not run while no users are visiting. The next admin request previously received the persisted stale snapshot while a refresh ran afterward.
 
-**How to apply:** Preserve the VM deployment target unless refresh scheduling is moved to an independent managed scheduler. When a persisted snapshot is stale after startup, revenue endpoints should coalesce with and await the active refresh rather than presenting the old timestamp as current.
+**How to apply:** Preserve the VM deployment target unless refresh scheduling is moved to an independent managed scheduler. Revenue endpoints must always return the latest completed persistent snapshot immediately; stale snapshots trigger a background refresh but page requests never wait on ClickFunnels.
