@@ -14,7 +14,7 @@ type RegularPeriod = {
   orders: number;
   averageOrderValue: number;
   refunded: number;
-  offers: Array<{ name: string; orders: number; revenue: number; averageOrderValue: number }>;
+  offers: Array<{ name: string; orders: number; revenue: number; cashCollected?: number; averageOrderValue: number }>;
 };
 type RegularRevenueSnapshot = {
   syncedAt: string;
@@ -97,9 +97,9 @@ export default function AdminRegularRevenuePage() {
       </section>
 
       <Card>
-        <CardHeader className="border-b"><CardTitle className="text-base">Offers · {period.dateLabel}</CardTitle><CardDescription>One-time order performance allocated from each order’s paid invoice total.</CardDescription></CardHeader>
+        <CardHeader className="border-b"><CardTitle className="text-base">Offers · {period.dateLabel}</CardTitle><CardDescription>Gross one-time revenue and the cash remaining after refunds, allocated to each offer.</CardDescription></CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-muted/40 text-xs uppercase text-muted-foreground"><tr><th className="px-4 py-3 text-left">Offer {info("The ClickFunnels product or variant name.")}</th><th className="px-4 py-3 text-right">Orders {info("Paid orders containing this offer.")}</th><th className="px-4 py-3 text-right">Revenue {info("Paid invoice revenue allocated to this offer.")}</th><th className="px-4 py-3 text-right">Avg order value {info("Offer revenue divided by orders.")}</th></tr></thead><tbody className="divide-y">{period.offers.length ? period.offers.map((offer) => <tr key={offer.name} className="hover:bg-muted/30"><td className="px-4 py-3 font-medium">{offer.name}</td><td className="px-4 py-3 text-right tabular-nums">{offer.orders}</td><td className="px-4 py-3 text-right tabular-nums">{money(offer.revenue)}</td><td className="px-4 py-3 text-right tabular-nums">{money(offer.averageOrderValue, 2)}</td></tr>) : <tr><td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">No paid one-time orders in this period.</td></tr>}</tbody></table></div>
+          <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-muted/40 text-xs uppercase text-muted-foreground"><tr><th className="px-4 py-3 text-left">Offer {info("The ClickFunnels product or variant name.")}</th><th className="px-4 py-3 text-right">Orders {info("Paid orders containing this offer.")}</th><th className="px-4 py-3 text-right">Revenue {info("Original gross paid-invoice value allocated to this offer, before refunds.")}</th><th className="px-4 py-3 text-right">Cash collected {info("Gross offer revenue minus ClickFunnels-reported refunds.")}</th><th className="px-4 py-3 text-right">Avg order value {info("Gross offer revenue divided by orders.")}</th></tr></thead><tbody className="divide-y">{period.offers.length ? period.offers.map((offer) => <tr key={offer.name} className="hover:bg-muted/30"><td className="px-4 py-3 font-medium">{offer.name}</td><td className="px-4 py-3 text-right tabular-nums">{offer.orders}</td><td className="px-4 py-3 text-right tabular-nums">{money(offer.revenue)}</td><td className="px-4 py-3 text-right font-semibold tabular-nums">{offer.cashCollected == null ? <span className="text-xs font-normal text-muted-foreground">Updating…</span> : money(offer.cashCollected)}</td><td className="px-4 py-3 text-right tabular-nums">{money(offer.averageOrderValue, 2)}</td></tr>) : <tr><td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">No paid one-time orders in this period.</td></tr>}</tbody></table></div>
           <p className="border-t px-4 py-3 text-xs leading-relaxed text-muted-foreground">{data.methodology}</p>
         </CardContent>
       </Card>

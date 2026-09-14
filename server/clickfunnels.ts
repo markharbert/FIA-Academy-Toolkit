@@ -101,7 +101,7 @@ export interface CfRegularRevenueSnapshot {
     orders: number;
     averageOrderValue: number;
     refunded: number;
-    offers: Array<{ name: string; orders: number; revenue: number; averageOrderValue: number }>;
+    offers: Array<{ name: string; orders: number; revenue: number; cashCollected: number; averageOrderValue: number }>;
   }>;
   methodology: string;
 }
@@ -547,7 +547,7 @@ type RegularRevenueOrder = {
   refundedAt: Date | null;
   revenue: number;
   refunded: number;
-  offers: Array<{ name: string; revenue: number }>;
+  offers: Array<{ name: string; revenue: number; cashCollected: number }>;
 };
 
 async function buildCfRegularRevenueSnapshot(): Promise<CfRegularRevenueSnapshot> {
@@ -621,12 +621,14 @@ async function buildCfRegularRevenueSnapshot(): Promise<CfRegularRevenueSnapshot
       amount: Math.max(0, Number(item.products_price?.amount) || 0) * Math.max(1, Number(item.quantity) || 1),
     }));
     const itemTotal = rawItems.reduce((sum: number, item: { amount: number }) => sum + item.amount, 0);
+    const cashCollected = Math.max(0, revenue - refunded);
     const offers = rawItems.length
       ? rawItems.map((item: { name: string; amount: number }) => ({
           name: item.name,
           revenue: itemTotal > 0 ? revenue * item.amount / itemTotal : revenue / rawItems.length,
+          cashCollected: itemTotal > 0 ? cashCollected * item.amount / itemTotal : cashCollected / rawItems.length,
         }))
-      : [{ name: "Unnamed offer", revenue }];
+      : [{ name: "Unnamed offer", revenue, cashCollected }];
     records.push({ paidAt, refundedAt, revenue, refunded, offers });
   }
 
@@ -650,11 +652,12 @@ async function buildCfRegularRevenueSnapshot(): Promise<CfRegularRevenueSnapshot
     const selected = records.filter((record) => record.paidAt && record.paidAt >= start && record.paidAt <= end);
     const refunded = records.filter((record) => record.refundedAt && record.refundedAt >= start && record.refundedAt <= end);
     const totalRevenue = selected.reduce((sum, record) => sum + record.revenue, 0);
-    const offerMap = new Map<string, { orders: Set<RegularRevenueOrder>; revenue: number }>();
+    const offerMap = new Map<string, { orders: Set<RegularRevenueOrder>; revenue: number; cashCollected: number }>();
     for (const record of selected) for (const offer of record.offers) {
-      const row = offerMap.get(offer.name) || { orders: new Set<RegularRevenueOrder>(), revenue: 0 };
+      const row = offerMap.get(offer.name) || { orders: new Set<RegularRevenueOrder>(), revenue: 0, cashCollected: 0 };
       row.orders.add(record);
       row.revenue += offer.revenue;
+      row.cashCollected += offer.cashCollected;
       offerMap.set(offer.name, row);
     }
     return {
@@ -668,6 +671,7 @@ async function buildCfRegularRevenueSnapshot(): Promise<CfRegularRevenueSnapshot
         name,
         orders: row.orders.size,
         revenue: roundMoney(row.revenue),
+        cashCollected: roundMoney(row.cashCollected),
         averageOrderValue: row.orders.size ? roundMoney(row.revenue / row.orders.size) : 0,
       })).sort((a, b) => b.revenue - a.revenue || b.orders - a.orders),
     };
@@ -695,7 +699,7 @@ async function buildCfRegularRevenueSnapshot(): Promise<CfRegularRevenueSnapshot
     month: { label: periods.thisMonth.dateLabel, collected: periods.thisMonth.totalRevenue },
     history,
     periods,
-    methodology: `Revenue is the original gross value of paid one-time-order invoices, including orders later marked refunded or partially refunded. Refunds are shown separately and are not subtracted from total revenue, matching ClickFunnels order reporting. Subscription orders are excluded. Reporting is limited to ${currency}.`,
+    methodology: `Revenue is the original gross value of paid one-time-order invoices, including orders later marked refunded or partially refunded. Offer cash collected is gross offer revenue minus ClickFunnels-reported refunds, allocated proportionally across offers in multi-offer orders. Refunds are shown separately and are not subtracted from total revenue, matching ClickFunnels order reporting. Subscription orders are excluded. Reporting is limited to ${currency}.`,
   };
 }
 

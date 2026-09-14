@@ -13,4 +13,4 @@ For regular revenue, treat `paid`, `refunded`, and `partially-refunded` invoices
 
 **Why:** ClickFunnels returns the partial-refund status with a hyphen, and its order report uses gross revenue. Excluding refunded invoices produces net revenue and fewer orders, which will not reconcile with ClickFunnels.
 
-**How to apply:** Normalize both hyphenated and underscored refund statuses. Keep gross revenue, order count, refunds, and allocated offer revenue as separate values, and verify that offer revenue sums to gross revenue.
+**How to apply:** Normalize both hyphenated and underscored refund statuses. Keep gross revenue, order count, refunds, and allocated offer revenue as separate values, and verify that offer revenue sums to gross revenue. At offer level, define cash collected as gross allocated revenue minus ClickFunnels-reported refunds, proportionally allocated for multi-offer orders.
