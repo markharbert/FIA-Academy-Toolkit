@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Tooltip as HelpTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -850,7 +851,24 @@ export function RecurringRevenueTab() {
   const money = (value: number) => new Intl.NumberFormat(undefined, { style: "currency", currency: snapshot?.currency || "USD", maximumFractionDigits: 0 }).format(value);
   const chartMoney = (value: number) => new Intl.NumberFormat(undefined, { style: "currency", currency: snapshot?.currency || "USD", currencyDisplay: "code", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
   const pct = (value: number | null) => value == null ? "—" : `${value.toFixed(1)}%`;
-  const infoIcon = (text: string) => <CircleHelp aria-label={text} title={text} className="h-3 w-3 shrink-0 text-muted-foreground/80" />;
+  const infoIcon = (text: string) => (
+    <HelpTooltip>
+      <TooltipTrigger asChild>
+        <span tabIndex={0} aria-label={text} className="inline-flex cursor-help rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-primary">
+          <CircleHelp aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-muted-foreground/80" />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs text-sm font-normal normal-case leading-relaxed tracking-normal">
+        {text}
+      </TooltipContent>
+    </HelpTooltip>
+  );
+  const recurringHelp: Record<string, string> = {
+    MRR: "The monthly value of all paying subscriptions right now. Free trials are not included.",
+    Trialing: "People using a free trial right now. The smaller amount shows what those trials may be worth each month.",
+    "At risk": "People whose payment is late. The smaller amount shows the monthly money that may be lost.",
+    "Active subscriptions": "The number of subscription plans that are active now. One person can have more than one plan.",
+  };
   const revenueChartTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
     const point = payload[0]?.payload;
@@ -865,7 +883,7 @@ export function RecurringRevenueTab() {
   };
   const metric = (label: string, value: string, detail: string, tone: string, icon: ReactNode, onClick?: () => void) => {
     const content = <>
-      <div className="flex items-center justify-between"><p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}{infoIcon(`${label} calculation details`)}</p><span className={`rounded-md p-1.5 ${tone}`}>{icon}</span></div>
+      <div className="flex items-center justify-between"><p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}{infoIcon(recurringHelp[label])}</p><span className={`rounded-md p-1.5 ${tone}`}>{icon}</span></div>
       {query.isLoading ? <div className="mt-3 h-8 w-28 animate-pulse rounded bg-muted" /> : <p className="mt-2 text-2xl font-bold tracking-tight">{value}</p>}
       <div className="mt-1 flex items-center justify-between gap-2"><p className="text-xs text-muted-foreground">{detail}</p>{onClick && <span className="text-[10px] font-semibold uppercase tracking-wide text-primary">View people</span>}</div>
     </>;
@@ -890,10 +908,20 @@ export function RecurringRevenueTab() {
         {metric("Active subscriptions", String(snapshot.current.activeSubscriptions), `${snapshot.current.activeSubscribers} subscribers`, "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300", <CheckCircle2 className="h-4 w-4" />)}
       </div></section>
       <section><div className="mb-3 flex items-center gap-2"><CalendarDays className="h-4 w-4 text-primary" /><h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">This month · {snapshot.month.label}</h3></div><div className="grid gap-3 md:grid-cols-3">
-        {[[ "Collected so far", money(snapshot.month.collected), "Actual paid invoices" ], [ "Expected rest of month", money(snapshot.month.expected), `Incl. ${money(snapshot.month.expectedAtRisk)} at-risk` ], [ "Projected month total", money(snapshot.month.projected), "Collected + expected" ]].map(([label, value, detail]) => <div key={label} className="rounded-xl border bg-muted/20 p-4"><p className="flex items-center gap-1 text-xs font-medium text-muted-foreground">{label}{infoIcon(`${label} calculation details`)}</p><p className="mt-2 text-xl font-bold">{value}</p><p className="mt-1 text-xs text-muted-foreground">{detail}</p></div>)}
+        {[
+          [ "Collected so far", money(snapshot.month.collected), "Actual paid invoices", "Subscription money that has been paid this month so far." ],
+          [ "Expected rest of month", money(snapshot.month.expected), `Incl. ${money(snapshot.month.expectedAtRisk)} at-risk`, "Subscription money that should still be paid before this month ends. Late payments are included." ],
+          [ "Projected month total", money(snapshot.month.projected), "Collected + expected", "The best estimate of this month's full subscription total. It adds money already paid and money still expected." ],
+        ].map(([label, value, detail, help]) => <div key={label} className="rounded-xl border bg-muted/20 p-4"><p className="flex items-center gap-1 text-xs font-medium text-muted-foreground">{label}{infoIcon(help)}</p><p className="mt-2 text-xl font-bold">{value}</p><p className="mt-1 text-xs text-muted-foreground">{detail}</p></div>)}
       </div></section>
       <Card className="overflow-hidden"><CardHeader className="border-b pb-4"><CardTitle className="flex items-center gap-2 text-base"><TrendingUp className="h-4 w-4 text-primary" />MRR & cash collected</CardTitle><CardDescription>Last 12 months of estimated recurring run-rate and paid invoices.</CardDescription></CardHeader><CardContent className="h-80 pt-6"><ResponsiveContainer width="100%" height="100%"><ComposedChart data={snapshot.history} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" /><XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} /><YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11 }} tickFormatter={(value) => `${snapshot.currency} ${Number(value) / 1000}k`} /><Tooltip content={revenueChartTooltip} cursor={{ stroke: "hsl(var(--primary) / .35)", strokeWidth: 1 }} /><Legend wrapperStyle={{ fontSize: 12 }} /><Bar dataKey="cashCollected" name="Cash collected" fill="hsl(var(--primary) / .25)" radius={[4,4,0,0]} /><Line type="monotone" dataKey="mrr" name="MRR run-rate" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={{ r: 3, fill: "hsl(var(--primary))" }} activeDot={{ r: 5, strokeWidth: 2, stroke: "hsl(var(--card))" }} /></ComposedChart></ResponsiveContainer></CardContent></Card>
-      {selectedPeriod && <section><div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Performance overview</h3><div className="flex items-center gap-3"><select aria-label="Revenue reporting period" value={revenuePeriod} onChange={(event) => setRevenuePeriod(event.target.value as RevenuePeriodKey)} className="h-9 rounded-lg border border-slate-300 bg-card px-3 pr-8 text-sm font-medium text-foreground shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700"><option value="thisMonth">This month</option><option value="lastMonth">Last month</option><option value="last3Months">Last 3 months</option><option value="last12Months">Last 12 months</option><option value="allTime">All time</option></select><span className="text-xs text-muted-foreground">{selectedPeriod.dateLabel}</span></div></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{[[ "Effective churn", pct(selectedPeriod.performance.effectiveChurnRate) ], [ "Gross MRR churn", pct(selectedPeriod.performance.grossMrrChurnRate) ], [ "Net MRR retention", pct(selectedPeriod.performance.netMrrRetention) ], [ "New MRR", money(selectedPeriod.performance.newMrr) ], [ "Churned MRR", money(selectedPeriod.performance.churnedMrr) ]].map(([label, value]) => <div key={label} className="rounded-xl border bg-card p-4"><p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}{infoIcon(`${label} uses the selected period`)}</p><p className="mt-2 text-xl font-bold">{value}</p></div>)}</div></section>}
+      {selectedPeriod && <section><div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Performance overview</h3><div className="flex items-center gap-3"><select aria-label="Revenue reporting period" value={revenuePeriod} onChange={(event) => setRevenuePeriod(event.target.value as RevenuePeriodKey)} className="h-9 rounded-lg border border-slate-300 bg-card px-3 pr-8 text-sm font-medium text-foreground shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700"><option value="thisMonth">This month</option><option value="lastMonth">Last month</option><option value="last3Months">Last 3 months</option><option value="last12Months">Last 12 months</option><option value="allTime">All time</option></select><span className="text-xs text-muted-foreground">{selectedPeriod.dateLabel}</span></div></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{[
+        [ "Effective churn", pct(selectedPeriod.performance.effectiveChurnRate), "The percent of starting subscriptions that ended during this time." ],
+        [ "Gross MRR churn", pct(selectedPeriod.performance.grossMrrChurnRate), "The percent of starting monthly subscription money that was lost during this time." ],
+        [ "Net MRR retention", pct(selectedPeriod.performance.netMrrRetention), "How much starting monthly subscription money stayed, including upgrades and downgrades. Over 100% means it grew." ],
+        [ "New MRR", money(selectedPeriod.performance.newMrr), "New monthly subscription money that started during this time." ],
+        [ "Churned MRR", money(selectedPeriod.performance.churnedMrr), "Monthly subscription money lost when subscriptions ended during this time." ],
+      ].map(([label, value, help]) => <div key={label} className="rounded-xl border bg-card p-4"><p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}{infoIcon(help)}</p><p className="mt-2 text-xl font-bold">{value}</p></div>)}</div></section>}
       {selectedPeriod && <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Offers · {selectedPeriod.dateLabel}</CardTitle>
@@ -905,14 +933,14 @@ export function RecurringRevenueTab() {
               <thead className="border-b bg-muted/50 text-left text-[10px] uppercase tracking-wide text-muted-foreground">
                 <tr>
                   {[
-                    ["Offer", "Recurring product attached to a subscription order"],
-                    ["Active subs", "Active recurring offer lines at the end of the selected period"],
-                    ["MRR", "Recurring prices normalized to a monthly amount"],
-                    ["New MRR", "MRR that began during the selected period"],
-                    ["Churned MRR", "Beginning-period MRR that ended during the selected period"],
-                    ["Effective churn", "Churned subscriptions divided by subscriptions active at period start"],
-                    ["Cancellation", "Canceled subscriptions divided by subscriptions active at period start"],
-                    ["Confidence", "Direct uses the order billing interval; Invoice-derived uses observed invoice cadence"],
+                    ["Offer", "The subscription product or plan the customer bought."],
+                    ["Active subs", "How many subscriptions for this offer were active at the end of this time."],
+                    ["MRR", "The monthly value of the active subscriptions for this offer."],
+                    ["New MRR", "New monthly subscription money this offer added during this time."],
+                    ["Churned MRR", "Monthly subscription money this offer lost during this time."],
+                    ["Effective churn", "The percent of starting subscriptions for this offer that ended during this time."],
+                    ["Cancellation", "The percent of starting subscriptions for this offer that customers canceled."],
+                    ["Confidence", "Direct means ClickFunnels gave us the billing schedule. Invoice-derived means we figured it out from payment dates."],
                   ].map(([label, help], index) => <th key={label} className={`px-3 py-3 ${index > 0 && index < 7 ? "text-right" : ""}`}><span className={`flex items-center gap-1 ${index > 0 && index < 7 ? "justify-end" : ""}`}>{label}{infoIcon(help)}</span></th>)}
                 </tr>
               </thead>
@@ -932,7 +960,7 @@ export function RecurringRevenueTab() {
           </div>
         </CardContent>
       </Card>}
-      <div className="flex items-start gap-2 border-t pt-4 text-xs text-muted-foreground"><CircleHelp className="mt-0.5 h-3.5 w-3.5 shrink-0" /><p>{snapshot.methodology}</p></div>
+      <div className="flex items-start gap-2 border-t pt-4 text-xs text-muted-foreground">{infoIcon("This note explains where the numbers come from and why they may not match other ClickFunnels reports.")}<p>{snapshot.methodology}</p></div>
     </>}
     <Sheet open={detailPanel !== null} onOpenChange={(open) => !open && setDetailPanel(null)}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-xl">

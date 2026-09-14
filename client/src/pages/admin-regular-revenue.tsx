@@ -5,6 +5,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tooltip as HelpTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type PeriodKey = "thisMonth" | "lastMonth" | "last3Months" | "last12Months" | "allTime";
 type RegularPeriod = {
@@ -52,7 +53,18 @@ export default function AdminRegularRevenuePage() {
     style: "currency", currency: data?.currency || "USD", currencyDisplay: "code",
     minimumFractionDigits: decimals, maximumFractionDigits: decimals,
   }).format(value);
-  const info = (label: string) => <CircleHelp className="h-3 w-3 text-muted-foreground" aria-label={label} title={label} />;
+  const info = (text: string) => (
+    <HelpTooltip>
+      <TooltipTrigger asChild>
+        <span tabIndex={0} aria-label={text} className="inline-flex cursor-help rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-primary">
+          <CircleHelp aria-hidden="true" className="h-3.5 w-3.5 text-muted-foreground" />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs text-sm font-normal normal-case leading-relaxed tracking-normal">
+        {text}
+      </TooltipContent>
+    </HelpTooltip>
+  );
   const chartTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
     const point = payload[0].payload as RegularRevenueSnapshot["history"][number];
@@ -83,7 +95,7 @@ export default function AdminRegularRevenuePage() {
 
       <section>
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">This month · cash · {data.month.label}</p>
-        <Card className="overflow-hidden"><div className="h-1 bg-gradient-to-r from-amber-500 to-orange-400" /><CardContent className="py-5"><p className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Collected so far {info("Paid one-time invoices collected this month, excluding subscription orders.")}</p><p className="mt-1 text-3xl font-bold tabular-nums">{money(data.month.collected)}</p><p className="mt-1 text-xs text-muted-foreground">actual paid orders</p></CardContent></Card>
+        <Card className="overflow-hidden"><div className="h-1 bg-gradient-to-r from-amber-500 to-orange-400" /><CardContent className="py-5"><p className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Collected so far {info("The money kept from one-time sales this month after refunds are taken out. Monthly payments are not included.")}</p><p className="mt-1 text-3xl font-bold tabular-nums">{money(data.month.collected)}</p><p className="mt-1 text-xs text-muted-foreground">actual paid orders</p></CardContent></Card>
       </section>
 
       <Card><CardHeader className="border-b pb-4"><CardTitle className="flex items-center gap-2 text-base"><BarChart2 className="h-4 w-4 text-teal-500" />Cash collected · last 12 months</CardTitle><CardDescription>Gross paid one-time invoices minus approved refund transactions by month.</CardDescription></CardHeader><CardContent className="h-80 pt-6"><ResponsiveContainer width="100%" height="100%"><BarChart data={data.history} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" /><XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} /><YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11 }} tickFormatter={(value) => `${data.currency} ${Number(value) / 1000}k`} /><Tooltip content={chartTooltip} cursor={{ fill: "hsl(var(--muted) / .4)" }} /><Bar dataKey={(entry) => entry.cashCollected ?? entry.revenue ?? 0} fill="hsl(174 60% 42% / .5)" stroke="hsl(174 60% 42%)" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer></CardContent></Card>
@@ -92,11 +104,11 @@ export default function AdminRegularRevenuePage() {
         <div className="flex flex-wrap items-center gap-3"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Performance over</p><select value={periodKey} onChange={(event) => setPeriodKey(event.target.value as PeriodKey)} className="rounded-md border bg-background px-3 py-2 text-sm font-medium">{periodOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}</select><span className="text-xs text-muted-foreground">{period.dateLabel}</span></div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {[
-            ["Total revenue", money(period.totalRevenue), "Gross paid one-time invoice revenue for this period, before refunds."],
-            ["Total cash collected", period.cashCollected == null ? "Updating…" : money(period.cashCollected), "Gross revenue received in this period minus approved refunds processed in this period."],
-            ["Orders", period.orders.toLocaleString(), "One-time orders with at least one paid invoice."],
-            ["Average order value", money(period.averageOrderValue, 2), "Total revenue divided by paid orders."],
-            ["Refunded", money(period.refunded, 2), "Approved full and partial refund transactions processed during this period."],
+            ["Total revenue", money(period.totalRevenue), "All money from one-time sales before any refunds are taken out."],
+            ["Total cash collected", period.cashCollected == null ? "Updating…" : money(period.cashCollected), "The money left from one-time sales after refunds are taken out."],
+            ["Orders", period.orders.toLocaleString(), "The number of one-time orders that were paid."],
+            ["Average order value", money(period.averageOrderValue, 2), "The average amount paid in each one-time order."],
+            ["Refunded", money(period.refunded, 2), "Money given back to customers during this time."],
           ].map(([label, value, help]) => <Card key={label}><CardContent className="py-4"><p className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">{label} {info(help)}</p><p className="mt-2 text-2xl font-bold tabular-nums">{value}</p></CardContent></Card>)}
         </div>
       </section>
@@ -104,7 +116,7 @@ export default function AdminRegularRevenuePage() {
       <Card>
         <CardHeader className="border-b"><CardTitle className="text-base">Offers · {period.dateLabel}</CardTitle><CardDescription>Gross one-time revenue and the cash remaining after refunds, allocated to each offer.</CardDescription></CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-sm"><thead className="bg-muted/40 text-xs uppercase text-muted-foreground"><tr><th className="px-4 py-3 text-left">Offer {info("The ClickFunnels product or variant name.")}</th><th className="px-4 py-3 text-right">Orders {info("Paid orders containing this offer.")}</th><th className="px-4 py-3 text-right">Revenue {info("Original gross paid-invoice value allocated to this offer, before refunds.")}</th><th className="px-4 py-3 text-right">Refunds {info("Number and value of refunded or partially refunded orders containing this offer.")}</th><th className="px-4 py-3 text-right">Cash collected {info("Gross offer revenue minus ClickFunnels-reported refunds.")}</th><th className="px-4 py-3 text-right">Avg order value {info("Gross offer revenue divided by orders.")}</th></tr></thead><tbody className="divide-y">{period.offers.length ? period.offers.map((offer) => <tr key={offer.name} className="hover:bg-muted/30"><td className="px-4 py-3 font-medium">{offer.name}</td><td className="px-4 py-3 text-right tabular-nums">{offer.orders}</td><td className="px-4 py-3 text-right tabular-nums">{money(offer.revenue)}</td><td className="px-4 py-3 text-right tabular-nums">{offer.refundedOrders == null || offer.refundedAmount == null ? <span className="text-xs text-muted-foreground">Updating…</span> : <div><p className="font-semibold">{offer.refundedOrders}</p><p className="text-xs text-muted-foreground">{money(offer.refundedAmount, 2)}</p></div>}</td><td className="px-4 py-3 text-right font-semibold tabular-nums">{offer.cashCollected == null ? <span className="text-xs font-normal text-muted-foreground">Updating…</span> : money(offer.cashCollected)}</td><td className="px-4 py-3 text-right tabular-nums">{money(offer.averageOrderValue, 2)}</td></tr>) : <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">No paid one-time orders in this period.</td></tr>}</tbody></table></div>
+          <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-sm"><thead className="bg-muted/40 text-xs uppercase text-muted-foreground"><tr><th className="px-4 py-3 text-left">Offer {info("The product or deal the customer bought.")}</th><th className="px-4 py-3 text-right">Orders {info("How many paid orders included this offer.")}</th><th className="px-4 py-3 text-right">Revenue {info("All money from this offer before refunds are taken out.")}</th><th className="px-4 py-3 text-right">Refunds {info("How many orders were refunded and how much money was given back.")}</th><th className="px-4 py-3 text-right">Cash collected {info("The money left from this offer after refunds are taken out.")}</th><th className="px-4 py-3 text-right">Avg order value {info("The average amount paid in each order for this offer.")}</th></tr></thead><tbody className="divide-y">{period.offers.length ? period.offers.map((offer) => <tr key={offer.name} className="hover:bg-muted/30"><td className="px-4 py-3 font-medium">{offer.name}</td><td className="px-4 py-3 text-right tabular-nums">{offer.orders}</td><td className="px-4 py-3 text-right tabular-nums">{money(offer.revenue)}</td><td className="px-4 py-3 text-right tabular-nums">{offer.refundedOrders == null || offer.refundedAmount == null ? <span className="text-xs text-muted-foreground">Updating…</span> : <div><p className="font-semibold">{offer.refundedOrders}</p><p className="text-xs text-muted-foreground">{money(offer.refundedAmount, 2)}</p></div>}</td><td className="px-4 py-3 text-right font-semibold tabular-nums">{offer.cashCollected == null ? <span className="text-xs font-normal text-muted-foreground">Updating…</span> : money(offer.cashCollected)}</td><td className="px-4 py-3 text-right tabular-nums">{money(offer.averageOrderValue, 2)}</td></tr>) : <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">No paid one-time orders in this period.</td></tr>}</tbody></table></div>
           <p className="border-t px-4 py-3 text-xs leading-relaxed text-muted-foreground">{data.methodology}</p>
         </CardContent>
       </Card>
