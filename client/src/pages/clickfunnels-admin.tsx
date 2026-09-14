@@ -830,7 +830,7 @@ function MemberHealthTab() {
   </div>;
 }
 
-function RecurringRevenueTab() {
+export function RecurringRevenueTab() {
   const [detailPanel, setDetailPanel] = useState<"trialing" | "atRisk" | null>(null);
   const [revenuePeriod, setRevenuePeriod] = useState<RevenuePeriodKey>("thisMonth");
   const query = useQuery<RecurringRevenueSnapshot>({
@@ -1393,7 +1393,6 @@ export default function ClickFunnelsAdminPage() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="members">Members</TabsTrigger>
           <TabsTrigger value="member-health">Member Health</TabsTrigger>
-          <TabsTrigger value="commercial">Recurring Revenue</TabsTrigger>
           <TabsTrigger value="integration">Integration</TabsTrigger>
           <TabsTrigger value="webhook-activity">Webhook Activity</TabsTrigger>
           <TabsTrigger value="course-import">Course Import</TabsTrigger>
@@ -1406,9 +1405,6 @@ export default function ClickFunnelsAdminPage() {
         </TabsContent>
         <TabsContent value="member-health" className="mt-4">
           <MemberHealthTab />
-        </TabsContent>
-        <TabsContent value="commercial" className="mt-4">
-          <RecurringRevenueTab />
         </TabsContent>
         <TabsContent value="integration" className="mt-4 space-y-6">
           <CfIntegrationSection />

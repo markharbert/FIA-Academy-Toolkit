@@ -43,6 +43,7 @@ import {
   CalendarDays,
   BookMarked,
   LayoutList,
+  DollarSign,
 } from "lucide-react";
 import logoImage from "@assets/image_1788559097620.png";
 import cfLogo from "@/assets/cf-logo.png";
@@ -446,6 +447,25 @@ export function AppSidebar() {
                     >
                       <img src={cfLogo} alt="ClickFunnels" className="h-4 w-4 object-contain" />
                       <span>ClickFunnels</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+            <SidebarSeparator />
+            <SidebarGroup>
+              <SidebarGroupLabel>REVENUE</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={location.startsWith("/admin/revenue/recurring-revenue")}
+                      tooltip="Recurring Revenue"
+                      onClick={() => setLocation("/admin/revenue/recurring-revenue")}
+                      data-testid="nav-recurring-revenue"
+                    >
+                      <DollarSign className={location.startsWith("/admin/revenue/recurring-revenue") ? undefined : "text-emerald-400"} />
+                      <span>Recurring Revenue</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 </SidebarMenu>
