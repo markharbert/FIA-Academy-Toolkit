@@ -503,7 +503,7 @@ async function buildCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenueSnap
         mrr: roundMoney(orderMrr(order)),
         billingStatus: String(order.billing_status || "unknown").replace(/[-_]/g, " "),
         relevantDate: relevantDate?.toISOString() || null,
-        contactUrl: publicId ? `https://${CF_WORKSPACE_DOMAIN}/contacts/${encodeURIComponent(publicId)}` : null,
+        contactUrl: publicId ? `https://${CF_WORKSPACE_DOMAIN}/account/contacts/${encodeURIComponent(publicId)}` : null,
       });
     }
     return [...contacts.values()].sort((a, b) => a.name.localeCompare(b.name));

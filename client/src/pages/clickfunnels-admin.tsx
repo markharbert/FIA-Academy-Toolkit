@@ -161,6 +161,11 @@ interface RecurringRevenueContact {
   contactUrl: string | null;
 }
 
+function normalizeClickFunnelsContactUrl(contactUrl: string): string {
+  if (contactUrl.includes("/account/contacts/")) return contactUrl;
+  return contactUrl.replace(/\/contacts\/([^/?#]+)(?=([?#]|$))/, "/account/contacts/$1");
+}
+
 interface CfReconciliationRun {
   id: string;
   status: "running" | "completed" | "failed";
@@ -988,7 +993,7 @@ export function RecurringRevenueTab() {
                 <div><p className="text-xs text-muted-foreground">{panelIsTrialing ? "Trial ends" : "Payment due"}</p><p className="mt-1 font-semibold">{contact.relevantDate ? formatDateTime(contact.relevantDate) : "Not available"}</p></div>
               </div>
               <p className="mt-3 text-xs text-muted-foreground">{contact.offers.join(" · ")}</p>
-              {contact.contactUrl && <Button asChild variant="outline" className="mt-4 w-full"><a href={contact.contactUrl} target="_blank" rel="noreferrer">Open contact in ClickFunnels<ExternalLink className="ml-2 h-3.5 w-3.5" /></a></Button>}
+              {contact.contactUrl && <Button asChild variant="outline" className="mt-4 w-full"><a href={normalizeClickFunnelsContactUrl(contact.contactUrl)} target="_blank" rel="noreferrer">Open contact in ClickFunnels<ExternalLink className="ml-2 h-3.5 w-3.5" /></a></Button>}
             </div>
           ))}
           {!panelContacts.length && <div className="rounded-xl border border-dashed py-12 text-center text-sm text-muted-foreground">No matching contacts in the current snapshot.</div>}
