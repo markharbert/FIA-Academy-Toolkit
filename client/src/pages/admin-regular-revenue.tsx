@@ -22,7 +22,7 @@ type RegularRevenueSnapshot = {
   currency: string;
   collectedToDate: number;
   month: { label: string; collected: number };
-  history: Array<{ month: string; label: string; revenue: number }>;
+  history: Array<{ month: string; label: string; totalRevenue?: number; cashCollected?: number; revenue?: number }>;
   periods: Record<PeriodKey, RegularPeriod>;
   methodology: string;
 };
@@ -55,9 +55,12 @@ export default function AdminRegularRevenuePage() {
   const info = (label: string) => <CircleHelp className="h-3 w-3 text-muted-foreground" aria-label={label} title={label} />;
   const chartTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
+    const point = payload[0].payload as RegularRevenueSnapshot["history"][number];
+    const cashCollected = point.cashCollected ?? point.revenue;
     return <div className="rounded-lg border bg-card px-3 py-2.5 text-sm text-card-foreground shadow-xl">
       <p className="mb-1.5 font-semibold">{label}</p>
-      <p className="flex items-center gap-2"><span className="h-3 w-3 rounded-sm bg-teal-500/70" />Cash collected: <strong className="tabular-nums">{money(Number(payload[0].value), 2)}</strong></p>
+      <p className="flex items-center gap-2"><span className="h-3 w-3 rounded-sm bg-amber-500/70" />Total revenue: <strong className="tabular-nums">{point.totalRevenue == null ? "Updating…" : money(point.totalRevenue, 2)}</strong></p>
+      <p className="mt-1 flex items-center gap-2"><span className="h-3 w-3 rounded-sm bg-teal-500/70" />Cash collected: <strong className="tabular-nums">{cashCollected == null ? "Updating…" : money(cashCollected, 2)}</strong></p>
     </div>;
   };
 
@@ -83,7 +86,7 @@ export default function AdminRegularRevenuePage() {
         <Card className="overflow-hidden"><div className="h-1 bg-gradient-to-r from-amber-500 to-orange-400" /><CardContent className="py-5"><p className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Collected so far {info("Paid one-time invoices collected this month, excluding subscription orders.")}</p><p className="mt-1 text-3xl font-bold tabular-nums">{money(data.month.collected)}</p><p className="mt-1 text-xs text-muted-foreground">actual paid orders</p></CardContent></Card>
       </section>
 
-      <Card><CardHeader className="border-b pb-4"><CardTitle className="flex items-center gap-2 text-base"><BarChart2 className="h-4 w-4 text-teal-500" />Cash collected · last 12 months</CardTitle><CardDescription>Gross paid one-time invoices minus approved refund transactions by month.</CardDescription></CardHeader><CardContent className="h-80 pt-6"><ResponsiveContainer width="100%" height="100%"><BarChart data={data.history} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" /><XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} /><YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11 }} tickFormatter={(value) => `${data.currency} ${Number(value) / 1000}k`} /><Tooltip content={chartTooltip} cursor={{ fill: "hsl(var(--muted) / .4)" }} /><Bar dataKey="revenue" fill="hsl(174 60% 42% / .5)" stroke="hsl(174 60% 42%)" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer></CardContent></Card>
+      <Card><CardHeader className="border-b pb-4"><CardTitle className="flex items-center gap-2 text-base"><BarChart2 className="h-4 w-4 text-teal-500" />Cash collected · last 12 months</CardTitle><CardDescription>Gross paid one-time invoices minus approved refund transactions by month.</CardDescription></CardHeader><CardContent className="h-80 pt-6"><ResponsiveContainer width="100%" height="100%"><BarChart data={data.history} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" /><XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} /><YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11 }} tickFormatter={(value) => `${data.currency} ${Number(value) / 1000}k`} /><Tooltip content={chartTooltip} cursor={{ fill: "hsl(var(--muted) / .4)" }} /><Bar dataKey={(entry) => entry.cashCollected ?? entry.revenue ?? 0} fill="hsl(174 60% 42% / .5)" stroke="hsl(174 60% 42%)" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer></CardContent></Card>
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-center gap-3"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Performance over</p><select value={periodKey} onChange={(event) => setPeriodKey(event.target.value as PeriodKey)} className="rounded-md border bg-background px-3 py-2 text-sm font-medium">{periodOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}</select><span className="text-xs text-muted-foreground">{period.dateLabel}</span></div>

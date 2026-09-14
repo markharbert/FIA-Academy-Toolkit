@@ -94,7 +94,7 @@ export interface CfRegularRevenueSnapshot {
   currency: string;
   collectedToDate: number;
   month: { label: string; collected: number };
-  history: Array<{ month: string; label: string; revenue: number }>;
+  history: Array<{ month: string; label: string; totalRevenue: number; cashCollected: number }>;
   periods: Record<CfRevenuePeriodKey, {
     label: string;
     dateLabel: string;
@@ -773,13 +773,19 @@ async function buildCfRegularRevenueSnapshot(): Promise<CfRegularRevenueSnapshot
     const date = zonedMidnight(nowParts.year, nowParts.month - 12 + index, 1, CF_REVENUE_TIME_ZONE);
     const next = zonedMidnight(nowParts.year, nowParts.month - 11 + index, 1, CF_REVENUE_TIME_ZONE);
     const dateParts = zonedDateParts(date, CF_REVENUE_TIME_ZONE);
+    const totalRevenue = records
+      .flatMap((record) => record.grossEvents)
+      .filter((event) => event.at >= date && event.at < next)
+      .reduce((sum, event) => sum + event.amount, 0);
+    const refunded = records
+      .flatMap((record) => record.refundEvents)
+      .filter((event) => event.at >= date && event.at < next)
+      .reduce((sum, event) => sum + event.amount, 0);
     return {
       month: `${dateParts.year}-${String(dateParts.month).padStart(2, "0")}`,
       label: new Intl.DateTimeFormat("en-US", { timeZone: CF_REVENUE_TIME_ZONE, month: "short", year: "2-digit" }).format(date),
-      revenue: roundMoney(
-        records.flatMap((record) => record.grossEvents).filter((event) => event.at >= date && event.at < next).reduce((sum, event) => sum + event.amount, 0)
-        - records.flatMap((record) => record.refundEvents).filter((event) => event.at >= date && event.at < next).reduce((sum, event) => sum + event.amount, 0)
-      ),
+      totalRevenue: roundMoney(totalRevenue),
+      cashCollected: roundMoney(totalRevenue - refunded),
     };
   });
   const periods = {
