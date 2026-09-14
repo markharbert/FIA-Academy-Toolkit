@@ -98,6 +98,7 @@ export function log(message: string, source = "express") {
 const SENSITIVE_LOG_PATHS = [
   "/api/inbox-analyzer/",
   "/api/admin/cf/recurring-revenue",
+  "/api/admin/cf/regular-revenue",
 ];
 
 app.use((req, res, next) => {

@@ -45,6 +45,7 @@ import {
   handleCfEnrollmentEvent,
   checkCfEnrollmentByEmail,
   getCfRecurringRevenueSnapshot,
+  getCfRegularRevenueSnapshot,
   CF_WORKSPACE_DOMAIN,
   CF_SSO_DOMAIN,
   CF_API_TOKEN,
@@ -2007,6 +2008,15 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[CF Admin] Recurring revenue sync error:", err?.message || err);
       res.status(502).json({ message: err?.message || "ClickFunnels recurring revenue sync failed" });
+    }
+  });
+
+  app.post("/api/admin/cf/regular-revenue", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      res.json(await getCfRegularRevenueSnapshot());
+    } catch (err: any) {
+      console.error("[CF Admin] Regular revenue sync error:", err?.message || err);
+      res.status(502).json({ message: err?.message || "ClickFunnels regular revenue sync failed" });
     }
   });
 

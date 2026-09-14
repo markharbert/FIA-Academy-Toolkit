@@ -88,6 +88,24 @@ export interface CfRecurringRevenueContact {
   contactUrl: string | null;
 }
 
+export interface CfRegularRevenueSnapshot {
+  syncedAt: Date;
+  currency: string;
+  collectedToDate: number;
+  month: { label: string; collected: number };
+  history: Array<{ month: string; label: string; revenue: number }>;
+  periods: Record<CfRevenuePeriodKey, {
+    label: string;
+    dateLabel: string;
+    totalRevenue: number;
+    orders: number;
+    averageOrderValue: number;
+    refunded: number;
+    offers: Array<{ name: string; orders: number; revenue: number; averageOrderValue: number }>;
+  }>;
+  methodology: string;
+}
+
 const CF_REPORT_PAGE_LIMIT = 100;
 const AT_RISK_BILLING_STATUSES = new Set([
   "past_due",
@@ -520,6 +538,238 @@ async function buildCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenueSnap
   };
 }
 
+type RegularRevenueOrder = {
+  paidAt: Date | null;
+  refundedAt: Date | null;
+  revenue: number;
+  refunded: number;
+  offers: Array<{ name: string; revenue: number }>;
+};
+
+async function buildCfRegularRevenueSnapshot(): Promise<CfRegularRevenueSnapshot> {
+  if (!CF_API_TOKEN || !CF_WORKSPACE_DOMAIN || !CF_WORKSPACE_ID) {
+    throw new Error("CF_API_TOKEN, CF_WORKSPACE_DOMAIN, and CF_WORKSPACE_ID must be configured");
+  }
+  const headers = { Authorization: `Bearer ${CF_API_TOKEN}`, Accept: "application/json" };
+  const apiBase = `https://${CF_WORKSPACE_DOMAIN}/api/v2`;
+  const allOrders = await fetchCfPages(
+    `${apiBase}/workspaces/${CF_WORKSPACE_ID}/orders?sort_order=desc&per=100`,
+    headers,
+    "ClickFunnels regular order sync",
+  );
+  const oneTimeOrders = allOrders.filter((order) => order.order_type !== "subscription-order");
+  const invoicesByOrder = new Map<string, any[]>();
+  let cursor = 0;
+  await Promise.all(Array.from({ length: Math.min(8, oneTimeOrders.length) }, async () => {
+    while (cursor < oneTimeOrders.length) {
+      const order = oneTimeOrders[cursor++];
+      invoicesByOrder.set(String(order.id), await fetchCfPages(
+        `${apiBase}/orders/${order.id}/invoices?per=100`,
+        headers,
+        `ClickFunnels invoices for regular order ${order.id}`,
+      ));
+    }
+  }));
+
+  const currencyCounts = new Map<string, number>();
+  for (const order of oneTimeOrders) {
+    for (const invoice of invoicesByOrder.get(String(order.id)) || []) {
+      const code = String(invoice.currency || order.currency || "usd").toUpperCase();
+      currencyCounts.set(code, (currencyCounts.get(code) || 0) + 1);
+    }
+  }
+  const currency = [...currencyCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "USD";
+  const records: RegularRevenueOrder[] = [];
+  for (const order of oneTimeOrders) {
+    const invoices = (invoicesByOrder.get(String(order.id)) || []).filter((invoice) =>
+      String(invoice.currency || order.currency || "usd").toUpperCase() === currency
+    );
+    const paid = invoices.filter((invoice) =>
+      String(invoice.status || "").toLowerCase() === "paid" && asDate(invoice.paid_at)
+    );
+    const revenue = paid.reduce((sum, invoice) => sum + (Number(invoice.total_amount) || 0), 0);
+    const refunded = invoices.reduce((sum, invoice) => {
+      const status = String(invoice.status || "").toLowerCase();
+      const explicit = Number(invoice.refunded_amount ?? invoice.amount_refunded ?? invoice.refund_amount);
+      if (Number.isFinite(explicit) && explicit > 0) return sum + explicit;
+      return status === "refunded" ? sum + (Number(invoice.total_amount) || 0) : sum;
+    }, 0);
+    if (!paid.length && refunded <= 0) continue;
+    const paidAt = paid.map((invoice) => asDate(invoice.paid_at)!).sort((a, b) => a.getTime() - b.getTime())[0] || null;
+    const refundedAt = invoices
+      .filter((invoice) => {
+        const status = String(invoice.status || "").toLowerCase();
+        return status === "refunded" || status === "partially_refunded" || Number(invoice.refunded_amount ?? invoice.amount_refunded ?? invoice.refund_amount) > 0;
+      })
+      .map((invoice) => firstDate(invoice.refunded_at, invoice.updated_at, invoice.paid_at, invoice.created_at))
+      .filter((date): date is Date => date !== null)
+      .sort((a, b) => a.getTime() - b.getTime())[0] || null;
+    const rawItems = (Array.isArray(order.line_items) ? order.line_items : []).map((item: any) => ({
+      name: String(item.original_product?.name || item.products_variant?.name || "Unnamed offer"),
+      amount: Math.max(0, Number(item.products_price?.amount) || 0) * Math.max(1, Number(item.quantity) || 1),
+    }));
+    const itemTotal = rawItems.reduce((sum: number, item: { amount: number }) => sum + item.amount, 0);
+    const offers = rawItems.length
+      ? rawItems.map((item: { name: string; amount: number }) => ({
+          name: item.name,
+          revenue: itemTotal > 0 ? revenue * item.amount / itemTotal : revenue / rawItems.length,
+        }))
+      : [{ name: "Unnamed offer", revenue }];
+    records.push({ paidAt, refundedAt, revenue, refunded, offers });
+  }
+
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const previousMonthEnd = new Date(monthStart.getTime() - 1);
+  const last3MonthsStart = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+  const last12MonthsStart = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+  const earliest = records.map((record) => record.paidAt).filter((date): date is Date => date !== null).sort((a, b) => a.getTime() - b.getTime())[0] || last12MonthsStart;
+  const allTimeStart = new Date(earliest.getFullYear(), earliest.getMonth(), 1);
+  const formatMonth = (date: Date, year = true) =>
+    new Intl.DateTimeFormat("en-US", { month: "short", ...(year ? { year: "numeric" } : {}) }).format(date);
+  const formatRange = (start: Date, end: Date) =>
+    start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth()
+      ? new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(start)
+      : start.getFullYear() === end.getFullYear()
+        ? `${formatMonth(start, false)}–${formatMonth(end, false)} ${end.getFullYear()}`
+        : `${formatMonth(start)}–${formatMonth(end)}`;
+  const buildPeriod = (label: string, start: Date, end: Date) => {
+    const selected = records.filter((record) => record.paidAt && record.paidAt >= start && record.paidAt <= end);
+    const refunded = records.filter((record) => record.refundedAt && record.refundedAt >= start && record.refundedAt <= end);
+    const totalRevenue = selected.reduce((sum, record) => sum + record.revenue, 0);
+    const offerMap = new Map<string, { orders: Set<RegularRevenueOrder>; revenue: number }>();
+    for (const record of selected) for (const offer of record.offers) {
+      const row = offerMap.get(offer.name) || { orders: new Set<RegularRevenueOrder>(), revenue: 0 };
+      row.orders.add(record);
+      row.revenue += offer.revenue;
+      offerMap.set(offer.name, row);
+    }
+    return {
+      label,
+      dateLabel: formatRange(start, end),
+      totalRevenue: roundMoney(totalRevenue),
+      orders: selected.length,
+      averageOrderValue: selected.length ? roundMoney(totalRevenue / selected.length) : 0,
+      refunded: roundMoney(refunded.reduce((sum, record) => sum + record.refunded, 0)),
+      offers: [...offerMap.entries()].map(([name, row]) => ({
+        name,
+        orders: row.orders.size,
+        revenue: roundMoney(row.revenue),
+        averageOrderValue: row.orders.size ? roundMoney(row.revenue / row.orders.size) : 0,
+      })).sort((a, b) => b.revenue - a.revenue || b.orders - a.orders),
+    };
+  };
+  const history = Array.from({ length: 12 }, (_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - (11 - index), 1);
+    const next = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+    return {
+      month: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`,
+      label: new Intl.DateTimeFormat("en-US", { month: "short", year: "2-digit" }).format(date),
+      revenue: roundMoney(records.filter((record) => record.paidAt && record.paidAt >= date && record.paidAt < next).reduce((sum, record) => sum + record.revenue, 0)),
+    };
+  });
+  const periods = {
+    thisMonth: buildPeriod("This month", monthStart, now),
+    lastMonth: buildPeriod("Last month", previousMonthStart, previousMonthEnd),
+    last3Months: buildPeriod("Last 3 months", last3MonthsStart, now),
+    last12Months: buildPeriod("Last 12 months", last12MonthsStart, now),
+    allTime: buildPeriod("All time", allTimeStart, now),
+  };
+  return {
+    syncedAt: now,
+    currency,
+    collectedToDate: periods.allTime.totalRevenue,
+    month: { label: periods.thisMonth.dateLabel, collected: periods.thisMonth.totalRevenue },
+    history,
+    periods,
+    methodology: `Revenue is calculated from paid one-time-order invoices—not ClickFunnels funnel stats—so totals can differ from funnel attribution when orders sell through multiple funnels or are refunded after the fact. Subscription orders are excluded. Reporting is limited to ${currency}.`,
+  };
+}
+
+let regularRevenueCache: { snapshot: CfRegularRevenueSnapshot; expiresAt: number } | null = null;
+let regularRevenueInFlight: Promise<CfRegularRevenueSnapshot> | null = null;
+let regularRevenuePersistentLoad: Promise<void> | null = null;
+let regularRevenueSchedulerStarted = false;
+
+function loadPersistentRegularRevenueCache(): Promise<void> {
+  if (regularRevenuePersistentLoad) return regularRevenuePersistentLoad;
+  regularRevenuePersistentLoad = (async () => {
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS cf_recurring_revenue_cache (
+          cache_key TEXT PRIMARY KEY,
+          snapshot JSONB NOT NULL,
+          refreshed_at TIMESTAMPTZ NOT NULL
+        )
+      `);
+      const result = await db.execute(sql`
+        SELECT snapshot FROM cf_recurring_revenue_cache
+        WHERE cache_key = 'workspace-regular-v1'
+        LIMIT 1
+      `);
+      const snapshot = (result as any).rows?.[0]?.snapshot as CfRegularRevenueSnapshot | undefined;
+      if (snapshot?.periods?.thisMonth && Array.isArray(snapshot.history)) {
+        regularRevenueCache = { snapshot: { ...snapshot, syncedAt: new Date(snapshot.syncedAt) }, expiresAt: 0 };
+        console.log("[CF Regular Revenue] restored cached snapshot from PostgreSQL");
+      }
+    } catch (error: any) {
+      console.error("[CF Regular Revenue] could not restore persistent cache:", error?.message || error);
+    }
+  })();
+  return regularRevenuePersistentLoad;
+}
+
+async function persistRegularRevenueCache(snapshot: CfRegularRevenueSnapshot): Promise<void> {
+  try {
+    await db.execute(sql`
+      INSERT INTO cf_recurring_revenue_cache (cache_key, snapshot, refreshed_at)
+      VALUES ('workspace-regular-v1', ${JSON.stringify(snapshot)}::jsonb, NOW())
+      ON CONFLICT (cache_key) DO UPDATE SET snapshot = EXCLUDED.snapshot, refreshed_at = EXCLUDED.refreshed_at
+    `);
+  } catch (error: any) {
+    console.error("[CF Regular Revenue] could not persist cache:", error?.message || error);
+  }
+}
+
+function refreshCfRegularRevenueSnapshot(): Promise<CfRegularRevenueSnapshot> {
+  if (regularRevenueInFlight) return regularRevenueInFlight;
+  regularRevenueInFlight = buildCfRegularRevenueSnapshot()
+    .then((snapshot) => {
+      regularRevenueCache = { snapshot, expiresAt: Date.now() + 15 * 60 * 1000 };
+      void persistRegularRevenueCache(snapshot);
+      return snapshot;
+    })
+    .finally(() => { regularRevenueInFlight = null; });
+  return regularRevenueInFlight;
+}
+
+export async function getCfRegularRevenueSnapshot(): Promise<CfRegularRevenueSnapshot> {
+  await loadPersistentRegularRevenueCache();
+  if (regularRevenueCache) {
+    if (regularRevenueCache.expiresAt <= Date.now()) {
+      void refreshCfRegularRevenueSnapshot().catch((error) =>
+        console.error("[CF Regular Revenue] background refresh failed; serving cached snapshot:", error?.message || error)
+      );
+    }
+    return regularRevenueCache.snapshot;
+  }
+  return refreshCfRegularRevenueSnapshot();
+}
+
+function startCfRegularRevenueScheduler(): void {
+  if (regularRevenueSchedulerStarted) return;
+  regularRevenueSchedulerStarted = true;
+  console.log("[CF Regular Revenue] background cache starting (refreshes every 15 minutes)");
+  const refresh = () => {
+    void refreshCfRegularRevenueSnapshot().catch((error) =>
+      console.error("[CF Regular Revenue] cache refresh failed:", error?.message || error)
+    );
+  };
+  void loadPersistentRegularRevenueCache().finally(refresh);
+  setInterval(refresh, 15 * 60 * 1000).unref();
+}
+
 let recurringRevenueCache: { snapshot: CfRecurringRevenueSnapshot; expiresAt: number } | null = null;
 let recurringRevenueInFlight: Promise<CfRecurringRevenueSnapshot> | null = null;
 const RECURRING_REVENUE_CACHE_MS = 15 * 60 * 1000;
@@ -613,6 +863,7 @@ export async function getCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenu
 export function startCfRecurringRevenueScheduler(): void {
   if (recurringRevenueSchedulerStarted) return;
   recurringRevenueSchedulerStarted = true;
+  startCfRegularRevenueScheduler();
   console.log("[CF Recurring Revenue] background cache starting (refreshes every 15 minutes)");
 
   const refresh = () => {

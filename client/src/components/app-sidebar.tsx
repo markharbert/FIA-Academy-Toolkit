@@ -468,6 +468,17 @@ export function AppSidebar() {
                       <span>Recurring Revenue</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={location.startsWith("/admin/revenue/regular-revenue")}
+                      tooltip="Regular Revenue"
+                      onClick={() => setLocation("/admin/revenue/regular-revenue")}
+                      data-testid="nav-regular-revenue"
+                    >
+                      <BarChart2 className={location.startsWith("/admin/revenue/regular-revenue") ? undefined : "text-amber-400"} />
+                      <span>Regular Revenue</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
