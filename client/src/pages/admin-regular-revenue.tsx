@@ -14,7 +14,7 @@ type RegularPeriod = {
   orders: number;
   averageOrderValue: number;
   refunded: number;
-  offers: Array<{ name: string; orders: number; revenue: number; cashCollected?: number; averageOrderValue: number }>;
+  offers: Array<{ name: string; orders: number; revenue: number; refundedOrders?: number; refundedAmount?: number; cashCollected?: number; averageOrderValue: number }>;
 };
 type RegularRevenueSnapshot = {
   syncedAt: string;
@@ -61,10 +61,10 @@ export default function AdminRegularRevenuePage() {
   };
 
   if (isLoading) return <div className="flex min-h-[55vh] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
-  if (error || !data || !period) return <div className="container mx-auto max-w-6xl px-4 py-8"><Card className="border-destructive/40"><CardContent className="py-8 text-center"><p className="font-semibold">Regular revenue could not be loaded</p><p className="mt-1 text-sm text-muted-foreground">{error instanceof Error ? error.message : "Try again."}</p><Button className="mt-4" onClick={() => refetch()}>Try again</Button></CardContent></Card></div>;
+  if (error || !data || !period) return <div className="container mx-auto max-w-7xl px-4 py-8"><Card className="border-destructive/40"><CardContent className="py-8 text-center"><p className="font-semibold">Regular revenue could not be loaded</p><p className="mt-1 text-sm text-muted-foreground">{error instanceof Error ? error.message : "Try again."}</p><Button className="mt-4" onClick={() => refetch()}>Try again</Button></CardContent></Card></div>;
 
   return (
-    <div className="container mx-auto max-w-6xl space-y-6 px-4 py-8">
+    <div className="container mx-auto max-w-7xl space-y-6 px-4 py-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-500"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" />Revenue operations</div>
@@ -99,7 +99,7 @@ export default function AdminRegularRevenuePage() {
       <Card>
         <CardHeader className="border-b"><CardTitle className="text-base">Offers · {period.dateLabel}</CardTitle><CardDescription>Gross one-time revenue and the cash remaining after refunds, allocated to each offer.</CardDescription></CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-muted/40 text-xs uppercase text-muted-foreground"><tr><th className="px-4 py-3 text-left">Offer {info("The ClickFunnels product or variant name.")}</th><th className="px-4 py-3 text-right">Orders {info("Paid orders containing this offer.")}</th><th className="px-4 py-3 text-right">Revenue {info("Original gross paid-invoice value allocated to this offer, before refunds.")}</th><th className="px-4 py-3 text-right">Cash collected {info("Gross offer revenue minus ClickFunnels-reported refunds.")}</th><th className="px-4 py-3 text-right">Avg order value {info("Gross offer revenue divided by orders.")}</th></tr></thead><tbody className="divide-y">{period.offers.length ? period.offers.map((offer) => <tr key={offer.name} className="hover:bg-muted/30"><td className="px-4 py-3 font-medium">{offer.name}</td><td className="px-4 py-3 text-right tabular-nums">{offer.orders}</td><td className="px-4 py-3 text-right tabular-nums">{money(offer.revenue)}</td><td className="px-4 py-3 text-right font-semibold tabular-nums">{offer.cashCollected == null ? <span className="text-xs font-normal text-muted-foreground">Updating…</span> : money(offer.cashCollected)}</td><td className="px-4 py-3 text-right tabular-nums">{money(offer.averageOrderValue, 2)}</td></tr>) : <tr><td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">No paid one-time orders in this period.</td></tr>}</tbody></table></div>
+          <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-sm"><thead className="bg-muted/40 text-xs uppercase text-muted-foreground"><tr><th className="px-4 py-3 text-left">Offer {info("The ClickFunnels product or variant name.")}</th><th className="px-4 py-3 text-right">Orders {info("Paid orders containing this offer.")}</th><th className="px-4 py-3 text-right">Revenue {info("Original gross paid-invoice value allocated to this offer, before refunds.")}</th><th className="px-4 py-3 text-right">Refunds {info("Number and value of refunded or partially refunded orders containing this offer.")}</th><th className="px-4 py-3 text-right">Cash collected {info("Gross offer revenue minus ClickFunnels-reported refunds.")}</th><th className="px-4 py-3 text-right">Avg order value {info("Gross offer revenue divided by orders.")}</th></tr></thead><tbody className="divide-y">{period.offers.length ? period.offers.map((offer) => <tr key={offer.name} className="hover:bg-muted/30"><td className="px-4 py-3 font-medium">{offer.name}</td><td className="px-4 py-3 text-right tabular-nums">{offer.orders}</td><td className="px-4 py-3 text-right tabular-nums">{money(offer.revenue)}</td><td className="px-4 py-3 text-right tabular-nums">{offer.refundedOrders == null || offer.refundedAmount == null ? <span className="text-xs text-muted-foreground">Updating…</span> : <div><p className="font-semibold">{offer.refundedOrders}</p><p className="text-xs text-muted-foreground">{money(offer.refundedAmount, 2)}</p></div>}</td><td className="px-4 py-3 text-right font-semibold tabular-nums">{offer.cashCollected == null ? <span className="text-xs font-normal text-muted-foreground">Updating…</span> : money(offer.cashCollected)}</td><td className="px-4 py-3 text-right tabular-nums">{money(offer.averageOrderValue, 2)}</td></tr>) : <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">No paid one-time orders in this period.</td></tr>}</tbody></table></div>
           <p className="border-t px-4 py-3 text-xs leading-relaxed text-muted-foreground">{data.methodology}</p>
         </CardContent>
       </Card>
