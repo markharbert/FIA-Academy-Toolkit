@@ -77,10 +77,10 @@ export default function AdminRegularRevenuePage() {
   };
 
   if (isLoading) return <div className="flex min-h-[55vh] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
-  if (error || !data || !period) return <div className="container mx-auto max-w-7xl px-4 py-8"><Card className="border-destructive/40"><CardContent className="py-8 text-center"><p className="font-semibold">Regular revenue could not be loaded</p><p className="mt-1 text-sm text-muted-foreground">{error instanceof Error ? error.message : "Try again."}</p><Button className="mt-4" onClick={() => refetch()}>Try again</Button></CardContent></Card></div>;
+  if (error || !data || !period) return <div className="container mx-auto max-w-[1600px] px-4 py-8"><Card className="border-destructive/40"><CardContent className="py-8 text-center"><p className="font-semibold">Regular revenue could not be loaded</p><p className="mt-1 text-sm text-muted-foreground">{error instanceof Error ? error.message : "Try again."}</p><Button className="mt-4" onClick={() => refetch()}>Try again</Button></CardContent></Card></div>;
 
   return (
-    <div className="container mx-auto max-w-7xl space-y-6 px-4 py-8">
+    <div className="container mx-auto max-w-[1600px] space-y-6 px-4 py-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-500"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" />Revenue operations</div>
