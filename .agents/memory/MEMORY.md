@@ -32,4 +32,4 @@
 - [Course outline hierarchy](course-outline-hierarchy.md) — nested course navigation must distinguish levels beyond indentation and always reveal the current lesson's path.
 - [Member notification timing](member-notification-timing.md) — evaluate schedules in each member's IANA timezone and catch up after missed target hours.
 - [Topic Pulse search allowance](topic-pulse-search-allowance.md) — monthly usage counts member searches, not underlying keyword API lookups.
-- [ClickFunnels recurring revenue data](cf-recurring-revenue-data.md) — mixed orders can omit line cadence, and live status flags can contradict timestamps.
+- [ClickFunnels revenue data](cf-recurring-revenue-data.md) — recurring cadence/statuses and one-time refund statuses require explicit reconciliation rules.

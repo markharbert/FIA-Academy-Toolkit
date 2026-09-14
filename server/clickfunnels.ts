@@ -584,22 +584,30 @@ async function buildCfRegularRevenueSnapshot(): Promise<CfRegularRevenueSnapshot
     const invoices = (invoicesByOrder.get(String(order.id)) || []).filter((invoice) =>
       String(invoice.currency || order.currency || "usd").toUpperCase() === currency
     );
-    const paid = invoices.filter((invoice) =>
-      String(invoice.status || "").toLowerCase() === "paid" && asDate(invoice.paid_at)
-    );
-    const revenue = paid.reduce((sum, invoice) => sum + (Number(invoice.total_amount) || 0), 0);
+    const charged = invoices.filter((invoice) => {
+      const status = String(invoice.status || "").toLowerCase();
+      return ["paid", "refunded", "partially-refunded", "partially_refunded"].includes(status)
+        && firstDate(invoice.paid_at, invoice.created_at);
+    });
+    const revenue = charged.reduce((sum, invoice) => sum + (Number(invoice.total_amount) || 0), 0);
     const refunded = invoices.reduce((sum, invoice) => {
       const status = String(invoice.status || "").toLowerCase();
       const explicit = Number(invoice.refunded_amount ?? invoice.amount_refunded ?? invoice.refund_amount);
       if (Number.isFinite(explicit) && explicit > 0) return sum + explicit;
-      return status === "refunded" ? sum + (Number(invoice.total_amount) || 0) : sum;
+      return ["refunded", "partially-refunded", "partially_refunded"].includes(status)
+        ? sum + (Number(invoice.total_amount) || 0)
+        : sum;
     }, 0);
-    if (!paid.length && refunded <= 0) continue;
-    const paidAt = paid.map((invoice) => asDate(invoice.paid_at)!).sort((a, b) => a.getTime() - b.getTime())[0] || null;
+    if (!charged.length) continue;
+    const paidAt = charged
+      .map((invoice) => firstDate(invoice.paid_at, invoice.created_at))
+      .filter((date): date is Date => date !== null)
+      .sort((a, b) => a.getTime() - b.getTime())[0] || null;
     const refundedAt = invoices
       .filter((invoice) => {
         const status = String(invoice.status || "").toLowerCase();
-        return status === "refunded" || status === "partially_refunded" || Number(invoice.refunded_amount ?? invoice.amount_refunded ?? invoice.refund_amount) > 0;
+        return ["refunded", "partially-refunded", "partially_refunded"].includes(status)
+          || Number(invoice.refunded_amount ?? invoice.amount_refunded ?? invoice.refund_amount) > 0;
       })
       .map((invoice) => firstDate(invoice.refunded_at, invoice.updated_at, invoice.paid_at, invoice.created_at))
       .filter((date): date is Date => date !== null)
@@ -683,7 +691,7 @@ async function buildCfRegularRevenueSnapshot(): Promise<CfRegularRevenueSnapshot
     month: { label: periods.thisMonth.dateLabel, collected: periods.thisMonth.totalRevenue },
     history,
     periods,
-    methodology: `Revenue is calculated from paid one-time-order invoices—not ClickFunnels funnel stats—so totals can differ from funnel attribution when orders sell through multiple funnels or are refunded after the fact. Subscription orders are excluded. Reporting is limited to ${currency}.`,
+    methodology: `Revenue is the original gross value of paid one-time-order invoices, including orders later marked refunded or partially refunded. Refunds are shown separately and are not subtracted from total revenue, matching ClickFunnels order reporting. Subscription orders are excluded. Reporting is limited to ${currency}.`,
   };
 }
 
@@ -705,7 +713,7 @@ function loadPersistentRegularRevenueCache(): Promise<void> {
       `);
       const result = await db.execute(sql`
         SELECT snapshot FROM cf_recurring_revenue_cache
-        WHERE cache_key = 'workspace-regular-v1'
+        WHERE cache_key = 'workspace-regular-v2'
         LIMIT 1
       `);
       const snapshot = (result as any).rows?.[0]?.snapshot as CfRegularRevenueSnapshot | undefined;
@@ -724,7 +732,7 @@ async function persistRegularRevenueCache(snapshot: CfRegularRevenueSnapshot): P
   try {
     await db.execute(sql`
       INSERT INTO cf_recurring_revenue_cache (cache_key, snapshot, refreshed_at)
-      VALUES ('workspace-regular-v1', ${JSON.stringify(snapshot)}::jsonb, NOW())
+      VALUES ('workspace-regular-v2', ${JSON.stringify(snapshot)}::jsonb, NOW())
       ON CONFLICT (cache_key) DO UPDATE SET snapshot = EXCLUDED.snapshot, refreshed_at = EXCLUDED.refreshed_at
     `);
   } catch (error: any) {
