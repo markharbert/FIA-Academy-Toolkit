@@ -506,12 +506,18 @@ async function buildCfRecurringRevenueSnapshot(): Promise<CfRecurringRevenueSnap
         contactUrl: publicId ? `https://${CF_WORKSPACE_DOMAIN}/account/contacts/${encodeURIComponent(publicId)}` : null,
       });
     }
-    return [...contacts.values()].sort((a, b) => a.name.localeCompare(b.name));
+    return [...contacts.values()];
   };
   const trialingDetails = contactDetails(trialingOrders, (order) => asDate(order.trial_end_at));
-  const atRiskDetails = contactDetails(atRiskOrders, (order) =>
-    firstDate(order.paid_until, order.renewal_at, order.next_charge_at)
-  );
+  const atRiskDetails = contactDetails(
+    atRiskOrders,
+    (order) => firstDate(order.paid_until, order.renewal_at, order.next_charge_at),
+  ).sort((a, b) => {
+    const aTime = a.relevantDate ? new Date(a.relevantDate).getTime() : 0;
+    const bTime = b.relevantDate ? new Date(b.relevantDate).getTime() : 0;
+    return bTime - aTime || a.name.localeCompare(b.name);
+  });
+  trialingDetails.sort((a, b) => a.name.localeCompare(b.name));
 
   return {
     syncedAt: now,

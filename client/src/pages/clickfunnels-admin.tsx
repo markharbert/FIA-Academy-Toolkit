@@ -563,7 +563,7 @@ function MemberDetailsSheet({
   return (
     <>
       <Sheet open={!!memberId} onOpenChange={onOpenChange}>
-        <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
+         <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
           <SheetHeader>
             <SheetTitle>Member account</SheetTitle>
             <SheetDescription>ClickFunnels determines Academy access. Toolkit data below describes the local account only.</SheetDescription>
@@ -899,6 +899,13 @@ export function RecurringRevenueTab() {
   };
   const panelContacts = detailPanel && snapshot ? snapshot.details[detailPanel] : [];
   const panelIsTrialing = detailPanel === "trialing";
+  const sortedPanelContacts = panelIsTrialing
+    ? panelContacts
+    : [...panelContacts].sort((a, b) => {
+        const aTime = a.relevantDate ? new Date(a.relevantDate).getTime() : 0;
+        const bTime = b.relevantDate ? new Date(b.relevantDate).getTime() : 0;
+        return bTime - aTime || a.name.localeCompare(b.name);
+      });
   return <div className="space-y-6">
     <div className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
       <div><div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-primary"><span className="h-1.5 w-1.5 rounded-full bg-primary" />Revenue operations</div><h2 className="text-2xl font-bold tracking-tight">Recurring Revenue</h2><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Offer-level MRR, subscriptions, and churn calculated from subscription orders and invoices.</p></div>
@@ -968,7 +975,7 @@ export function RecurringRevenueTab() {
       <div className="flex items-start gap-2 border-t pt-4 text-xs text-muted-foreground">{infoIcon("This note explains where the numbers come from and why they may not match other ClickFunnels reports.")}<p>{snapshot.methodology}</p></div>
     </>}
     <Sheet open={detailPanel !== null} onOpenChange={(open) => !open && setDetailPanel(null)}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
+      <SheetContent className="w-full overflow-y-auto sm:max-w-3xl">
         <SheetHeader className="border-b pb-5 text-left">
           <div className={`mb-2 flex h-10 w-10 items-center justify-center rounded-xl ${panelIsTrialing ? "bg-amber-500/10 text-amber-700 dark:text-amber-300" : "bg-rose-500/10 text-rose-700 dark:text-rose-300"}`}>
             {panelIsTrialing ? <Clock className="h-5 w-5" /> : <ShieldAlert className="h-5 w-5" />}
@@ -976,26 +983,47 @@ export function RecurringRevenueTab() {
           <SheetTitle>{panelIsTrialing ? "Contacts currently trialing" : "Past-due contacts"}</SheetTitle>
           <SheetDescription>{panelContacts.length} {panelContacts.length === 1 ? "person" : "people"} · data refreshes automatically every 15 minutes</SheetDescription>
         </SheetHeader>
-        <div className="space-y-3 py-5">
-          {panelContacts.map((contact) => (
-            <div key={contact.id} className="rounded-xl border bg-card p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
+        <div className="py-3">
+          <div className="mb-2 hidden grid-cols-[minmax(0,1.7fr)_minmax(0,1.15fr)_82px_150px_82px_34px] items-center gap-3 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground sm:grid">
+            <span>Contact</span>
+            <span>Offer</span>
+            <span className="text-right">Monthly</span>
+            <span>{panelIsTrialing ? "Trial ends" : "Payment due"}</span>
+            <span className="text-right">Status</span>
+            <span aria-hidden="true" />
+          </div>
+          <div className="divide-y rounded-lg border bg-card">
+          {sortedPanelContacts.map((contact) => (
+            <div key={contact.id} className="group px-3 py-2.5 transition-colors hover:bg-muted/30">
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1.7fr)_minmax(0,1.15fr)_82px_150px_82px_34px] sm:items-center sm:gap-3">
                 <div className="min-w-0">
-                  <p className="truncate font-semibold text-foreground">{contact.name}</p>
-                  {contact.email && <p className="mt-0.5 truncate text-sm text-muted-foreground">{contact.email}</p>}
+                  <div className="flex items-center justify-between gap-2 sm:block">
+                    <p className="break-words text-sm font-semibold leading-5 text-foreground">{contact.name}</p>
+                    <Badge variant="outline" className={`shrink-0 text-[10px] leading-4 sm:hidden ${panelIsTrialing ? "border-amber-300 text-amber-700 dark:text-amber-300" : "border-rose-300 text-rose-700 dark:text-rose-300"}`}>
+                      {panelIsTrialing ? "Trialing" : contact.billingStatus}
+                    </Badge>
+                  </div>
+                  {contact.email && <p className="break-all text-xs leading-4 text-muted-foreground">{contact.email}</p>}
                 </div>
-                <Badge variant="outline" className={panelIsTrialing ? "shrink-0 border-amber-300 text-amber-700 dark:text-amber-300" : "shrink-0 border-rose-300 text-rose-700 dark:text-rose-300"}>
+                <p className="truncate text-xs text-muted-foreground" title={contact.offers.join(" · ")}>{contact.offers.join(" · ") || "No offer listed"}</p>
+                <div className="flex items-baseline justify-between gap-2 sm:block sm:text-right">
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground sm:hidden">Monthly</span>
+                  <span className="text-sm font-semibold tabular-nums">{money(contact.mrr)}</span>
+                </div>
+                <div className="flex items-baseline justify-between gap-2 sm:block">
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground sm:hidden">{panelIsTrialing ? "Trial ends" : "Payment due"}</span>
+                  <span className="truncate text-xs font-medium" title={contact.relevantDate ? formatDateTime(contact.relevantDate) : "Not available"}>{contact.relevantDate ? formatDateTime(contact.relevantDate) : "Not available"}</span>
+                </div>
+                <Badge variant="outline" className={`hidden shrink-0 justify-self-end text-[10px] leading-4 sm:inline-flex ${panelIsTrialing ? "border-amber-300 text-amber-700 dark:text-amber-300" : "border-rose-300 text-rose-700 dark:text-rose-300"}`}>
                   {panelIsTrialing ? "Trialing" : contact.billingStatus}
                 </Badge>
+                <div className="flex justify-end">
+                  {contact.contactUrl && <Button asChild variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" aria-label={`Open ${contact.name} in ClickFunnels`} title="Open in ClickFunnels"><a href={normalizeClickFunnelsContactUrl(contact.contactUrl)} target="_blank" rel="noreferrer"><ExternalLink className="h-3.5 w-3.5" /></a></Button>}
+                </div>
               </div>
-              <div className="mt-4 grid grid-cols-2 gap-3 rounded-lg bg-muted/40 p-3 text-sm">
-                <div><p className="text-xs text-muted-foreground">Monthly value</p><p className="mt-1 font-semibold">{money(contact.mrr)}</p></div>
-                <div><p className="text-xs text-muted-foreground">{panelIsTrialing ? "Trial ends" : "Payment due"}</p><p className="mt-1 font-semibold">{contact.relevantDate ? formatDateTime(contact.relevantDate) : "Not available"}</p></div>
-              </div>
-              <p className="mt-3 text-xs text-muted-foreground">{contact.offers.join(" · ")}</p>
-              {contact.contactUrl && <Button asChild variant="outline" className="mt-4 w-full"><a href={normalizeClickFunnelsContactUrl(contact.contactUrl)} target="_blank" rel="noreferrer">Open contact in ClickFunnels<ExternalLink className="ml-2 h-3.5 w-3.5" /></a></Button>}
             </div>
           ))}
+          </div>
           {!panelContacts.length && <div className="rounded-xl border border-dashed py-12 text-center text-sm text-muted-foreground">No matching contacts in the current snapshot.</div>}
         </div>
       </SheetContent>
