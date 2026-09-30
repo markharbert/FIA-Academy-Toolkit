@@ -14,6 +14,9 @@ import { CourseIcon } from "@/lib/course-icons";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { trainingCoursePath, trainingLessonPath } from "@shared/training-url";
 import { TrainingResourceIcon } from "@/components/training-resource-icon";
+import { useAuth } from "@/lib/auth";
+import { resolveLessonVideo } from "@/lib/training-lesson-video";
+import { findCurrentLessonIndex } from "@/lib/training-lesson-navigation";
 
 /** Restrict resource/video URLs to http(s) only — prevents javascript: hrefs. */
 function safeHref(url: string | null | undefined): string {
@@ -103,29 +106,6 @@ async function apiFetch(url: string, init?: RequestInit) {
   return res.json();
 }
 
-function getEmbedUrl(videoUrl: string): string | null {
-  if (!videoUrl) return null;
-  if (videoUrl.includes("youtube.com") || videoUrl.includes("youtu.be")) {
-    const videoId = videoUrl.includes("youtu.be/")
-      ? videoUrl.split("youtu.be/")[1]?.split("?")[0]
-      : new URLSearchParams(videoUrl.split("?")[1] || "").get("v");
-    return videoId ? `https://www.youtube.com/embed/${videoId}` : null;
-  }
-  if (videoUrl.includes("vimeo.com")) {
-    try {
-      const url = new URL(videoUrl);
-      const vimeoId = url.pathname.match(/(?:^|\/)(?:video\/)?(\d+)(?:\/|$)/)?.[1];
-      if (!vimeoId) return null;
-      const params = new URLSearchParams(url.search);
-      params.set("api", "1");
-      return `https://player.vimeo.com/video/${vimeoId}?${params.toString()}`;
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-
 function formatTimestamp(seconds: number): string {
   const total = Math.max(0, Math.floor(seconds));
   const hours = Math.floor(total / 3600);
@@ -137,6 +117,7 @@ function formatTimestamp(seconds: number): string {
 }
 
 export default function TrainingLessonPage() {
+  const { user } = useAuth();
   const {
     courseSlug,
     courseId: legacyCourseId,
@@ -163,6 +144,7 @@ export default function TrainingLessonPage() {
   const [videoCurrentTime, setVideoCurrentTime] = useState(0);
   const vimeoPlayerRef = useRef<HTMLIFrameElement>(null);
   const vimeoPlayerApiRef = useRef<Player | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const transcriptScrollContainerRef = useRef<HTMLDivElement>(null);
   const activeTranscriptWordRef = useRef<HTMLSpanElement>(null);
   const lastScrolledWordRef = useRef<number | null>(null);
@@ -188,7 +170,7 @@ export default function TrainingLessonPage() {
 
   // Mark progress
   const progressMutation = useMutation({
-    mutationFn: ({ id, completed }: { id: string; completed: boolean }) =>
+    mutationFn: ({ id, completed }: { id: string; completed: boolean; advanceTo?: string }) =>
       apiFetch(`/api/training/lessons/${id}/progress`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -197,10 +179,7 @@ export default function TrainingLessonPage() {
     onSuccess: (_savedProgress, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/training/courses", courseIdentifier] });
       queryClient.invalidateQueries({ queryKey: ["/api/training/courses"] });
-      if (variables.completed && nextLesson) {
-        const nextModule = moduleForLesson(nextLesson);
-        if (courseData && nextModule) setLocation(trainingLessonPath(courseData.course, nextModule, nextLesson));
-      }
+      if (variables.completed && variables.advanceTo) setLocation(variables.advanceTo);
     },
   });
 
@@ -221,9 +200,11 @@ export default function TrainingLessonPage() {
 
   // Flatten lessons in the nested outline order for prev/next navigation.
   const allLessons: CourseLesson[] = flattenCourseModuleTree(moduleTree).flatMap((module) => module.lessons);
-  const currentIndex = allLessons.findIndex((candidate) => candidate.id === lesson?.id || candidate.slug === lessonIdentifier);
+  const currentIndex = findCurrentLessonIndex(
+    allLessons, courseData?.modules ?? [], lesson?.id, lessonIdentifier, moduleSlug,
+  );
   const prevLesson = currentIndex > 0 ? allLessons[currentIndex - 1] : null;
-  const nextLesson = currentIndex < allLessons.length - 1 ? allLessons[currentIndex + 1] : null;
+  const nextLesson = currentIndex >= 0 && currentIndex < allLessons.length - 1 ? allLessons[currentIndex + 1] : null;
   const currentLesson = allLessons[currentIndex];
   const isCompleted = currentLesson?.completed ?? false;
 
@@ -235,7 +216,7 @@ export default function TrainingLessonPage() {
     const findPath = (nodes: CourseModuleTree<CourseModule>[], trail: string[]): boolean => {
       for (const node of nodes) {
         const nextTrail = [...trail, node.id];
-        if (node.lessons.some((item) => item.id === currentLesson.id || item.slug === lessonIdentifier)) {
+        if (node.lessons.some((item) => item.id === currentLesson.id)) {
           ancestors.push(...nextTrail);
           return true;
         }
@@ -251,7 +232,7 @@ export default function TrainingLessonPage() {
 
   const moduleForLesson = (candidate: CourseLesson | null | undefined) =>
     flattenCourseModuleTree(moduleTree).find((module) =>
-      module.lessons.some((lesson) => lesson.id === candidate?.id || lesson.slug === candidate?.slug),
+      module.lessons.some((lesson) => lesson.id === candidate?.id),
     );
 
   // Progress stats
@@ -259,8 +240,10 @@ export default function TrainingLessonPage() {
   const totalCount = allLessons.length;
   const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
-  const embedUrl = lesson?.videoUrl ? getEmbedUrl(lesson.videoUrl) : null;
-  const isVimeoLesson = !!lesson?.videoUrl?.includes("vimeo.com");
+  const video = resolveLessonVideo(lesson?.videoUrl);
+  const embedUrl = video?.kind === "iframe" ? video.url : null;
+  const isVimeoLesson = video?.provider === "vimeo";
+  const isFileLesson = video?.kind === "file";
   const chapters = lesson?.transcriptChapters ?? [];
   const transcriptCues = lesson?.transcriptCues ?? [];
   const transcriptText = lesson?.transcriptText ? formatTranscriptParagraphs(lesson.transcriptText) : "";
@@ -335,15 +318,40 @@ export default function TrainingLessonPage() {
     };
   }, [embedUrl, isVimeoLesson]);
 
+  useEffect(() => {
+    const element = videoRef.current;
+    if (!element || video?.kind !== "file" || video.provider !== "hls") return;
+    if (element.canPlayType("application/vnd.apple.mpegurl")) {
+      element.src = video.url;
+      return;
+    }
+    let disposed = false;
+    let hls: import("hls.js").default | null = null;
+    void import("hls.js").then(({ default: Hls }) => {
+      if (disposed || !Hls.isSupported()) return;
+      hls = new Hls();
+      hls.loadSource(video.url);
+      hls.attachMedia(element);
+    });
+    return () => {
+      disposed = true;
+      hls?.destroy();
+    };
+  }, [video?.kind, video?.provider, video?.url]);
+
   const seekToChapter = (startSeconds: number) => {
-    if (!isVimeoLesson) return;
-    void vimeoPlayerApiRef.current?.setCurrentTime(startSeconds);
-    vimeoPlayerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (isVimeoLesson) {
+      void vimeoPlayerApiRef.current?.setCurrentTime(startSeconds);
+      vimeoPlayerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    } else if (isFileLesson && videoRef.current) {
+      videoRef.current.currentTime = startSeconds;
+      videoRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
   };
 
   // Find current module for breadcrumb
   const currentModule = flattenCourseModuleTree(moduleTree).find((m) =>
-    m.lessons.some((l) => l.id === lesson?.id || l.slug === lessonIdentifier)
+    m.lessons.some((l) => l.id === currentLesson?.id)
   );
 
   // Preserve old bookmarked ID links, but immediately replace them with the
@@ -370,7 +378,7 @@ export default function TrainingLessonPage() {
     const moduleLessons = getModuleLessons(module);
     const isModuleComplete = moduleLessons.length > 0 && moduleLessons.every((lesson) => lesson.completed);
     const isCurrentModule = moduleLessons.some(
-      (lesson) => lesson.id === currentLesson?.id || lesson.slug === lessonIdentifier,
+      (lesson) => lesson.id === currentLesson?.id,
     );
     const toggleModule = () => setExpandedCourseModules((current) => {
       const next = new Set(current);
@@ -461,7 +469,7 @@ export default function TrainingLessonPage() {
         </div>
 
         {isModuleExpanded && module.lessons.map((lesson) => {
-        const isActive = lesson.id === currentLesson?.id || lesson.slug === lessonIdentifier;
+        const isActive = lesson.id === currentLesson?.id;
         const lessonButton = (
           <button
             key={lesson.id}
@@ -731,21 +739,39 @@ export default function TrainingLessonPage() {
             </h1>
 
             {/* Video */}
-            {embedUrl && (
+            {video && (
               <div className="mx-auto mb-8 w-full max-w-[1100px]">
                 <div
                   className="aspect-video overflow-hidden rounded-xl shadow-sm"
                   style={{ background: "#0f172a" }}
                 >
-                  <iframe
-                    ref={isVimeoLesson ? vimeoPlayerRef : undefined}
-                    src={embedUrl}
-                    className="h-full w-full"
-                    allowFullScreen
-                    title={lesson.title}
-                  />
+                  {video.kind === "file" ? (
+                    <video
+                      ref={videoRef}
+                      src={video.provider === "mp4" ? video.url : undefined}
+                      controls
+                      playsInline
+                      className="h-full w-full"
+                      onTimeUpdate={(event) => setVideoCurrentTime(event.currentTarget.currentTime)}
+                      aria-label={lesson.title}
+                    />
+                  ) : (
+                    <iframe
+                      ref={isVimeoLesson ? vimeoPlayerRef : undefined}
+                      src={video.url}
+                      className="h-full w-full"
+                      allowFullScreen
+                      allow="autoplay; fullscreen; picture-in-picture"
+                      title={lesson.title}
+                    />
+                  )}
                 </div>
               </div>
+            )}
+            {lesson.videoUrl && !video && (user?.isAdmin || user?.role === "super_admin") && (
+              <p role="alert" className="mx-auto mb-8 max-w-[780px] rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                This video link isn't supported. Use a YouTube, Vimeo, Voomly, Wistia, MP4, or M3U8 link.
+              </p>
             )}
             <div className="mx-auto max-w-[780px]">
             {lesson.transcriptText && (
@@ -800,7 +826,7 @@ export default function TrainingLessonPage() {
                                 key={`${chapter.startSeconds}-${chapter.title}`}
                                 type="button"
                                 onClick={() => seekToChapter(chapter.startSeconds)}
-                                disabled={!isVimeoLesson}
+                                disabled={!isVimeoLesson && !isFileLesson}
                                 className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors enabled:hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
                               >
                                 <span className="w-10 shrink-0 font-mono text-[12px] font-semibold" style={{ color: "#2563eb" }}>
@@ -842,7 +868,7 @@ export default function TrainingLessonPage() {
                 )}
               </div>
             )}
-            {!lesson.transcriptText && embedUrl && <div className="mb-8" />}
+            {!lesson.transcriptText && video && <div className="mb-8" />}
 
             {/* Lesson content — sanitized before render to prevent stored XSS */}
             {lesson.content && (
@@ -898,7 +924,17 @@ export default function TrainingLessonPage() {
             {/* Mark complete button */}
             <div className="flex justify-center mb-6">
               <button
-                onClick={() => lesson && progressMutation.mutate({ id: lesson.id, completed: !isCompleted })}
+                onClick={() => {
+                  if (!lesson) return;
+                  const nextModule = moduleForLesson(nextLesson);
+                  progressMutation.mutate({
+                    id: lesson.id,
+                    completed: !isCompleted,
+                    advanceTo: !isCompleted && nextLesson && courseData && nextModule
+                      ? trainingLessonPath(courseData.course, nextModule, nextLesson)
+                      : undefined,
+                  });
+                }}
                 disabled={progressMutation.isPending || !lesson}
                 className="flex items-center gap-2 px-5 py-2 rounded-lg text-[13px] font-semibold transition-colors"
                 style={

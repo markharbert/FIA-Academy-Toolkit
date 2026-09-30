@@ -841,6 +841,11 @@ export async function registerRoutes(
         }
       }
 
+      // Prevent session fixation after the ClickFunnels enrollment checks pass.
+      // This login does not rely on any pre-authentication session data.
+      await new Promise<void>((resolve, reject) =>
+        req.session.regenerate(err => (err ? reject(err) : resolve()))
+      );
       req.session.userId = user!.id;
       await storage.updateUser(user!.id, { lastLoginAt: new Date() });
 
@@ -13554,10 +13559,6 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       res.status(500).json({ message: err?.message ?? "Capture failed" });
     }
   });
-
-  // ─── Chrome Extension: Push Subscriptions ────────────────────────────────
-  // Save or replace push subscription for the authenticated member
-  // ---- Extension version check + download (public, no auth) ----
 
   // ---- Public pages (no auth, server-rendered HTML) ----
 
