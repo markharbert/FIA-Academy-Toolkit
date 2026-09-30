@@ -539,7 +539,7 @@ export interface IStorage {
   // Webhooks
   getWebhooksForUser(userId: string): Promise<Webhook[]>;
   createWebhook(userId: string, data: { url: string; label?: string; events?: string[] }): Promise<{ webhook: Webhook; secret: string }>;
-  updateWebhook(id: string, userId: string, data: { active?: boolean; label?: string; events?: string[] }): Promise<Webhook | undefined>;
+  updateWebhook(id: string, userId: string, data: { active?: boolean; label?: string; events?: string[]; url?: string }): Promise<Webhook | undefined>;
   deleteWebhook(id: string, userId: string): Promise<void>;
 
   // DMO Tracker
@@ -3060,8 +3060,9 @@ export class DatabaseStorage implements IStorage {
     return { webhook, secret };
   }
 
-  async updateWebhook(id: string, userId: string, data: { active?: boolean; label?: string; events?: string[] }): Promise<Webhook | undefined> {
+  async updateWebhook(id: string, userId: string, data: { active?: boolean; label?: string; events?: string[]; url?: string }): Promise<Webhook | undefined> {
     const updates: Partial<typeof webhooks.$inferSelect> = {};
+    if (data.url !== undefined) updates.url = data.url;
     if (data.active !== undefined) updates.active = data.active;
     if (data.label !== undefined) updates.label = data.label;
     if (data.events !== undefined) updates.events = data.events;

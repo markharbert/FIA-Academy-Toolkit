@@ -11,7 +11,7 @@ import { startYouTubeAnalyticsScheduler } from "./youtubeAnalyticsScheduler";
 import { startCfMembershipReconciliationScheduler } from "./cfMembershipReconciliation";
 import { startTrainingReplayTranscriptWorker } from "./trainingReplayTranscriptWorker";
 import { startCfRecurringRevenueScheduler } from "./clickfunnels";
-import { db, pool } from "./db";
+import { db as startupDb, pool } from "./db";
 import { sql, eq, and } from "drizzle-orm";
 import { teleprompterScripts, teleprompterRecordings } from "@shared/schema";
 import { slugify } from "@shared/slug";
@@ -72,10 +72,21 @@ app.use((_req, res, next) => {
 });
 
 const CF_WEBHOOK_RE = /^\/api\/webhooks\/clickfunnels\/?$/;
+// Most API calls are small. Give only the authenticated editors that carry
+// canvas, rich lesson content, or image snapshots a larger JSON allowance.
+const LARGE_JSON_PATHS = [
+  /^\/api\/funnels(?:\/[^/]+)?\/?$/,
+  /^\/api\/funnels\/screenshot\/?$/,
+  /^\/api\/admin\/lessons\/[^/]+\/?$/,
+  /^\/api\/admin\/training-replays\/[^/]+\/?$/,
+  /^\/api\/teleprompter\/scripts(?:\/[^/]+)?\/?$/,
+  /^\/api\/topic-pulse\/scripts\/[^/]+\/?$/,
+  /^\/api\/swipe(?:\/[^/]+)?\/?$/,
+];
 app.use((req, res, next) => {
   if (CF_WEBHOOK_RE.test(req.path)) return next();
   express.json({
-    limit: "50mb",
+    limit: LARGE_JSON_PATHS.some((pattern) => pattern.test(req.path)) ? "20mb" : "1mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
@@ -133,6 +144,25 @@ app.use((req, res, next) => {
 });
 
 async function runStartupMigrations() {
+  // A bad optional migration must not prevent unrelated tables from being
+  // attempted. Record failures individually rather than ending the whole run.
+  let migrationFailures = 0;
+  let migrationSteps = 0;
+  const db = new Proxy(startupDb, {
+    get(target, property, receiver) {
+      if (property !== "execute") return Reflect.get(target, property, receiver);
+      return async (...args: Parameters<typeof startupDb.execute>) => {
+        const step = ++migrationSteps;
+        try {
+          return await target.execute(...args);
+        } catch (err) {
+          migrationFailures++;
+          console.error(`[startup] database step ${step} failed (continuing):`, err);
+          return { rows: [], rowCount: 0 };
+        }
+      };
+    },
+  });
   try {
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS cf_webhook_activity (
@@ -943,6 +973,7 @@ async function runStartupMigrations() {
         UNIQUE(user_id)
       )
     `);
+    await db.execute(sql`ALTER TABLE extension_push_subscriptions ADD COLUMN IF NOT EXISTS vapid_public_key TEXT`);
     console.log("[startup] extension_push_subscriptions migration complete");
 
     await db.execute(sql`
@@ -1061,7 +1092,10 @@ async function runStartupMigrations() {
     console.log("[startup] readable course URL slugs migration complete");
 
   } catch (err) {
-    console.error("[startup] migration error:", err);
+    migrationFailures++;
+    console.error("[startup] migration error (remaining steps could not be attempted):", err);
+  } finally {
+    console.log(`[startup] database steps finished: ${migrationSteps} attempted, ${migrationFailures} failure(s)`);
   }
 }
 
@@ -1070,11 +1104,14 @@ async function runStartupMigrations() {
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    res.status(status).json({ message });
-    throw err;
+    console.error("[express] unhandled request error:", err);
+    if (res.headersSent) return _next(err);
+    const candidate = err.status || err.statusCode;
+    const status = Number.isInteger(candidate) && candidate >= 400 && candidate < 600 ? candidate : 500;
+    const production = process.env.NODE_ENV === "production" || process.env.REPLIT_DEPLOYMENT === "1";
+    res.status(status).json({
+      message: status >= 500 && production ? "Internal Server Error" : err.message || "Internal Server Error",
+    });
   });
 
   // importantly only setup vite in development and after

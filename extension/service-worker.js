@@ -999,9 +999,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     injectErrorToast(tabId, `Snippet not saved: ${err.message}`);
   }
 });
-// This public key is safe to embed — it is designed to be shared with clients.
-const VAPID_PUBLIC_KEY = "BPdIbvBytx7rxn5z3S3QJ2vI0GhB-PTDrtKpnpyyMa52g_nGrS7MCxYnUpbXEUMGPosBYYFydnRbXFm3rmnRBZE";
-
 // ─── Push subscription ────────────────────────────────────────────────────────
 function urlBase64ToUint8Array(b64) {
   const pad = "=".repeat((4 - (b64.length % 4)) % 4);
@@ -1012,19 +1009,33 @@ function urlBase64ToUint8Array(b64) {
 
 async function subscribeToPush(apiKey) {
   try {
+    const keyResponse = await fetch(`${API_BASE}/api/extension/push-key`, {
+      headers: { "X-API-Key": apiKey },
+    });
+    if (!keyResponse.ok) throw new Error("Push key unavailable");
+    const { publicKey } = await keyResponse.json();
+    if (!publicKey) throw new Error("Push key unavailable");
     const existing = await self.registration.pushManager.getSubscription();
-    if (existing) await existing.unsubscribe();
+    if (existing) {
+      const oldKey = existing.options?.applicationServerKey
+        ? new Uint8Array(existing.options.applicationServerKey) : null;
+      const nextKey = urlBase64ToUint8Array(publicKey);
+      if (!oldKey || oldKey.length !== nextKey.length || !oldKey.every((byte, index) => byte === nextKey[index])) {
+        await existing.unsubscribe();
+      }
+    }
 
-    const subscription = await self.registration.pushManager.subscribe({
+    const subscription = await self.registration.pushManager.getSubscription() || await self.registration.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      applicationServerKey: urlBase64ToUint8Array(publicKey),
     });
 
-    await fetch(`${API_BASE}/api/extension/subscribe`, {
+    const response = await fetch(`${API_BASE}/api/extension/subscribe`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
-      body: JSON.stringify(subscription.toJSON()),
+      body: JSON.stringify({ ...subscription.toJSON(), vapidPublicKey: publicKey }),
     });
+    if (!response.ok) throw new Error("Push registration was not saved");
 
     console.log("[FIA] Push subscription registered");
     return { success: true };

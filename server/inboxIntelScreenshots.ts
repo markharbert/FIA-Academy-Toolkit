@@ -54,6 +54,7 @@ function basicNormalize(raw?: string | null): string | null {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    if (parsed.username || parsed.password) return null;
     if (isObviouslyBadHost(parsed.hostname)) return null;
     return parsed.toString();
   } catch {

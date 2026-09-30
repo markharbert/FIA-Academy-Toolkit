@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { db } from "./db";
 import { webhooks } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
+import { safeNormalizeWebsite } from "./inboxIntelScreenshots";
 
 export type WebhookEvent =
   | "task.created"
@@ -36,9 +37,17 @@ export async function fireWebhooks(
     const payload = JSON.stringify({ event, userId, timestamp: new Date().toISOString(), data });
 
     for (const wh of matching) {
+      // Recheck on each delivery: a previously safe hostname may have changed.
+      // Never follow a redirect to an unvalidated destination.
+      const safeUrl = await safeNormalizeWebsite(wh.url);
+      if (!safeUrl) {
+        console.warn(`[webhook] blocked unsafe delivery target for webhook ${wh.id}`);
+        continue;
+      }
       const sig = sign(wh.secret, payload);
-      fetch(wh.url, {
+      fetch(safeUrl, {
         method: "POST",
+        redirect: "error",
         headers: {
           "Content-Type": "application/json",
           "X-Webhook-Event": event,

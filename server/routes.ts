@@ -431,8 +431,8 @@ export async function registerRoutes(
         if (!s) throw new Error("SESSION_SECRET environment variable is required but not set");
         return s;
       })(),
-      resave: true,
-      saveUninitialized: true, // Required for OAuth state storage before callback
+      resave: false,
+      saveUninitialized: false,
       rolling: true, // Reset expiration on each request (activity extends session)
       cookie: {
         secure: isProduction, // Use secure cookies in production (HTTPS)
@@ -1328,14 +1328,20 @@ export async function registerRoutes(
         
         // Set session and save before redirect
         console.log("[OAuth Google] Setting session for user:", user.id);
-        req.session.userId = user.id;
-        req.session.save((saveErr) => {
-          if (saveErr) {
-            console.error("[OAuth Google] Session save error:", saveErr);
+        req.session.regenerate((regenerateErr) => {
+          if (regenerateErr) {
+            console.error("[OAuth Google] Session regeneration error:", regenerateErr);
             return res.redirect("/?error=oauth_failed&reason=session_save");
           }
-          console.log("[OAuth Google] Session saved, redirecting to dashboard");
-          res.redirect("/dashboard");
+          req.session.userId = user.id;
+          req.session.save((saveErr) => {
+            if (saveErr) {
+              console.error("[OAuth Google] Session save error:", saveErr);
+              return res.redirect("/?error=oauth_failed&reason=session_save");
+            }
+            console.log("[OAuth Google] Session saved, redirecting to dashboard");
+            res.redirect("/dashboard");
+          });
         });
       })(req, res, next);
     });
@@ -11436,11 +11442,19 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
   app.patch("/api/v1/webhooks/:id", requireApiKey, async (req: Request, res: Response) => {
     try {
       const user = (req as any).apiUser;
-      const { active, label, events } = req.body;
+      const { active, label, events, url } = req.body;
+      let safeUrl: string | undefined;
+      if (url !== undefined) {
+        if (typeof url !== "string" || !/^https?:\/\/.+/i.test(url)) {
+          return res.status(400).json({ message: "A valid url is required" });
+        }
+        safeUrl = await safeNormalizeWebsite(url) ?? undefined;
+        if (!safeUrl) return res.status(400).json({ message: "URL resolves to a private or reserved address and cannot be used as a webhook target." });
+      }
       if (events !== undefined && (!Array.isArray(events) || events.some((e: string) => !VALID_EVENTS.includes(e)))) {
         return res.status(400).json({ message: `events must be an array of: ${VALID_EVENTS.join(", ")}` });
       }
-      const updated = await storage.updateWebhook(req.params.id, user.id, { active, label, events });
+      const updated = await storage.updateWebhook(req.params.id, user.id, { active, label, events, url: safeUrl });
       if (!updated) return res.status(404).json({ message: "Webhook not found" });
       const { secret: _s, ...rest } = updated;
       res.json({ webhook: rest });
@@ -13672,6 +13686,12 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }
   });
 
+  app.get("/api/extension/push-key", requireApiKey, (_req: Request, res: Response) => {
+    const publicKey = process.env.VAPID_PUBLIC_KEY;
+    if (!publicKey) return res.status(503).json({ message: "Push notifications are not configured" });
+    res.json({ publicKey });
+  });
+
   app.post("/api/extension/subscribe", requireApiKey, async (req: Request, res: Response) => {
     try {
       const user = (req as any).apiUser;
@@ -13679,13 +13699,17 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       if (!endpoint || !keys?.p256dh || !keys?.auth) {
         return res.status(400).json({ message: "Invalid subscription object" });
       }
+      if (!process.env.VAPID_PUBLIC_KEY || req.body.vapidPublicKey !== process.env.VAPID_PUBLIC_KEY) {
+        return res.status(409).json({ message: "Push key changed; subscribe again" });
+      }
       await db.execute(sql`
-        INSERT INTO extension_push_subscriptions (user_id, endpoint, p256dh, auth)
-        VALUES (${user.id}, ${endpoint}, ${keys.p256dh}, ${keys.auth})
+        INSERT INTO extension_push_subscriptions (user_id, endpoint, p256dh, auth, vapid_public_key)
+        VALUES (${user.id}, ${endpoint}, ${keys.p256dh}, ${keys.auth}, ${process.env.VAPID_PUBLIC_KEY})
         ON CONFLICT (user_id) DO UPDATE
           SET endpoint = EXCLUDED.endpoint,
               p256dh   = EXCLUDED.p256dh,
               auth     = EXCLUDED.auth,
+              vapid_public_key = EXCLUDED.vapid_public_key,
               created_at = CURRENT_TIMESTAMP
       `);
       res.json({ ok: true });
@@ -13735,6 +13759,8 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       const webpush = await import("web-push");
       webpush.default.setVapidDetails(vapidContact, vapidPublicKey, vapidPrivateKey);
 
+      // Subscriptions signed with retired keys cannot receive this broadcast.
+      await db.execute(sql`DELETE FROM extension_push_subscriptions WHERE vapid_public_key IS DISTINCT FROM ${vapidPublicKey}`);
       const rows = await db.execute(sql`SELECT endpoint, p256dh, auth FROM extension_push_subscriptions`);
       const subs = rows.rows as { endpoint: string; p256dh: string; auth: string }[];
 
