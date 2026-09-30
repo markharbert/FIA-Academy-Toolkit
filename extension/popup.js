@@ -1788,10 +1788,6 @@ async function validateAndSave(key, errorEl) {
   try {
     await apiFetch("/api/v1/dmo");
     await chrome.storage.local.set({ apiKey: key });
-    try {
-      const sw = await navigator.serviceWorker.ready;
-      if (sw.active) sw.active.postMessage({ type: "SUBSCRIBE_PUSH", apiKey: key });
-    } catch (_) {}
     await loadDMO();
   } catch (e) {
     if (e instanceof MembershipError) {
