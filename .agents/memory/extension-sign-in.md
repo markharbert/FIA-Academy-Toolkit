@@ -9,6 +9,12 @@ The user wants the browser extension to use regular Toolkit login instead of man
 
 **How to apply:** Keep browser device authorization and renewal independent of website-cookie lifetime and the Public API key feature. Require explicit approval in the normal Toolkit login context. Browser-based approval with PKCE-bound polling avoids depending on a fixed Chrome extension ID when installations come from downloaded ZIPs.
 
+The extension is for paying members of the Fearless Influencer Academy at fearlessinfluencer.com.
+
+**Why:** The user explicitly identified this audience and required it to be stated in the Chrome Web Store description.
+
+**How to apply:** Clearly identify the paid-membership requirement in customer-facing extension descriptions; do not describe it as a standalone tool available to everyone.
+
 Credentials and pending authorization proofs belong in extension-origin IndexedDB, not content-script-accessible Chrome local storage.
 
 **Why:** The packaged tests use Chromium 125, where local storage's setAccessLevel method is unavailable. IndexedDB works there and gives extension-origin isolation without raising the browser minimum just for credential storage. Chrome local storage remains appropriate for non-secret preferences.
