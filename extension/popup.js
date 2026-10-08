@@ -165,6 +165,7 @@ async function signOutExtension() {
   stopTick();
   await chrome.storage.local.remove(["cachedDmo", "timers", "todayDate", "notesValue", "targets", "dmoAccountId"]);
   connected = false; extensionAccount = null;
+  resetCachedPanels();
   timers = {}; notesValue = ""; serverEntry = null;
   showPendingLogin(null);
   showScreen("setup");
@@ -500,15 +501,30 @@ function renderActivities() {
 }
 
 // ─── Links tab ─────────────────────────────────────────────────────────────
+let linkThumbnails = {};
+let linksRenderRevision = 0;
+let logRenderRevision = 0;
+function resetCachedPanels() {
+  linksRenderRevision++; logRenderRevision++;
+  linkThumbnails = {}; linksAll = []; logEntries = [];
+  $("links-content")?.replaceChildren();
+  $("log-content")?.replaceChildren();
+}
 async function renderLinks() {
+  const revision = ++linksRenderRevision;
   const container = $("links-content");
   if (!container) return;
-  container.innerHTML = `<div class="links-loading"><div class="spinner" style="border-top-color:var(--accent)"></div></div>`;
+  if (!container.querySelector(".links-header")) container.innerHTML = `<div class="links-loading"><div class="spinner" style="border-top-color:var(--accent)"></div></div>`;
   try {
+    const accountId = extensionAccount?.id;
+    const snapshot = await authMessage("POPUP_CACHE_SNAPSHOT").catch(() => null);
+    if (snapshot?.accountId === accountId) linkThumbnails = snapshot.thumbnails || {};
     const data = await apiFetch("/api/v1/links?activeOnly=false");
+    if (!connected || extensionAccount?.id !== accountId || revision !== linksRenderRevision) return;
     linksAll = data.links || [];
     renderLinksList(container);
   } catch (err) {
+    if (revision !== linksRenderRevision) return;
     if (err instanceof MembershipError) { showSuspended(); return; }
     container.innerHTML = `<div class="links-empty">Could not load links. Check your connection.</div>`;
   }
@@ -664,13 +680,16 @@ function buildLinkCard(link, container) {
   const thumb = document.createElement("div");
   thumb.className = "link-thumb";
   const thumbImg = document.createElement("img");
-  thumbImg.loading = "lazy";
+  thumbImg.loading = "eager";
+  thumbImg.decoding = "async";
   thumbImg.alt = link.title;
-  thumbImg.src = link.screenshotUrl
-    ? link.screenshotUrl
+  const source = link.screenshotUrl
+    ? (link.screenshotUrl.startsWith("/") ? `${API_BASE}${link.screenshotUrl}` : link.screenshotUrl)
     : link.url
       ? `https://api.microlink.io/?url=${encodeURIComponent(link.url)}&screenshot=true&meta=false&embed=screenshot.url`
       : "";
+  thumbImg.dataset.thumbSource = source;
+  thumbImg.src = linkThumbnails[source] || source;
   const thumbPh = document.createElement("span");
   thumbPh.className = "link-thumb-ph";
   thumbPh.textContent = "🌐";
@@ -942,11 +961,14 @@ function buildLinksForm(container) {
 
 // ─── Render log ────────────────────────────────────────────────────────────
 async function renderLog() {
+  const accountId = extensionAccount?.id;
+  const revision = ++logRenderRevision;
   const container = $("log-content");
   if (!container) return;
   container.innerHTML = `<div class="log-loading"><div class="spinner" style="border-top-color:var(--accent)"></div></div>`;
   try {
     const data = await apiFetch("/api/v1/dmo/history?limit=60");
+    if (!connected || extensionAccount?.id !== accountId || revision !== logRenderRevision) return;
     logEntries = data.entries || [];
     renderLogList(container);
   } catch {
@@ -1393,7 +1415,8 @@ async function loadDMO(background = false) {
     ]);
 
     // Persist for next cache-first open
-    chrome.storage.local.set({ cachedDmo: { dmoData, settingsData, accountId: extensionAccount?.id } }).catch(() => {});
+    chrome.storage.local.set({ cachedDmo: { dmoData, settingsData, accountId: extensionAccount?.id,
+      cacheDay: localCacheDay() } }).catch(() => {});
 
     await applyDmoData(dmoData, settingsData, background);
     if (!background) showScreen("main");
@@ -1481,6 +1504,7 @@ async function swipeCaptureFullPage() {
     });
     if (!response?.ok) throw new Error(response?.error || "Could not start the capture.");
   } catch (err) {
+    if (revision !== logRenderRevision) return;
     swipeEnableBtns();
     swipeHideStatus();
     swipeShowStatus(`Capture could not start: ${err.message || "Please try again."}`);
@@ -1811,6 +1835,15 @@ async function startSignIn() {
 }
 
 // ─── Boot ──────────────────────────────────────────────────────────────────
+function localCacheDay() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+async function preloadPanels() {
+  void authMessage("POPUP_CACHE_WARM").catch(() => {});
+  void renderLinks();
+  void renderLog();
+}
 async function boot() {
   showScreen("loading");
 
@@ -1958,10 +1991,25 @@ async function boot() {
   // Uses chrome.runtime.onMessage — the correct MV3 extension messaging API.
   // Fires when the background alarm detects restored membership while the popup is open.
   chrome.runtime.onMessage.addListener((message) => {
-    if (message?.type === "AUTH_CONNECTED") {
+    if (message?.type === "POPUP_AUTH_CLEARED") {
+      connected = false; extensionAccount = null; resetCachedPanels(); showPendingLogin(null); showScreen("setup");
+    } else if (message?.type === "POPUP_DATA_UPDATED" && message.accountId === extensionAccount?.id && connected) {
+      if (message.path.startsWith("/api/v1/links?")) void renderLinks();
+      else if (message.path === "/api/v1/dmo" || message.path === "/api/v1/dmo/settings") void loadDMO(true);
+      else if (message.path.startsWith("/api/v1/dmo/history") && !logEditMode) void renderLog();
+    } else if (message?.type === "POPUP_THUMBNAIL_READY" && message.accountId === extensionAccount?.id && connected) {
+      linkThumbnails[message.src] = message.dataUrl;
+      document.querySelectorAll("#links-content img[data-thumb-source]").forEach((img) => {
+        if (img.dataset.thumbSource === message.src) { img.style.display = ""; img.src = message.dataUrl; }
+      });
+    } else if (message?.type === "POPUP_ACCESS_BLOCKED" && message.accountId === extensionAccount?.id) {
+      if (message.status === 401) { connected = false; showScreen("setup"); }
+      else showScreen("suspended");
+    } else if (message?.type === "AUTH_CONNECTED") {
       authMessage("AUTH_STATUS").then((status) => {
+        if (extensionAccount?.id !== status.account?.id) resetCachedPanels();
         connected = status.connected; extensionAccount = status.account;
-        if (connected) void loadDMO();
+        if (connected) { void preloadPanels(); void loadDMO(); }
       }).catch(() => {});
     } else if (message?.type === "MEMBERSHIP_RESTORED") {
       loadDMO();
@@ -1981,9 +2029,11 @@ async function boot() {
   showPendingLogin(authStatus.pending);
   // Restore only the current member's cache; old unscoped caches are never shown.
   if (connected) {
+    void preloadPanels();
     if (stored.targets) targets = stored.targets;
 
-    if (stored.cachedDmo?.dmoData && stored.cachedDmo.accountId === extensionAccount?.id) {
+    if (stored.cachedDmo?.dmoData && stored.cachedDmo.accountId === extensionAccount?.id
+      && stored.cachedDmo.cacheDay === localCacheDay()) {
       // Show UI immediately from last cached response (~0ms), then refresh in background
       await applyDmoData(stored.cachedDmo.dmoData, stored.cachedDmo.settingsData);
       showScreen("main");

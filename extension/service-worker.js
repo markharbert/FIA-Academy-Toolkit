@@ -1,4 +1,7 @@
 import { authenticatedFetch, getAuthStatus } from "./extension-auth.js";
+import { installPopupCache } from "./popup-cache.js";
+
+installPopupCache();
 
 "use strict";
 

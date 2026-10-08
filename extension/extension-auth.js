@@ -4,6 +4,13 @@ const API_BASE = "https://toolkit.fearlessmarketinglab.com";
 const LOGIN_ALARM = "extension-login-poll";
 let refreshing = null;
 let polling = null;
+let requestCacheHandler = null;
+const authChangeListeners = new Set();
+export function setRequestCacheHandler(handler) { requestCacheHandler = handler; }
+export function onAuthChanged(listener) { authChangeListeners.add(listener); }
+function notifyAuthChanged() {
+  for (const listener of authChangeListeners) Promise.resolve().then(listener).catch(() => {});
+}
 
 const encode = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const randomSecret = () => encode(crypto.getRandomValues(new Uint8Array(32)));
@@ -48,6 +55,7 @@ async function clearAuth() {
   await chrome.storage.local.remove(["apiKey", "suspended", "lastSuspendedCheckAt"]);
   await chrome.alarms.clear(LOGIN_ALARM);
   await chrome.alarms.clear("fia-suspended-check");
+  notifyAuthChanged();
 }
 
 async function pollLogin() {
@@ -58,6 +66,7 @@ async function pollLogin() {
     if (!validPending(pending) || pending.expiresAt < Date.now()) {
       await authStore.remove("extensionLoginPending");
       await chrome.alarms.clear(LOGIN_ALARM);
+      notifyAuthChanged();
       return;
     }
     let data;
@@ -192,9 +201,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       await chrome.alarms.clear(LOGIN_ALARM);
       return {};
     }
-    const res = await authenticatedFetch(msg.path, { method: msg.method || "GET", body: msg.body,
+    const context = { path: msg.path, method: (msg.method || "GET").toUpperCase(), phase: "before" };
+    let cached = null;
+    try { cached = requestCacheHandler ? await requestCacheHandler(context) : null; }
+    catch (error) { console.warn("Popup cache unavailable; using a direct request.", error.message); }
+    if (cached) return cached;
+    const res = await authenticatedFetch(msg.path, { method: context.method, body: msg.body,
       headers: { "Content-Type": "application/json" } });
     const data = await res.json().catch(() => ({}));
+    try { if (requestCacheHandler) await requestCacheHandler({ ...context, phase: "after", status: res.status, data }); }
+    catch (error) { console.warn("Popup cache update failed.", error.message); }
     return { status: res.status, data };
   })().then((data) => sendResponse({ ok: true, ...data })).catch((err) => {
     sendResponse({ ok: false, status: err.status || 0, code: err.code, error: err.message || "Could not connect." });

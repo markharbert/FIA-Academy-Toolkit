@@ -36,3 +36,4 @@
 - [Revenue refresh deployment](revenue-refresh-deployment.md) — 15-minute ClickFunnels refreshes require always-on production compute; Autoscale pauses timers.
 - [Extension push retired](extension-push-retired.md) — browser push broadcasts were intentionally removed; keep the rest of the toolkit extension intact.
 - [Extension sign-in](extension-sign-in.md) — independent device sessions, extension-origin credential storage, and a login return-path race to preserve.
+- [Extension background loading](extension-background-loading.md) — preload popup data and thumbnails so opening tabs does not start their first network load.
