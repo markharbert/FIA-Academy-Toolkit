@@ -875,7 +875,7 @@
     Contact Support
   </a>
   <button class="suspended-dismiss" id="suspended-disconnect">
-    Disconnect &amp; clear saved key
+    Sign out
   </button>
 </div>
 
@@ -884,15 +884,16 @@
   <div class="setup-logo"><img src="icons/icon128.png" alt="FIA" /></div>
   <div class="setup-title">Fearless Influencer Academy Toolkit</div>
   <p class="setup-desc">
-    Enter your API key to connect the extension to your Academy Toolkit account.<br/>
-    Get one at <a href="https://toolkit.fearlessmarketinglab.com/account" target="_blank">toolkit.fearlessmarketinglab.com</a> → Account → API Access.
+    Sign in with your regular Academy Toolkit account. Your browser will open the Toolkit sign-in page. No API key is needed.
   </p>
-  <div>
-    <div class="field-label">API Key</div>
-    <input type="password" id="api-key-input" class="text-input" placeholder="ftk_…" autocomplete="off" />
+  <div id="login-pending" style="display:none; padding:14px; border:1px solid var(--border); border-radius:10px; text-align:center;">
+    <div class="field-label">Compare this code on the Toolkit page</div>
+    <strong id="login-code" style="font-size:22px; letter-spacing:3px;"></strong>
+    <p style="font-size:12px; line-height:1.5;">Approve the connection in the Toolkit tab, then reopen this extension.</p>
+    <button id="cancel-login-btn" class="btn-ghost">Cancel sign-in</button>
   </div>
   <div id="setup-error" class="error-msg" style="display:none"></div>
-  <button id="save-key-btn" class="btn-primary">Connect</button>
+  <button id="sign-in-btn" class="btn-primary">Sign in to Academy Toolkit</button>
 </div>
 
 <!-- Main -->
@@ -1050,19 +1051,17 @@
       <span class="settings-ovl-title">Settings</span>
     </div>
     <div class="settings-ovl-body">
-      <div class="settings-section-title">API Key</div>
+      <div class="settings-section-title">Account</div>
       <div class="settings-block">
-        <input type="password" id="settings-key-input" class="text-input" placeholder="ftk_…" />
+        <div id="settings-account" style="font-size:12px; line-height:1.5;"></div>
         <div id="settings-error" class="error-msg" style="display:none"></div>
-        <button id="update-key-btn" class="btn-primary">Update Key</button>
-        <button id="disconnect-btn" class="btn-ghost">Disconnect &amp; clear all data</button>
+        <button id="disconnect-btn" class="btn-ghost">Sign out</button>
         <div id="disconnect-confirm" style="display:none; flex-direction:column; gap:8px; padding:12px; border-radius:10px; border:1px solid rgba(218,0,16,.3); background:rgba(218,0,16,.05);">
           <p style="font-size:12px; color:var(--text); line-height:1.55;">
-            <strong>Are you sure?</strong> This will remove your API key and all locally saved data.
-            You'll need to enter a new API key to reconnect.
+            <strong>Sign out of this extension?</strong> This revokes its connection and clears locally cached account data. Your theme and tool preferences are kept.
           </p>
           <div style="display:flex; gap:8px;">
-            <button id="disconnect-confirm-yes" class="btn-primary" style="background:var(--red); font-size:12px; padding:8px 14px;">Yes, disconnect</button>
+            <button id="disconnect-confirm-yes" class="btn-primary" style="background:var(--red); font-size:12px; padding:8px 14px;">Yes, sign out</button>
             <button id="disconnect-confirm-cancel" class="btn-ghost" style="font-size:12px; padding:8px 14px;">Cancel</button>
           </div>
         </div>

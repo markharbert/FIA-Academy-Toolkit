@@ -580,8 +580,43 @@ async function main() {
     const extensionPage = await browser.newPage();
     await extensionPage.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: "domcontentloaded" });
     await extensionPage.evaluate(async () => {
-      await chrome.storage.local.set({ apiKey: "link-vault-smoke-test" });
+      const tokens = {
+        accessToken: "fte_access_" + "a".repeat(64), refreshToken: "fte_refresh_" + "b".repeat(64),
+        accessExpiresAt: Date.now() + 3600000, refreshExpiresAt: Date.now() + 90 * 86400000,
+        account: { id: "smoke-member", email: "smoke@example.invalid" },
+      };
+      await new Promise((resolve, reject) => {
+        const request = indexedDB.open("fia-extension-auth", 1);
+        request.onupgradeneeded = () => request.result.createObjectStore("state");
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const tx = request.result.transaction("state", "readwrite");
+          tx.objectStore("state").put(tokens, "extensionAuth");
+          tx.oncomplete = () => { request.result.close(); resolve(); };
+          tx.onerror = () => reject(tx.error);
+        };
+      });
       await chrome.storage.session.clear();
+    });
+    // Authenticated requests now originate in the worker, not the picker page.
+    // Never let this packaged smoke test contact the real member API.
+    await workerSession.send("Runtime.evaluate", {
+      expression: `
+        globalThis.__fiaSmokeNetworkFetch = globalThis.fetch;
+        globalThis.fetch = async (url, options = {}) => {
+          if (String(url).includes("toolkit.fearlessmarketinglab.com/api/")) {
+            if (String(url).includes("/api/v1/links?activeOnly=false")) {
+              return new Response(JSON.stringify({ links: [{ id: "smoke-link", title: "Smoke-test Link", url: ${JSON.stringify(linkUrl)} }] }), {
+                status: 200, headers: { "Content-Type": "application/json" },
+              });
+            }
+            if (String(url).includes("/api/v1/links/smoke-link/click")) return new Response(null, { status: 204 });
+            throw new Error("Unexpected live API request blocked by smoke test");
+          }
+          return globalThis.__fiaSmokeNetworkFetch(url, options);
+        };
+      `,
+      awaitPromise: true,
     });
 
     async function tabFor(url) {
@@ -632,9 +667,13 @@ async function main() {
         { timeout: 5_000 },
       );
       const pickerPage = await pickerTarget.page();
+      pickerPage.on("pageerror", (error) => console.error("Picker script error:", error.message));
       await installLinkApiStub(pickerPage);
       await pickerPage.reload({ waitUntil: "domcontentloaded" });
-      await pickerPage.waitForSelector(".link-button");
+      await pickerPage.waitForSelector(".link-button", { timeout: 10000 }).catch(async (error) => {
+        console.error("Picker state:", await pickerPage.$eval("body", (body) => body.innerText));
+        throw error;
+      });
 
       return { pickerPage, windowId };
     }
@@ -1690,7 +1729,7 @@ async function main() {
         { family: "Headline Fixture", variants: [{ weight: "700", size: "36px", count: 1 }] },
       ],
     );
-    assert.equal(saveRequestResult.result.value.headers["X-API-Key"], "link-vault-smoke-test");
+    assert.equal(saveRequestResult.result.value.headers.Authorization, "Bearer fte_access_" + "a".repeat(64));
 
     // Switching tabs during a scan must abort instead of sampling unrelated content,
     // and the source page must still be restored to its original scroll position.

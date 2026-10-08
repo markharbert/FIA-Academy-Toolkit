@@ -1781,6 +1781,37 @@ export const publicApiKeys = pgTable("public_api_keys", {
 
 export type PublicApiKey = typeof publicApiKeys.$inferSelect;
 
+// Browser-extension sessions are separate from website cookies and public API keys.
+export const extensionDeviceSessions = pgTable("extension_device_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  deviceLabel: text("device_label").notNull().default("Chrome extension"),
+  refreshTokenHash: text("refresh_token_hash").notNull().unique(),
+  previousRefreshTokenHash: text("previous_refresh_token_hash"),
+  previousRefreshUntil: timestamp("previous_refresh_until"),
+  accessTokenHash: text("access_token_hash").notNull().unique(),
+  accessExpiresAt: timestamp("access_expires_at").notNull(),
+  refreshExpiresAt: timestamp("refresh_expires_at").notNull(),
+  cfLastCheckedAt: timestamp("cf_last_checked_at"),
+  revokedAt: timestamp("revoked_at"),
+  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  lastUsedAt: timestamp("last_used_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const extensionAuthRequests = pgTable("extension_auth_requests", {
+  id: varchar("id").primaryKey(),
+  pollSecretHash: text("poll_secret_hash").notNull(),
+  pkceChallenge: text("pkce_challenge").notNull(),
+  userCode: text("user_code").notNull(),
+  deviceLabel: text("device_label").notNull(),
+  status: text("status").notNull().default("pending"),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }),
+  sessionId: varchar("session_id").references(() => extensionDeviceSessions.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at").notNull(),
+  consumedAt: timestamp("consumed_at"),
+  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 // ─── Outbound Webhooks ────────────────────────────────────────────────────────
 export const webhooks = pgTable("webhooks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

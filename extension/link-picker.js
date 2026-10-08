@@ -1,3 +1,5 @@
+import { extensionRequest, extensionStatus } from "./auth-request.js";
+
 "use strict";
 
 const API_BASE = "https://toolkit.fearlessmarketinglab.com";
@@ -63,7 +65,7 @@ async function copyText(text) {
   if (!copied) throw new Error("Clipboard access was denied");
 }
 
-async function chooseLink(link, buttons, apiKey) {
+async function chooseLink(link, buttons) {
   buttons.forEach((button) => { button.disabled = true; });
 
   try {
@@ -72,10 +74,8 @@ async function chooseLink(link, buttons, apiKey) {
     // Keep Link Vault usage metrics consistent with the extension's main popup.
     // Guard against malformed records that have a missing or invalid id.
     if (link.id != null) {
-      fetch(`${API_BASE}/api/v1/links/${encodeURIComponent(link.id)}/click`, {
+      extensionRequest(`/api/v1/links/${encodeURIComponent(link.id)}/click`, {
         method: "POST",
-        headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
-        keepalive: true,
       }).catch(() => {});
     }
 
@@ -99,7 +99,7 @@ async function chooseLink(link, buttons, apiKey) {
   }
 }
 
-function renderLinks(links, apiKey) {
+function renderLinks(links) {
   if (links.length === 0) {
     makeState({
       title: "No links yet",
@@ -131,7 +131,7 @@ function renderLinks(links, apiKey) {
     button.type = "button";
     button.className = "link-button";
     button.textContent = String(link.title || "Untitled link");
-    button.addEventListener("click", () => chooseLink(link, buttons, apiKey));
+    button.addEventListener("click", () => chooseLink(link, buttons));
 
     buttons.push(button);
     item.appendChild(button);
@@ -158,10 +158,16 @@ async function loadLinks() {
       <p class="state-copy">Loading your links…</p>
     </div>`;
 
-  const stored = await chrome.storage.local.get(["apiKey", "theme"]);
+  const stored = await chrome.storage.local.get(["theme"]);
   document.body.classList.toggle("dark", stored.theme === "dark");
 
-  if (!stored.apiKey) {
+  let auth;
+  try { auth = await extensionStatus(); }
+  catch (err) {
+    makeState({ icon: "!", title: "Could not check connection", copy: err.message, error: true, actionLabel: "Try again", onAction: loadLinks });
+    return;
+  }
+  if (!auth.connected) {
     makeState({
       icon: "🔒",
       title: "Connect your account",
@@ -184,25 +190,8 @@ async function loadLinks() {
   }
 
   try {
-    const response = await fetch(`${API_BASE}/api/v1/links?activeOnly=false`, {
-      headers: { "X-API-Key": stored.apiKey, "Content-Type": "application/json" },
-    });
-
-    if (response.status === 401) {
-      throw new Error("Your extension connection has expired. Open FIA Toolkit and sign in again.");
-    }
-    if (response.status === 403) {
-      let message = "Your membership is not active.";
-      try {
-        const body = await response.json();
-        message = body.message || message;
-      } catch {}
-      throw new Error(message);
-    }
-    if (!response.ok) throw new Error("Could not load links. Check your connection and try again.");
-
-    const data = await response.json();
-    renderLinks(Array.isArray(data.links) ? data.links : [], stored.apiKey);
+    const data = await extensionRequest("/api/v1/links?activeOnly=false");
+    renderLinks(Array.isArray(data.links) ? data.links : []);
   } catch (error) {
     makeState({
       icon: "!",

@@ -1,3 +1,5 @@
+import { authenticatedFetch, getAuthStatus } from "./extension-auth.js";
+
 "use strict";
 
 const API_BASE = "https://toolkit.fearlessmarketinglab.com";
@@ -336,10 +338,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   (async () => {
     try {
-      const stored = await chrome.storage.local.get(["apiKey"]);
-      const key = stored.apiKey;
-      if (!key) throw new Error("Not connected — please enter your API key.");
-
       if (!Array.isArray(msg.colors) || msg.colors.length !== 6) {
         throw new Error("The palette must contain exactly six colors.");
       }
@@ -354,9 +352,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const sourceTitle = typeof msg.sourceTitle === "string" ? msg.sourceTitle.trim().slice(0, 120) : "";
       const fallbackTitle = new URL(msg.sourceUrl || "https://unknown").hostname;
       const title = `Color Palette — ${sourceTitle || fallbackTitle}`;
-      const res = await fetch(`${API_BASE}/api/v1/swipe`, {
+      const res = await authenticatedFetch("/api/v1/swipe", {
         method:  "POST",
-        headers: { "Content-Type": "application/json", "X-API-Key": key },
+        headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ type: "palette", title, content, sourceUrl: msg.sourceUrl || "" }),
       });
       if (!res.ok) {
@@ -958,14 +956,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const title     = (tab?.title ?? "Snippet").substring(0, 120);
   const tabId     = tab?.id;
 
-  const stored = await chrome.storage.local.get(["apiKey"]);
-  const key = stored.apiKey;
-  if (!key) {
-    // No API key — surface an error instead of silently doing nothing.
-    injectErrorToast(tabId, "Snippet not saved — please connect your API key first.");
-    return;
-  }
-
   // snippet-capture.js stashes the selection HTML in session storage at the
   // moment of right-click (before the selection is cleared by the menu click).
   // Read it here and clear it so it doesn't bleed into the next snippet.
@@ -984,9 +974,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 
   try {
-    const res = await fetch(`${API_BASE}/api/v1/swipe`, {
+    const res = await authenticatedFetch("/api/v1/swipe", {
       method:  "POST",
-      headers: { "Content-Type": "application/json", "X-API-Key": key },
+      headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ type: "snippet", title, content, sourceUrl }),
     });
     if (!res.ok) {
@@ -1012,8 +1002,14 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 async function checkMembershipAlarm() {
-  const { apiKey, suspended } = await chrome.storage.local.get(["apiKey", "suspended"]);
-  if (!apiKey || !suspended) {
+  const { suspended } = await chrome.storage.local.get(["suspended"]);
+  if (!suspended) {
+    chrome.alarms.clear(SUSPENDED_ALARM);
+    return;
+  }
+  let status;
+  try { status = await getAuthStatus(); } catch { return; }
+  if (!status.connected) {
     // State no longer requires background checking — cancel the alarm.
     chrome.alarms.clear(SUSPENDED_ALARM);
     return;
@@ -1023,9 +1019,9 @@ async function checkMembershipAlarm() {
   await chrome.storage.local.set({ lastSuspendedCheckAt: Date.now() });
 
   try {
-    const res = await fetch(`${API_BASE}/api/v1/membership/check`, {
+    const res = await authenticatedFetch("/api/v1/membership/check", {
       method: "POST",
-      headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json" },
     });
     if (!res.ok) return; // Silent — will retry on next alarm
     const data = await res.json();
@@ -1058,7 +1054,7 @@ async function checkMembershipAlarm() {
 // ─── Runtime messages from popup ─────────────────────────────────────────────
 // Uses chrome.runtime.onMessage (the correct MV3 extension messaging API).
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  const { type, apiKey } = message || {};
+  const { type } = message || {};
 
   if (type === "START_SUSPENDED_CHECK") {
     chrome.storage.local.set({ suspended: true, lastSuspendedCheckAt: Date.now() }).then(() =>

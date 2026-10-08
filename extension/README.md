@@ -1,5 +1,15 @@
 # FIA Toolkit extension checks
 
+## Sign-in
+
+Click **Sign in to Academy Toolkit**, use your normal Toolkit login in the tab that opens, and approve the connection after comparing its code with the extension. Reopen the extension to finish. No API key or password is stored by the extension.
+
+The extension has its own renewable device session, separate from the website cookie. Access credentials last 15 minutes and renew automatically. The renewal window extends with use; a browser left unused for 90 days requires sign-in again. Network failures do not erase a session. Signing out, resetting your password, or revoking the device in **Account → Profile → Browser extension sessions** requires signing in again. Membership restrictions still apply.
+
+Upgrading retains theme and tool preferences but removes the obsolete locally saved API key. The Public API key feature on the Account page remains available for other integrations.
+
+For an unpacked Chrome installation, extract updates into the same extension folder you originally loaded, then click **Reload** at `chrome://extensions`. Loading a different folder or uninstalling creates a new installation and requires signing in again. Publish the updated Toolkit before installing this version so its sign-in endpoints are available.
+
 ## Link Vault paste smoke test
 
 Run this before distributing an updated extension archive:

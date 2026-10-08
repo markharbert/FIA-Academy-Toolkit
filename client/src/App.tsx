@@ -1,5 +1,5 @@
 import { Switch, Route, Redirect, useLocation, useParams } from "wouter";
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useMemo } from "react";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -15,6 +15,7 @@ import { Loader2, ExternalLink } from "lucide-react";
 
 // Public pages — kept eager so the login screen renders instantly
 import LoginPage from "@/pages/login";
+import ExtensionConnectPage from "@/pages/extension-connect";
 import ForgotPasswordPage from "@/pages/forgot-password";
 import ResetPasswordPage from "@/pages/reset-password";
 
@@ -169,6 +170,9 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
 
 function PublicOnlyRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
+  // Capture the return destination before login changes both auth and URL state.
+  // A late render of this old route must not read the new page's query string.
+  const destination = useMemo(() => new URLSearchParams(window.location.search).get("redirect") || "", []);
 
   if (isLoading) {
     return (
@@ -179,7 +183,9 @@ function PublicOnlyRoute({ component: Component }: { component: React.ComponentT
   }
 
   if (user) {
-    return <Redirect to="/dashboard" />;
+    // Avoid racing the login form's return destination after it updates auth state.
+    const safe = destination.startsWith("/") && !destination.startsWith("//") && !destination.includes("\\");
+    return <Redirect to={safe ? destination : "/dashboard"} />;
   }
 
   return <Component />;
@@ -197,6 +203,13 @@ function AuthenticatedCatchAll() {
   }
 
   if (user) {
+    // Login updates auth before its navigation finishes. This fallback can render
+    // briefly at "/", or after the browser URL has moved but before Switch updates.
+    if (window.location.pathname === "/extension/connect") return <ExtensionConnectPage />;
+    const destination = new URLSearchParams(window.location.search).get("redirect") || "";
+    if (destination.startsWith("/") && !destination.startsWith("//") && !destination.includes("\\")) {
+      return <Redirect to={destination} />;
+    }
     return <Redirect to="/dashboard" />;
   }
 
@@ -538,6 +551,7 @@ function App() {
                 <Route path="/cf-login">{() => <CfLoginPage />}</Route>
                 <Route path="/member-login">{() => <MemberLoginPage />}</Route>
                 <Route path="/workspace/accept">{() => <WorkspaceInviteAcceptPage />}</Route>
+                <Route path="/extension/connect">{() => <ExtensionConnectPage />}</Route>
                 <Route path="/funnels/share/:token">{() => <FunnelSharePage />}</Route>
                 <Route path="/swipe/:token">{() => <SwipeSharePage />}</Route>
                 <Route path="/privacy-policy">{() => <PrivacyPolicyPage />}</Route>

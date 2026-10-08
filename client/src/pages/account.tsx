@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useAuth } from "@/lib/auth";
+import ExtensionSessionsCard from "@/components/extension-sessions-card";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -581,6 +582,9 @@ export default function AccountPage() {
               </Form>
             </CardContent>
           </Card>
+          {!isCollaborator && !user?.impersonating && <div className="mt-6">
+            <ExtensionSessionsCard />
+          </div>}
         </TabsContent>
 
         {/* ─── Time Zone Tab ───────────────────────────────────── */}

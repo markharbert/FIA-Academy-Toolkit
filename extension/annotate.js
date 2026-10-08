@@ -1,3 +1,5 @@
+import { extensionRequest } from "./auth-request.js";
+
 "use strict";
 
 const API_BASE = "https://toolkit.fearlessmarketinglab.com";
@@ -743,9 +745,6 @@ document.getElementById("btn-save").addEventListener("click", async () => {
   btn.textContent = "Saving…";
 
   try {
-    const { apiKey } = await chrome.storage.local.get("apiKey");
-    if (!apiKey) throw new Error("Not logged in — open the FIA Toolkit extension first.");
-
     // Deselect before exporting so handles don't appear in the saved image
     selectedIndex = -1;
     render();
@@ -754,31 +753,21 @@ document.getElementById("btn-save").addEventListener("click", async () => {
       canvas.toBlob(b => b ? res(b) : rej(new Error("Canvas export failed")), "image/png");
     });
 
-    const upRes = await fetch(`${API_BASE}/api/v1/swipe/request-upload-url`, {
-      method: "POST", headers: { Authorization: `Bearer ${apiKey}` },
-    });
-    if (!upRes.ok) throw new Error(`Upload URL failed (${upRes.status})`);
-    const { uploadURL, objectPath } = await upRes.json();
+    const { uploadURL, objectPath } = await extensionRequest("/api/v1/swipe/request-upload-url", { method: "POST" });
 
     const putRes = await fetch(uploadURL, {
       method: "PUT", headers: { "Content-Type": "image/png" }, body: blob,
     });
     if (!putRes.ok) throw new Error(`Upload failed (${putRes.status})`);
 
-    const saveRes = await fetch(`${API_BASE}/api/v1/swipe`, {
+    const { item } = await extensionRequest("/api/v1/swipe", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({ type: "upload", title: (document.getElementById("capture-title")?.value?.trim() || pendingTitle), imagePath: objectPath }),
     });
-    if (!saveRes.ok) throw new Error(`Save failed (${saveRes.status})`);
-    const { item } = await saveRes.json();
 
     let shareToken = null;
     try {
-      const shareRes = await fetch(`${API_BASE}/api/v1/swipe/${item.id}/share`, {
-        method: "POST", headers: { Authorization: `Bearer ${apiKey}` },
-      });
-      if (shareRes.ok) shareToken = (await shareRes.json()).token ?? null;
+      shareToken = (await extensionRequest(`/api/v1/swipe/${item.id}/share`, { method: "POST" })).token ?? null;
     } catch (_) {}
 
     await chrome.storage.session.remove("pendingAnnotation").catch(() => {});

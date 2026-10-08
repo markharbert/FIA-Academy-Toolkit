@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { registerExtensionAuthRoutes, requireExtensionAccess, resolveExtensionAccess, revokeExtensionSessions } from "./extension-auth";
 import { answerTrainingQuestionFromTranscripts, answerTrainingQuestionFromWeb, transcribeAudio, transcribeAudioWhisper, transcribeAudioWithTimestamps, scoreTranscript, generateTitle, generateDmoSummary, generateBulletPoints, generateLessonChapters, generateReplayDescription, generateReplayMetadata, generateTrainingQuestionFilename } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio, extractRemoteAudioSegments, probeVideo, faststartMp4, prepareTeleprompterMp4, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
 import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, type TrainingReplay, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema, insertProjectTemplateSchema, insertProjectTemplateTaskSchema, updateProjectTemplateTaskSchema, insertProjectColumnSchema, insertCannedResponseSchema, insertAnnouncementSchema, insertAffiliateLinkSchema } from "@shared/schema";
@@ -289,6 +290,7 @@ declare module "express-session" {
     gmailOAuthNonce: string;
     gmailOAuthInboxId: string;
     workspaceOwnerId: string;
+    extensionGoogleReturnTo?: string;
   }
 }
 
@@ -438,10 +440,12 @@ export async function registerRoutes(
         secure: isProduction, // Use secure cookies in production (HTTPS)
         httpOnly: true,
         sameSite: "lax", // Allows cookies on same-site navigations (like OAuth redirects)
-        maxAge: SESSION_INACTIVITY_TIMEOUT, // 3 hours of inactivity
+        maxAge: SESSION_INACTIVITY_TIMEOUT, // 7 days of inactivity
       },
     })
   );
+
+  registerExtensionAuthRoutes(app, requireAuth);
 
   // ===================
   // AUTH ROUTES
@@ -1042,6 +1046,7 @@ export async function registerRoutes(
       const passwordHash = await bcrypt.hash(newPassword, 10);
 
       await storage.updateUser(resetToken.userId, { passwordHash });
+      await revokeExtensionSessions(resetToken.userId);
       await storage.markPasswordResetTokenUsed(resetToken.id);
 
       res.json({ message: "Password reset successfully. You can now log in with your new password." });
@@ -1296,12 +1301,20 @@ export async function registerRoutes(
       }
     }));
 
-    app.get("/api/auth/oauth/google", passport.authenticate("google", {
+    app.get("/api/auth/oauth/google", (req: Request, _res: Response, next: NextFunction) => {
+      const redirect = typeof req.query.redirect === "string" ? req.query.redirect : "";
+      if (/^\/extension\/connect\?request=[\w-]{43}$/.test(redirect)) {
+        req.session.extensionGoogleReturnTo = redirect;
+      } else {
+        delete req.session.extensionGoogleReturnTo;
+      }
+      next();
+    }, passport.authenticate("google", {
       scope: ["profile", "email"],
     }));
 
     app.get("/api/auth/oauth/google/callback", (req: Request, res: Response, next: NextFunction) => {
-      console.log("[OAuth Google] Callback received, query:", JSON.stringify(req.query));
+      console.log("[OAuth Google] Callback received");
       passport.authenticate("google", (err: any, user: any, info: any) => {
         console.log("[OAuth Google] Passport result - err:", err?.message || null, "user:", user?.id || null, "info:", JSON.stringify(info));
         if (err) {
@@ -1333,6 +1346,7 @@ export async function registerRoutes(
         
         // Set session and save before redirect
         console.log("[OAuth Google] Setting session for user:", user.id);
+        const returnTo = req.session.extensionGoogleReturnTo || "/dashboard";
         req.session.regenerate((regenerateErr) => {
           if (regenerateErr) {
             console.error("[OAuth Google] Session regeneration error:", regenerateErr);
@@ -1344,8 +1358,8 @@ export async function registerRoutes(
               console.error("[OAuth Google] Session save error:", saveErr);
               return res.redirect("/?error=oauth_failed&reason=session_save");
             }
-            console.log("[OAuth Google] Session saved, redirecting to dashboard");
-            res.redirect("/dashboard");
+            console.log("[OAuth Google] Session saved");
+            res.redirect(returnTo);
           });
         });
       })(req, res, next);
@@ -10846,6 +10860,14 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     if (!rawKey && authHeader.toLowerCase().startsWith("bearer ")) {
       rawKey = authHeader.slice(7).trim();
     }
+    if (rawKey.startsWith("fte_access_")) {
+      try {
+        return await requireExtensionAccess(req, res, next, rawKey);
+      } catch (err) {
+        console.error("[extension-auth] access check failed");
+        return res.status(503).json({ message: "Could not verify the extension connection. Please try again." });
+      }
+    }
     if (!rawKey || !rawKey.startsWith("ftk_")) {
       return res.status(401).json({ message: "Missing or invalid API key. Use Authorization: Bearer <key> or X-API-Key header." });
     }
@@ -10916,13 +10938,14 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     if (!rawKey && authHeader.toLowerCase().startsWith("bearer ")) {
       rawKey = authHeader.slice(7).trim();
     }
-    if (!rawKey || !rawKey.startsWith("ftk_")) {
+    if (!rawKey || (!rawKey.startsWith("ftk_") && !rawKey.startsWith("fte_access_"))) {
       return res.status(401).json({ message: "Missing or invalid API key." });
     }
     try {
       const { createHash } = await import("crypto");
-      const keyHash = createHash("sha256").update(rawKey).digest("hex");
-      const user = await storage.getUserByPublicApiKeyHash(keyHash);
+      const extensionAccess = rawKey.startsWith("fte_access_") ? await resolveExtensionAccess(rawKey, true) : null;
+      const keyHash = rawKey.startsWith("ftk_") ? createHash("sha256").update(rawKey).digest("hex") : null;
+      const user = keyHash ? await storage.getUserByPublicApiKeyHash(keyHash) : extensionAccess?.user;
       if (!user) return res.status(401).json({ message: "API key not found or revoked." });
 
       // A CF-suspended user has isDisabled=true, cfEnrolled=false, and cfRevokedAt set.
@@ -10958,7 +10981,8 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       }
       // Reset the 24-hour cache stamp so the next regular requireApiKey call
       // also sees the fresh result instead of skipping the check.
-      await storage.touchPublicApiKey(keyHash, true);
+      if (keyHash) await storage.touchPublicApiKey(keyHash, true);
+      if (extensionAccess) await pool.query("UPDATE extension_device_sessions SET cf_last_checked_at=NOW() WHERE id=$1", [extensionAccess.row.id]);
 
       return res.json({ enrolled: cfInfo.enrolled });
     } catch (err) {
@@ -11259,6 +11283,22 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     } catch (err) {
       console.error("[v1] dmo settings error:", err);
       res.status(500).json({ message: "Failed to load DMO settings" });
+    }
+  });
+
+  app.post("/api/v1/dmo/settings", requireApiKey, async (req: Request, res: Response) => {
+    const fields = ["visionTarget", "personalTarget", "expandTarget", "executionTarget", "connectingTarget"] as const;
+    const data: Partial<Record<typeof fields[number], number>> = {};
+    for (const field of fields) {
+      if (req.body[field] == null) continue;
+      const value = Number(req.body[field]);
+      if (!Number.isFinite(value)) return res.status(400).json({ message: "DMO targets must be valid numbers." });
+      data[field] = Math.max(1, Math.min(480, Math.round(value)));
+    }
+    try {
+      res.json(await storage.upsertDmoSettings((req as any).apiUser.id, data));
+    } catch {
+      res.status(500).json({ message: "Failed to save DMO settings." });
     }
   });
 

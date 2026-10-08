@@ -12,7 +12,8 @@ const ACTS = [
 ];
 
 // ─── App state ─────────────────────────────────────────────────────────────
-let apiKey      = null;
+let connected = false;
+let extensionAccount = null;
 let todayDate   = null;
 let serverEntry = null;
 let targets     = {};
@@ -141,17 +142,32 @@ class MembershipError extends Error {
 
 // ─── API ───────────────────────────────────────────────────────────────────
 async function apiFetch(path, opts = {}) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...opts,
-    headers: { "X-API-Key": apiKey, "Content-Type": "application/json", ...(opts.headers || {}) },
-  });
-  if (res.status === 403) {
-    let msg = "Membership not active.";
-    try { const j = await res.json(); msg = j.message || msg; } catch {}
-    throw new MembershipError(msg);
-  }
-  if (!res.ok) { const e = new Error(`HTTP ${res.status}`); e.status = res.status; throw e; }
-  return res.json();
+  const res = await authMessage("AUTH_REQUEST", { path, method: opts.method, body: opts.body });
+  if (res.status === 403) throw new MembershipError(res.data?.message || "Account access is restricted.");
+  if (res.status >= 400) throw Object.assign(new Error(res.data?.message || `HTTP ${res.status}`), { status: res.status });
+  return res.data;
+}
+
+async function authMessage(type, payload = {}) {
+  const result = await chrome.runtime.sendMessage({ type, ...payload });
+  if (!result?.ok) throw Object.assign(new Error(result?.error || "Could not connect. Please try again."), { status: result?.status, code: result?.code });
+  return result;
+}
+
+function showPendingLogin(pending) {
+  $("login-pending").style.display = pending ? "block" : "none";
+  $("sign-in-btn").textContent = pending ? "Start sign-in again" : "Sign in to Academy Toolkit";
+  $("login-code").textContent = pending?.userCode || "";
+}
+
+async function signOutExtension() {
+  await authMessage("AUTH_LOGOUT");
+  stopTick();
+  await chrome.storage.local.remove(["cachedDmo", "timers", "todayDate", "notesValue", "targets", "dmoAccountId"]);
+  connected = false; extensionAccount = null;
+  timers = {}; notesValue = ""; serverEntry = null;
+  showPendingLogin(null);
+  showScreen("setup");
 }
 
 // ─── Service-worker messaging ──────────────────────────────────────────────
@@ -232,11 +248,12 @@ function saveToServer(showStatus = false) {
 
 // ─── Persistence ───────────────────────────────────────────────────────────
 async function persist() {
-  await chrome.storage.local.set({ timers, todayDate, notesValue });
+  await chrome.storage.local.set({ timers, todayDate, notesValue, dmoAccountId: extensionAccount?.id });
 }
 
 async function loadPersisted(todayKey) {
-  const s = await chrome.storage.local.get(["timers", "todayDate", "notesValue"]);
+  const s = await chrome.storage.local.get(["timers", "todayDate", "notesValue", "dmoAccountId"]);
+  if (s.dmoAccountId !== extensionAccount?.id) return;
   if (s.todayDate !== todayKey) { timers = {}; notesValue = ""; return; }
   timers     = s.timers     || {};
   notesValue = s.notesValue || "";
@@ -1305,7 +1322,7 @@ async function saveTargets() {
     else targets[key] = defaultMins;
   });
   try {
-    await apiFetch("/api/dmo/settings", { method: "POST", body: JSON.stringify(payload) });
+    await apiFetch("/api/v1/dmo/settings", { method: "POST", body: JSON.stringify(payload) });
     await chrome.storage.local.set({ targets });
     setStatus("Goals saved ✓", 2500);
     renderActivities();
@@ -1376,16 +1393,17 @@ async function loadDMO(background = false) {
     ]);
 
     // Persist for next cache-first open
-    chrome.storage.local.set({ cachedDmo: { dmoData, settingsData } }).catch(() => {});
+    chrome.storage.local.set({ cachedDmo: { dmoData, settingsData, accountId: extensionAccount?.id } }).catch(() => {});
 
     await applyDmoData(dmoData, settingsData, background);
     if (!background) showScreen("main");
   } catch (e) {
-    if (e instanceof MembershipError) {
+    if (e instanceof MembershipError || e.status === 403) {
       showScreen("suspended");
     } else if (e.status === 401) {
-      await chrome.storage.local.remove("apiKey");
-      apiKey = null; showScreen("setup");
+      connected = false; showPendingLogin(null); showScreen("setup");
+      $("setup-error").textContent = "Your extension session was revoked or expired. Please sign in again.";
+      $("setup-error").style.display = "block";
     } else {
       if (!background) { renderActivities(); showScreen("main"); }
       setStatus("Could not refresh — check connection", 5000);
@@ -1778,30 +1796,18 @@ function switchSubTab(name) {
   chrome.storage.local.set({ lastSubTab: name }).catch(() => {});
 }
 
-// ─── API key validation ────────────────────────────────────────────────────
-async function validateAndSave(key, errorEl) {
+// ─── Regular account sign-in ───────────────────────────────────────────────
+async function startSignIn() {
+  const errorEl = $("setup-error");
   errorEl.style.display = "none";
-  if (!key.startsWith("ftk_")) {
-    errorEl.textContent = "Key must start with ftk_"; errorEl.style.display = "block"; return;
-  }
-  apiKey = key;
+  $("sign-in-btn").disabled = true;
   try {
-    await apiFetch("/api/v1/dmo");
-    await chrome.storage.local.set({ apiKey: key });
-    await loadDMO();
+    const result = await authMessage("AUTH_BEGIN_LOGIN");
+    showPendingLogin(result.pending);
   } catch (e) {
-    if (e instanceof MembershipError) {
-      // Key is valid but membership is inactive — save it and show suspended screen
-      await chrome.storage.local.set({ apiKey: key });
-      showScreen("suspended");
-    } else {
-      apiKey = null;
-      errorEl.textContent = e.status === 401
-        ? "API key not found or revoked — check your Account page."
-        : `Connection error: ${e.message}`;
-      errorEl.style.display = "block"; showScreen("setup");
-    }
-  }
+    errorEl.textContent = e.message;
+    errorEl.style.display = "block";
+  } finally { $("sign-in-btn").disabled = false; }
 }
 
 // ─── Boot ──────────────────────────────────────────────────────────────────
@@ -1809,7 +1815,9 @@ async function boot() {
   showScreen("loading");
 
   // Load and apply saved theme
-  const stored = await chrome.storage.local.get(["apiKey", "theme", "targets", "cachedDmo", "lastPrimaryTab", "lastSubTab"]);
+  const stored = await chrome.storage.local.get(["theme", "targets", "cachedDmo", "lastPrimaryTab", "lastSubTab"]);
+  // Retire only the legacy credential; retain settings and local tool data on upgrade.
+  await chrome.storage.local.remove("apiKey");
   applyTheme(stored.theme || "light");   // light is default
 
   // Theme toggle
@@ -1824,15 +1832,13 @@ async function boot() {
     b.addEventListener("click", () => switchSubTab(b.dataset.tab)));
 
   // Setup screen
-  $("save-key-btn").addEventListener("click", () =>
-    validateAndSave($("api-key-input").value.trim(), $("setup-error")));
-  $("api-key-input").addEventListener("keydown", e => {
-    if (e.key === "Enter") $("save-key-btn").click();
+  $("sign-in-btn").addEventListener("click", startSignIn);
+  $("cancel-login-btn").addEventListener("click", async () => {
+    await authMessage("AUTH_CANCEL_LOGIN");
+    showPendingLogin(null);
   });
 
   // Settings tab
-  $("update-key-btn").addEventListener("click", () =>
-    validateAndSave($("settings-key-input").value.trim(), $("settings-error")));
   $("disconnect-btn").addEventListener("click", () => {
     $("disconnect-btn").style.display = "none";
     $("disconnect-confirm").style.display = "flex";
@@ -1842,15 +1848,15 @@ async function boot() {
     $("disconnect-btn").style.display = "";
   });
   $("disconnect-confirm-yes").addEventListener("click", async () => {
-    stopTick();
-    const savedTheme = currentTheme;
-    await chrome.storage.local.clear();
-    await chrome.storage.local.set({ theme: savedTheme }); // keep theme pref
-    apiKey = null; timers = {}; notesValue = ""; serverEntry = null;
+    try { await signOutExtension(); }
+    catch (err) {
+      $("settings-error").textContent = `Could not sign out: ${err.message}`;
+      $("settings-error").style.display = "block";
+      return;
+    }
     $("disconnect-confirm").style.display = "none";
     $("disconnect-btn").style.display = "";
     $("settings-overlay").classList.remove("open");
-    showScreen("setup");
   });
   $("save-targets-btn").addEventListener("click", saveTargets);
 
@@ -1907,7 +1913,7 @@ async function boot() {
   $("suspended-check-btn")?.addEventListener("click", async () => {
     const btn = $("suspended-check-btn");
     const msg = $("suspended-check-msg");
-    if (!btn || !apiKey) return;
+    if (!btn || !connected) return;
 
     btn.disabled = true;
     btn.innerHTML = `<span class="spinner" style="width:14px;height:14px;border-width:2px;border-top-color:var(--accent)"></span> Checking…`;
@@ -1933,18 +1939,13 @@ async function boot() {
 
   // Suspended screen — disconnect clears everything
   $("suspended-disconnect")?.addEventListener("click", async () => {
-    stopTick();
-    const savedTheme = currentTheme;
-    await chrome.storage.local.clear();
-    await chrome.storage.local.set({ theme: savedTheme });
-    apiKey = null; timers = {}; notesValue = ""; serverEntry = null;
-    showScreen("setup");
+    try { await signOutExtension(); }
+    catch (err) { $("suspended-check-msg").textContent = `Could not sign out: ${err.message}`; }
   });
 
   // Gear icon → open settings overlay; back arrow → close it
   $("settings-gear-btn").addEventListener("click", () => {
-    const el = $("settings-key-input");
-    if (el && apiKey) el.value = apiKey;
+    $("settings-account").textContent = extensionAccount?.email || extensionAccount?.displayName || "Signed in";
     const errEl = $("settings-error");
     if (errEl) errEl.style.display = "none";
     $("settings-overlay").classList.add("open");
@@ -1957,17 +1958,32 @@ async function boot() {
   // Uses chrome.runtime.onMessage — the correct MV3 extension messaging API.
   // Fires when the background alarm detects restored membership while the popup is open.
   chrome.runtime.onMessage.addListener((message) => {
-    if (message?.type === "MEMBERSHIP_RESTORED") {
+    if (message?.type === "AUTH_CONNECTED") {
+      authMessage("AUTH_STATUS").then((status) => {
+        connected = status.connected; extensionAccount = status.account;
+        if (connected) void loadDMO();
+      }).catch(() => {});
+    } else if (message?.type === "MEMBERSHIP_RESTORED") {
       loadDMO();
     }
   });
 
-  // Load API key and go — cache-first so the popup feels instant
-  if (stored.apiKey) {
-    apiKey = stored.apiKey;
+  let authStatus;
+  try { authStatus = await authMessage("AUTH_STATUS"); }
+  catch (err) {
+    $("setup-error").textContent = err.message;
+    $("setup-error").style.display = "block";
+    showScreen("setup");
+    return;
+  }
+  connected = authStatus.connected;
+  extensionAccount = authStatus.account;
+  showPendingLogin(authStatus.pending);
+  // Restore only the current member's cache; old unscoped caches are never shown.
+  if (connected) {
     if (stored.targets) targets = stored.targets;
 
-    if (stored.cachedDmo?.dmoData) {
+    if (stored.cachedDmo?.dmoData && stored.cachedDmo.accountId === extensionAccount?.id) {
       // Show UI immediately from last cached response (~0ms), then refresh in background
       await applyDmoData(stored.cachedDmo.dmoData, stored.cachedDmo.settingsData);
       showScreen("main");

@@ -67,7 +67,8 @@ export default function LoginPage() {
   const emailParam = params.get("email") || "";
   const rawRedirect = params.get("redirect") || "";
   // Only allow internal redirects (must start with /) to prevent open-redirect attacks
-  const redirectTo = rawRedirect.startsWith("/") ? rawRedirect : "/dashboard";
+  const redirectTo = rawRedirect.startsWith("/") && !rawRedirect.startsWith("//") && !rawRedirect.includes("\\")
+    ? rawRedirect : "/dashboard";
 
   useEffect(() => {
     if (errorParam && CF_ERROR_MESSAGES[errorParam]) {
@@ -200,6 +201,15 @@ export default function LoginPage() {
             </form>
           </Form>
 
+          {redirectTo.startsWith("/extension/connect?") && (
+            <button
+              type="button"
+              className="mt-3 w-full rounded-lg border border-white/20 px-4 py-2.5 text-sm font-medium text-white hover:bg-white/5"
+              onClick={() => { window.location.href = `/api/auth/oauth/google?redirect=${encodeURIComponent(redirectTo)}`; }}
+            >
+              Continue with Google
+            </button>
+          )}
           <div className="flex flex-col items-center gap-2 pt-1">
             <Link
               href="/forgot-password"
