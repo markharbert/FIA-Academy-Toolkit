@@ -8,6 +8,17 @@ let polling = null;
 const encode = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const randomSecret = () => encode(crypto.getRandomValues(new Uint8Array(32)));
 const pkce = async (value) => encode(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))));
+const validSecret = (value) => typeof value === "string" && /^[\w-]{43}$/.test(value);
+const validPending = (data) => data && validSecret(data.requestId) && validSecret(data.pollSecret)
+  && validSecret(data.codeVerifier) && typeof data.userCode === "string" && /^[A-F0-9]{4}-[A-F0-9]{4}$/.test(data.userCode)
+  && Number.isFinite(data.expiresAt);
+const invalidAuthResponse = () => Object.assign(new Error(
+  "The Toolkit website needs its latest update before extension sign-in can work. Please ask the administrator to publish the update, then try again."
+), { status: 503, code: "extension_auth_unavailable" });
+const validCredentials = (data) => typeof data.accessToken === "string" && /^fte_access_[a-f0-9]{64}$/.test(data.accessToken)
+  && typeof data.refreshToken === "string" && /^fte_refresh_[a-f0-9]{64}$/.test(data.refreshToken)
+  && Number.isFinite(data.accessExpiresAt) && Number.isFinite(data.refreshExpiresAt)
+  && data.account && typeof data.account.id === "string" && data.account.id.length > 0;
 
 async function authPost(path, body) {
   const res = await fetch(`${API_BASE}/api/extension/auth/${path}`, {
@@ -15,8 +26,20 @@ async function authPost(path, body) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body), signal: AbortSignal.timeout(20000),
   });
-  const data = await res.json().catch(() => ({}));
+  if (!res.headers.get("Content-Type")?.toLowerCase().includes("application/json")) {
+    if (res.ok || res.status === 404) throw invalidAuthResponse();
+    throw Object.assign(new Error(`Connection error (${res.status}). Please try again later.`), { status: res.status });
+  }
+  let data;
+  try { data = await res.json(); } catch { throw invalidAuthResponse(); }
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw invalidAuthResponse();
   if (!res.ok) throw Object.assign(new Error(data.message || `Connection error (${res.status})`), { status: res.status, code: data.error });
+  if (path === "start" && (!validPending({ ...data, codeVerifier: body.codeChallenge })
+    || data.verificationPath !== `/extension/connect?request=${data.requestId}`)) throw invalidAuthResponse();
+  if (path === "refresh" && !validCredentials(data)) throw invalidAuthResponse();
+  if (path === "poll" && (!["pending", "denied", "connected"].includes(data.status)
+    || (data.status === "connected" && !validCredentials(data)))) throw invalidAuthResponse();
+  if (path === "logout" && data.ok !== true) throw invalidAuthResponse();
   return data;
 }
 
@@ -32,7 +55,7 @@ async function pollLogin() {
   polling = (async () => {
     const { extensionLoginPending: pending } = await authStore.get("extensionLoginPending");
     if (!pending) return;
-    if (pending.expiresAt < Date.now()) {
+    if (!validPending(pending) || pending.expiresAt < Date.now()) {
       await authStore.remove("extensionLoginPending");
       await chrome.alarms.clear(LOGIN_ALARM);
       return;
@@ -89,7 +112,7 @@ async function beginLogin() {
   } });
   await chrome.storage.local.remove("apiKey");
   await chrome.alarms.create(LOGIN_ALARM, { periodInMinutes: 0.5 });
-  await chrome.tabs.create({ url: `${API_BASE}${data.verificationPath}` });
+  await chrome.tabs.create({ url: new URL(data.verificationPath, API_BASE).href });
   return { pending: { userCode: data.userCode, expiresAt: data.expiresAt } };
 }
 

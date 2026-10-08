@@ -23,6 +23,49 @@ try {
   const page = await browser.newPage();
   await page.goto(`chrome-extension://${extensionId}/link-picker.html`, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => document.body.textContent.includes("Connect your account"));
+  // Reproduce the actual Sign In click against an old deployment returning HTML.
+  const initialWorker = await target.createCDPSession();
+  await initialWorker.send("Runtime.enable");
+  await initialWorker.send("Runtime.evaluate", {
+    expression: `globalThis.fetch = async () => new Response("<!DOCTYPE html><html>Old website</html>",
+      { status: 200, headers: { "Content-Type": "text/html" } });`,
+  });
+  await page.evaluate(async () => {
+    const { authStore } = await import(chrome.runtime.getURL("auth-store.js"));
+    await authStore.set({ extensionLoginPending: { codeVerifier: "x".repeat(43) } });
+  });
+  const popup = await browser.newPage();
+  await popup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: "domcontentloaded" });
+  await popup.waitForSelector("#sign-in-btn", { visible: true });
+  const tabCount = (await browser.pages()).length;
+  await popup.click("#sign-in-btn");
+  await popup.waitForFunction(() => document.getElementById("setup-error").textContent.includes("publish the update"));
+  assert.equal((await browser.pages()).length, tabCount, "old website response must not open any tab");
+  const invalidState = await popup.evaluate(async () => {
+    const { authStore } = await import(chrome.runtime.getURL("auth-store.js"));
+    return !!(await authStore.get("extensionLoginPending")).extensionLoginPending;
+  });
+  assert.equal(invalidState, false);
+  // Verify the popup → worker → browser-tab URL contract against a valid backend.
+  await initialWorker.send("Runtime.evaluate", {
+    expression: `globalThis.__openedUrl = null;
+      chrome.tabs.create = async ({url}) => { globalThis.__openedUrl = url; return { id: 999 }; };
+      globalThis.fetch = async () => new Response(JSON.stringify({
+        requestId: "r".repeat(43), pollSecret: "p".repeat(43), userCode: "ABCD-1234",
+        expiresAt: Date.now()+600000, verificationPath: "/extension/connect?request="+"r".repeat(43)
+      }), { status: 200, headers: { "Content-Type": "application/json" } });`,
+  });
+  await popup.waitForFunction(() => !document.getElementById("sign-in-btn").disabled);
+  await popup.click("#sign-in-btn");
+  await popup.waitForFunction(() => document.getElementById("login-code").textContent === "ABCD-1234");
+  const opened = await initialWorker.send("Runtime.evaluate", { expression: "globalThis.__openedUrl", returnByValue: true });
+  assert.equal(opened.result.value, `https://toolkit.fearlessmarketinglab.com/extension/connect?request=${"r".repeat(43)}`);
+  await popup.evaluate(async () => {
+    const { authStore } = await import(chrome.runtime.getURL("auth-store.js"));
+    await authStore.remove("extensionLoginPending");
+    await chrome.alarms.clear("extension-login-poll");
+  });
+  console.log("PASS: packaged Sign In button rejects old HTML responses, clears corrupt pending state, and opens only the validated approval URL.");
   await page.evaluate(async () => {
     await new Promise((resolve, reject) => {
       const request = indexedDB.open("fia-extension-auth", 1);

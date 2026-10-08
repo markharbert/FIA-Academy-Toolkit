@@ -26,3 +26,9 @@ Renewal must preserve credentials during offline/server failures and support ide
 **Why:** Otherwise an ordinary network interruption creates a new unintended sign-out, defeating the user's persistence requirement.
 
 **How to apply:** Retain credentials on transient errors, serialize worker refreshes, and preserve the bounded retry grace for credential rotation. Definitive revocation, security changes, or long inactivity may still require normal sign-in.
+
+A newly built extension ZIP must not assume that the published website already supports its authentication protocol.
+
+**Why:** An older live website returned its SPA HTML with HTTP 200 for the missing sign-in endpoint. Treating failed JSON parsing as an empty object opened a malformed hostname containing `undefined`. Development-only tests and successful-response mocks did not expose the deployment mismatch.
+
+**How to apply:** Validate JSON and the complete auth response before saving credentials or opening a tab. Exercise the actual packaged Sign In button against both HTML-200 responses and a compatible response, and discard corrupt pending requests left by older clients. Check live API readiness before describing a release as usable; publish the website before installing the matching extension update.

@@ -33,6 +33,10 @@ const issued = {
   accessExpiresAt: Date.now() + 900000, refreshExpiresAt: Date.now() + 90 * 86400000,
   account: { id: "member", displayName: "Test member", email: "member@example.invalid" },
 };
+const startResponse = () => ({
+  requestId: "r".repeat(43), pollSecret: "p".repeat(43), userCode: "ABCD-1234",
+  expiresAt: Date.now() + 600000, verificationPath: `/extension/connect?request=${"r".repeat(43)}`,
+});
 
 test("ordinary browser sign-in hands off a PKCE-bound session without exposing credentials", async () => {
   let challenge;
@@ -42,7 +46,7 @@ test("ordinary browser sign-in hands off a PKCE-bound session without exposing c
     if (url.endsWith("/start")) {
       challenge = body.codeChallenge;
       assert.match(challenge, /^[\w-]{43}$/);
-      return reply({ requestId: "request", pollSecret: "poll", userCode: "ABCD-1234", expiresAt: Date.now() + 600000, verificationPath: "/extension/connect?request=request" });
+      return reply(startResponse());
     }
     if (url.endsWith("/poll")) {
       assert.equal(body.codeVerifier.length, 43);
@@ -56,7 +60,7 @@ test("ordinary browser sign-in hands off a PKCE-bound session without exposing c
   const started = await message({ type: "AUTH_BEGIN_LOGIN" });
   assert.equal(started.ok, true);
   assert.equal(started.pending.userCode, "ABCD-1234");
-  assert.equal(tabUrls[0], "https://toolkit.fearlessmarketinglab.com/extension/connect?request=request");
+  assert.equal(tabUrls[0], `https://toolkit.fearlessmarketinglab.com/extension/connect?request=${"r".repeat(43)}`);
   assert.ok(!state.apiKey);
   const connected = await getAuthStatus();
   assert.equal(connected.connected, true);
@@ -122,4 +126,42 @@ test("explicit sign-out revokes the device without clearing tool preferences", a
   assert.ok(revoked);
   assert.ok(!(await authStore.get("extensionAuth")).extensionAuth);
   assert.equal(state.theme, "dark");
+});
+
+test("old websites and malformed sign-in responses never save a request or open a broken URL", async () => {
+  const responses = [
+    () => new Response("<!DOCTYPE html><html>Old website</html>", { status: 200, headers: { "Content-Type": "text/html" } }),
+    () => new Response("{broken", { status: 200, headers: { "Content-Type": "application/json" } }),
+    () => reply({}),
+    () => reply({ ...startResponse(), verificationPath: undefined }),
+    () => reply({ ...startResponse(), verificationPath: "https://example.invalid/sign-in" }),
+    () => reply({ ...startResponse(), requestId: undefined }),
+    () => reply({ ...startResponse(), expiresAt: null }),
+  ];
+  const opened = tabUrls.length;
+  for (const response of responses) {
+    fetchHandler = async () => response();
+    const result = await message({ type: "AUTH_BEGIN_LOGIN" });
+    assert.equal(result.ok, false);
+    assert.equal(result.code, "extension_auth_unavailable");
+    assert.match(result.error, /website.*update/i);
+    assert.equal(tabUrls.length, opened);
+    assert.ok(!(await authStore.get("extensionLoginPending")).extensionLoginPending);
+  }
+});
+
+test("a corrupt pending request left by the previous extension is removed without a network call", async () => {
+  await authStore.set({ extensionLoginPending: { codeVerifier: "x".repeat(43) } });
+  fetchHandler = async () => { throw new Error("Invalid pending request must not be sent"); };
+  const status = await getAuthStatus();
+  assert.equal(status.pending, null);
+  assert.equal(status.connected, false);
+});
+
+test("an incomplete renewal response does not erase an existing device session", async () => {
+  await authStore.set({ extensionAuth: { ...issued, accessExpiresAt: 0 } });
+  fetchHandler = async () => reply({});
+  await assert.rejects(authenticatedFetch("/api/v1/dmo"), /website.*update/i);
+  assert.deepEqual((await authStore.get("extensionAuth")).extensionAuth, { ...issued, accessExpiresAt: 0 });
+  await authStore.remove("extensionAuth");
 });
