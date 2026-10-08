@@ -16,6 +16,7 @@ import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { sendPasswordResetEmail, sendWorkspaceInviteEmail, sendWelcomeEmail, isEmailConfigured } from "./email";
 import path from "path";
 import fs from "fs";
+import { extractFunnelDocumentText } from "./funnel-document-text";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { pool, db } from "./db";
@@ -1526,7 +1527,7 @@ export async function registerRoutes(
         if (result.action === "created" && result.email) {
           try {
             const newUser = await storage.getUserByEmail(result.email);
-            if (newUser) {
+            if (newUser?.email) {
               const token = crypto.randomBytes(32).toString("hex");
               const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
               const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
@@ -1539,7 +1540,7 @@ export async function registerRoutes(
               });
               const APP_BASE = process.env.APP_BASE_URL || "https://toolkit.fearlessmarketinglab.com";
               const setupLink = `${APP_BASE}/reset-password?token=${token}&welcome=1`;
-              const resources = await storage.getActiveEmailResourceLinks();
+              const resources = await storage.getActiveEmailResources();
               await sendWelcomeEmail({
                 email: newUser.email,
                 firstName: newUser.firstName,
@@ -10876,7 +10877,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const keyHash = createHash("sha256").update(rawKey).digest("hex");
       const user = await storage.getUserByPublicApiKeyHash(keyHash);
       if (!user) return res.status(401).json({ message: "API key not found or revoked." });
-      if (user.disabled) return res.status(403).json({ message: "Account is disabled." });
+      if (user.isDisabled) return res.status(403).json({ message: "Account is disabled." });
 
       // ClickFunnels membership check (cached 24 h)
       const keyRecord = await storage.getUserPublicApiKey(user.id);
@@ -12513,21 +12514,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       let extractedText = "";
 
       try {
-        if (mimetype === "application/pdf") {
-          const pdfParse = (await import("pdf-parse")).default;
-          const data = await pdfParse(buffer);
-          extractedText = data.text ?? "";
-        } else if (
-          mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-          originalname.toLowerCase().endsWith(".docx")
-        ) {
-          const mammoth = await import("mammoth");
-          const result = await mammoth.extractRawText({ buffer });
-          extractedText = result.value ?? "";
-        } else {
-          // Plain text, markdown, transcript files
-          extractedText = buffer.toString("utf-8");
-        }
+        extractedText = await extractFunnelDocumentText(mimetype, originalname, buffer);
       } catch (extractErr) {
         console.error("[funnel-brain] text extraction error:", extractErr);
         extractedText = buffer.toString("utf-8").replace(/[^\x20-\x7E\n\r\t]/g, " ");

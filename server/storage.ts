@@ -804,7 +804,7 @@ export interface IStorage {
   getWorkspaceInviteByToken(token: string): Promise<WorkspaceInvite | undefined>;
   getActiveInviteForMember(memberId: string, ownerId: string): Promise<WorkspaceInvite | undefined>;
   acceptWorkspaceInvite(token: string, memberId: string): Promise<WorkspaceInvite | undefined>;
-  revokeWorkspaceInvite(id: string, ownerId: string): Promise<void>;
+  revokeWorkspaceInvite(id: string, ownerId: string): Promise<boolean>;
   refreshWorkspaceInviteToken(id: string, ownerId: string, newToken: string): Promise<WorkspaceInvite | undefined>;
   countActiveWorkspaceInvites(ownerId: string): Promise<number>;
   getCollaboratorOwner(userId: string): Promise<string | undefined>;
@@ -2088,7 +2088,6 @@ export class DatabaseStorage implements IStorage {
         displayName: users.displayName,
         firstName: users.firstName,
         lastName: users.lastName,
-        email: users.email,
         email: users.email,
       })
       .from(userActionLog)
@@ -5738,10 +5737,12 @@ export class DatabaseStorage implements IStorage {
     return updated ?? undefined;
   }
 
-  async revokeWorkspaceInvite(id: string, ownerId: string): Promise<void> {
-    await db.update(workspaceInvites)
+  async revokeWorkspaceInvite(id: string, ownerId: string): Promise<boolean> {
+    const [revoked] = await db.update(workspaceInvites)
       .set({ status: "revoked", memberId: null, acceptedAt: null })
-      .where(and(eq(workspaceInvites.id, id), eq(workspaceInvites.ownerId, ownerId)));
+      .where(and(eq(workspaceInvites.id, id), eq(workspaceInvites.ownerId, ownerId)))
+      .returning({ id: workspaceInvites.id });
+    return !!revoked;
   }
 
   async refreshWorkspaceInviteToken(id: string, ownerId: string, newToken: string): Promise<WorkspaceInvite | undefined> {
@@ -7258,7 +7259,7 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async getTrainingReplayComments(replayId: string): Promise<Array<TrainingReplayComment & { authorName: string }>> {
+  async getTrainingReplayComments(replayId: string): Promise<Array<TrainingReplayComment & { authorName: string; authorAvatarUrl: string | null }>> {
     const rows = await db
       .select({
         id: trainingReplayComments.id,
@@ -7272,6 +7273,7 @@ export class DatabaseStorage implements IStorage {
         displayName: users.displayName,
         firstName: users.firstName,
         lastName: users.lastName,
+        email: users.email,
       })
       .from(trainingReplayComments)
       .leftJoin(users, eq(users.id, trainingReplayComments.userId))

@@ -51,6 +51,18 @@ try {
   await page.waitForFunction(() => document.body.textContent?.includes("No active extension sessions"));
   const revoked = await post("/api/extension/auth/refresh", { refreshToken: grant.data.refreshToken });
   assert.equal(revoked.status, 401);
+  const apiKey = await page.evaluate(async () => {
+    const response = await fetch("/api/account/api-key", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: "readiness fixture" }),
+    });
+    if (!response.ok) throw new Error("Could not issue fixture API key");
+    return (await response.json()).rawKey;
+  });
+  assert.equal(typeof apiKey, "string");
+  await pool.query("UPDATE users SET is_disabled=true WHERE id=$1", [id]);
+  const disabled = await fetch(base + "/api/v1/me", { headers: { "X-API-Key": apiKey } });
+  assert.equal(disabled.status, 403, "disabled accounts must not retain access via legacy API keys");
+  console.log("PASS: disabled-account legacy API access is blocked.");
   console.log("PASS: normal login redirect, visible approval code, explicit connection approval, account session list and device revocation.");
 } catch (error) {
   if (browser) {

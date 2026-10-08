@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, serial, timestamp, jsonb, boolean, real, unique, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, serial, timestamp, jsonb, boolean, real, unique, index, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -2436,7 +2436,7 @@ export const trainingReplayComments = pgTable("training_replay_comments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   replayId: varchar("replay_id").notNull().references(() => trainingReplays.id, { onDelete: "cascade" }),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  parentCommentId: varchar("parent_comment_id").references(() => trainingReplayComments.id, { onDelete: "cascade" }),
+  parentCommentId: varchar("parent_comment_id").references((): AnyPgColumn => trainingReplayComments.id, { onDelete: "cascade" }),
   body: text("body").notNull(),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
