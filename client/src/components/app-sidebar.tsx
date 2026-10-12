@@ -231,7 +231,6 @@ const allNavItems: NavItem[] = [
         url: "/swipe-file",
         testId: "nav-swipe-file",
         activeClass: "!bg-purple-500/10 !text-purple-200 font-medium",
-        adminOnly: true,
       },
     ],
   },

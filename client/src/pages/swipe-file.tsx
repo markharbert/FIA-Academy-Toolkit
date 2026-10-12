@@ -1391,7 +1391,7 @@ export default function SwipeFilePage() {
       return fetched < total ? fetched : undefined;
     },
     initialPageParam: 0,
-    enabled: !!user?.isAdmin,
+    enabled: !!user,
     staleTime: 60_000,
   });
 
@@ -1408,7 +1408,7 @@ export default function SwipeFilePage() {
   if (authLoading) {
     return <div className="flex min-h-[60vh] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
-  if (!user?.isAdmin) return <Redirect to="/dashboard" />;
+  if (!user) return <Redirect to="/" />;
 
   // Flatten all loaded pages into a single item list
   const items = data?.pages.flatMap(pg => pg.items) ?? [];
