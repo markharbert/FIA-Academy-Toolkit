@@ -40,3 +40,4 @@
 - [Extension background loading](extension-background-loading.md) — preload popup data and thumbnails so opening tabs does not start their first network load.
 - [Extension privacy disclosures](extension-privacy-disclosures.md) — local processing counts; IPs and captured source URLs need accurate Chrome Store categories.
 - [Projects AI access](projects-ai-access.md) — intentional Projects-only scope, regular member login, and member-controlled approval for AI deletions.
+- [MCP connector branding](mcp-connector-branding.md) — use the FIA lion head; metadata delivery and third-party icon rendering are separate checks.

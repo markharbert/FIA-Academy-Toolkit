@@ -1,5 +1,14 @@
 # FIA Toolkit AI connection
 
+## Connector branding
+
+The connection advertises **FIA Toolkit** and the public lion-head PNG in MCP
+`serverInfo.icons`. Root, current, and legacy OAuth resource discovery also
+advertise the same image using `resource_logo_uri`. No login is needed to load
+the image. After publishing, refresh/reconnect an existing connector to reload
+its metadata. Display is controlled by the AI client: some custom-connector
+interfaces may still show a generic icon even when branding is supplied.
+
 Open **Projects → AI connections** for endpoint URLs, setup instructions, active
 connections, and pending destructive actions. This integration only exposes the
 member's Projects workspace; it does not grant access to administration, courses,

@@ -8,13 +8,15 @@ import { tokenHandler } from "@modelcontextprotocol/sdk/server/auth/handlers/tok
 import { clientRegistrationHandler } from "@modelcontextprotocol/sdk/server/auth/handlers/register.js";
 import { revocationHandler } from "@modelcontextprotocol/sdk/server/auth/handlers/revoke.js";
 import { InvalidTokenError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
-import { createOAuthMetadata, mcpAuthMetadataRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
+import { createOAuthMetadata } from "@modelcontextprotocol/sdk/server/auth/router.js";
+import { metadataHandler } from "@modelcontextprotocol/sdk/server/auth/handlers/metadata.js";
 import { pool } from "../db";
 import { storage } from "../storage";
 import { buildMcpReference } from "./reference";
 import { cleanExpiredMcpData, ensureMcpDatabase } from "./database";
 import { ProjectsOAuthProvider, MCP_SCOPES, opaqueToken, hashToken, assertWorkspaceAccess, productionOrigin } from "./oauth";
 import { createProjectsMcpServer, projectTools, publicToolError, type ToolContext } from "./tools";
+import { mcpBranding } from "./branding";
 
 declare module "express-session" {
   interface SessionData {
@@ -72,19 +74,22 @@ export function registerProjectsMcpRoutes(app: Express, requireAuth: RequestHand
   const oauthMetadata = { ...metadata,
     authorization_endpoint: `${origin}/api/mcp/oauth/authorize`, token_endpoint: `${origin}/api/mcp/oauth/token`,
     registration_endpoint: `${origin}/api/mcp/oauth/register`, revocation_endpoint: `${origin}/api/mcp/oauth/revoke` };
-  app.use(mcpAuthMetadataRouter({ oauthMetadata, resourceServerUrl: new URL(provider.endpoint),
-    scopesSupported: MCP_SCOPES, resourceName: "FIA Toolkit",
-    serviceDocumentationUrl: new URL("/projects/ai", origin) }));
-  // Root fallback for clients that discover metadata without the endpoint path.
-  app.get("/.well-known/oauth-protected-resource", (_req, res) => res.json({
-    resource: provider.endpoint, authorization_servers: [origin], scopes_supported: MCP_SCOPES,
-    resource_name: "FIA Toolkit",
-  }));
-  // Compatibility discovery for assistants configured before the path rename.
-  app.get("/.well-known/oauth-protected-resource/mcp/projects", (_req, res) => res.json({
-    resource: `${origin}/mcp/projects`, authorization_servers: [origin], scopes_supported: MCP_SCOPES,
-    resource_name: "FIA Toolkit",
-  }));
+  const branding = mcpBranding(origin);
+  const resourceMetadata = {
+    authorization_servers: [origin], scopes_supported: MCP_SCOPES,
+    resource_name: branding.title, resource_logo_uri: branding.icons![0].src,
+    resource_documentation: new URL("/projects/ai", origin).href,
+  };
+  // The SDK's metadata router does not accept resource_logo_uri. Reuse its
+  // GET/OPTIONS-only, CORS-enabled handler for branded RFC 9728 discovery.
+  app.use("/.well-known/oauth-authorization-server", metadataHandler(oauthMetadata));
+  app.use("/.well-known/oauth-protected-resource/mcp/agent",
+    metadataHandler({ ...resourceMetadata, resource: provider.endpoint }));
+  // Keep root discovery and legacy connections branded too.
+  app.use("/.well-known/oauth-protected-resource",
+    metadataHandler({ ...resourceMetadata, resource: provider.endpoint }));
+  app.use("/.well-known/oauth-protected-resource/mcp/projects",
+    metadataHandler({ ...resourceMetadata, resource: `${origin}/mcp/projects` }));
   app.use("/api/mcp/oauth/authorize", noStore, authorizationHandler({ provider }));
   app.use("/api/mcp/oauth/token", noStore, tokenHandler({ provider }));
   app.use("/api/mcp/oauth/register", noStore, clientRegistrationHandler({ clientsStore: provider.clientsStore, clientSecretExpirySeconds: 0 }));

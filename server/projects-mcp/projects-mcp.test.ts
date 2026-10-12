@@ -161,9 +161,23 @@ test("FIA Toolkit agent endpoint supports discovery, OAuth, tools, and existing 
   const metadata = await (await fetch(`${base}/.well-known/oauth-protected-resource/mcp/agent`)).json();
   assert.equal(metadata.resource, `${base}/mcp/agent`);
   assert.equal(metadata.resource_name, "FIA Toolkit");
+  assert.equal(metadata.resource_logo_uri, `${base}/lion-logo.png`);
+  for (const suffix of ["", "/mcp/projects"]) {
+    const discovery = await fetch(`${base}/.well-known/oauth-protected-resource${suffix}`,
+      { headers: { Origin: "https://ai-client.example" } });
+    assert.equal(discovery.headers.get("access-control-allow-origin"), "*");
+    const info = await discovery.json();
+    assert.equal(info.resource_name, "FIA Toolkit");
+    assert.equal(info.resource_logo_uri, `${base}/lion-logo.png`);
+    assert.equal(info.resource, `${base}/mcp/${suffix ? "projects" : "agent"}`);
+  }
   const actor = await connection(MCP_SCOPES, members[0], "/mcp/agent");
   assert.equal(actor.client.getServerVersion()?.name, "fia-toolkit");
   assert.equal(actor.client.getServerVersion()?.version, "1.1.0");
+  assert.equal(actor.client.getServerVersion()?.title, "FIA Toolkit");
+  assert.equal(actor.client.getServerVersion()?.websiteUrl, `${base}/`);
+  assert.deepEqual(actor.client.getServerVersion()?.icons,
+    [{ src: `${base}/lion-logo.png`, mimeType: "image/png", sizes: ["540x540"] }]);
   await assertDeletionToolsListed(actor.client);
   // Simulate a grant issued before the URL rename, without changing its scope.
   await pool.query("UPDATE project_mcp_grants SET resource=$1 WHERE id=$2", [`${base}/mcp/projects`, actor.grantId]);
