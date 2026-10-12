@@ -33,6 +33,13 @@ function view(content: React.ReactNode = <AdminMcpServerPage />) {
   clients.push(client);
   return render(<QueryClientProvider client={client}>{content}</QueryClientProvider>);
 }
+function expandSection(label: string) {
+  const summary = screen.getByText(label);
+  const section = summary.closest("details");
+  if (!section) throw new Error(`Missing expandable section: ${label}`);
+  if (!section.open) fireEvent.click(summary);
+  return section;
+}
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.user.isAdmin = true;
@@ -50,12 +57,42 @@ describe("Admin MCP server guide", () => {
     expect(screen.queryByText(reference.endpoint)).toBeNull();
     expect(screen.getAllByText("FIA Toolkit").length).toBeGreaterThan(0);
     expect(screen.queryByText("Current environment URL")).toBeNull();
+    const claude = screen.getByText("Claude setup instructions").closest("details");
+    const chatgpt = screen.getByText("ChatGPT setup instructions").closest("details");
+    const registry = screen.getByText("Live endpoint and tool registry").closest("details");
+    expect(claude?.open).toBe(false);
+    expect(chatgpt?.open).toBe(false);
+    expect(registry?.open).toBe(false);
+    expandSection("Claude setup instructions");
     expect(screen.getByText("Claude custom connector")).toBeTruthy();
+    expect(claude?.open).toBe(true);
+    expect(chatgpt?.open).toBe(false);
+    expandSection("ChatGPT setup instructions");
     expect(screen.getByRole("heading", { name: /ChatGPT/ })).toBeTruthy();
+    expect(claude?.open).toBe(true);
+    expect(chatgpt?.open).toBe(true);
     expect(screen.getAllByText("Register automatically").length).toBeGreaterThan(0);
+    expandSection("Live endpoint and tool registry");
     expect(screen.getByText("list_projects")).toBeTruthy();
     expect(screen.getByText("/api/mcp/oauth/register")).toBeTruthy();
     expect(mocks.query.mock.calls[0][0].queryKey).toEqual(["/api/admin/mcp/reference"]);
+  });
+  it("keeps advanced guidance collapsed initially and allows sections to toggle", async () => {
+    view();
+    await screen.findByText(reference.productionEndpoint);
+    expect(Array.from(document.querySelectorAll("summary")).slice(0, 2)
+      .map((summary) => summary.textContent?.replace("＋", "").trim()))
+      .toEqual(["Claude setup instructions", "ChatGPT setup instructions"]);
+    const details = screen.getByText("Permissions, safety, and member approvals").closest("details");
+    expect(details?.open).toBe(false);
+    expect(screen.getByText("Claude setup instructions").closest("details")?.open).toBe(false);
+    expect(screen.getByText("ChatGPT setup instructions").closest("details")?.open).toBe(false);
+    expect(screen.getByText("Compatibility testing, other clients, and troubleshooting").closest("details")?.open).toBe(false);
+    const summary = screen.getByText("Permissions, safety, and member approvals");
+    fireEvent.click(summary);
+    expect(details?.open).toBe(true);
+    fireEvent.click(summary);
+    expect(details?.open).toBe(false);
   });
   it("copies the published endpoint rather than an OAuth URL", async () => {
     view();
@@ -69,6 +106,8 @@ describe("Admin MCP server guide", () => {
   });
   it("filters endpoint and tool references and shows required edit inputs", async () => {
     view();
+    await screen.findByText(reference.productionEndpoint);
+    expandSection("Live endpoint and tool registry");
     await screen.findByText("update_task");
     fireEvent.change(screen.getByRole("textbox", { name: "Search MCP endpoints and tools" }), { target: { value: "expected_version" } });
     expect(screen.getByText("update_task")).toBeTruthy();

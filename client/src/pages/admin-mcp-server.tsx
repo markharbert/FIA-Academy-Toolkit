@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Activity, AlertCircle, ArrowDownToLine, ArrowUpRight, BookOpen, Check, Clipboard,
-  Clock3, Code2, ExternalLink, FileCheck2, FileText, Fingerprint, FolderKanban,
+  Code2, ExternalLink, FileCheck2, FileText, Fingerprint, FolderKanban,
   Info, KeyRound, LockKeyhole, Plug, RefreshCw, Search, ShieldCheck, TriangleAlert,
 } from "lucide-react";
 
@@ -83,31 +83,25 @@ export default function AdminMcpServerPage() {
 
   return (
     <div className="min-h-full bg-[hsl(42,35%,96%)] text-foreground dark:bg-background">
-      <header className="relative overflow-hidden border-b border-[hsl(39,24%,82%)] bg-[hsl(224,36%,16%)] text-[hsl(43,37%,95%)]">
-        <div className="pointer-events-none absolute -right-20 -top-28 h-80 w-80 rounded-full border border-[hsl(43,55%,68%)]/15" />
-        <div className="pointer-events-none absolute right-10 top-12 h-44 w-44 rounded-full border border-[hsl(43,55%,68%)]/10" />
-        <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-9 lg:py-10">
-          <div className="mb-4 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[hsl(43,68%,72%)]"><Fingerprint className="h-4 w-4" /> Admin reference / integrations</div>
-          <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
-            <div className="max-w-3xl">
-              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-2.5 py-1 text-[11px] font-medium text-white/75"><LockKeyhole className="h-3 w-3" /> Admin-only documentation</div>
-              <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">MCP server reference</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-white/70">Connect an approved AI client to Academy Projects. This page documents the published connection URL, setup paths, permissions, and the live server registry.</p>
+      <header className="border-b border-border/70 bg-card/70">
+        <div className="mx-auto max-w-5xl px-4 py-7 sm:px-6 lg:px-8">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
+            <LockKeyhole className="h-4 w-4 text-primary" /> Admin-only · FIA Toolkit
+          </div>
+          <div className="mt-3 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+            <div className="max-w-2xl">
+              <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Connect your AI to Projects</h1>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">FIA Toolkit lets you connect the AI you choose to your Academy Projects using your familiar Academy login. Choose your AI, then use the connection name and published address below.</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={retry} disabled={reference.isFetching} className="border-white/25 bg-white/[0.07] text-white hover:bg-white/15 hover:text-white"><RefreshCw className={`h-4 w-4 ${reference.isFetching ? "animate-spin" : ""}`} /> Refresh reference</Button>
-              <Button asChild className="bg-[hsl(43,72%,72%)] text-[hsl(224,36%,16%)] hover:bg-[hsl(43,72%,78%)]"><a href="/projects/ai"><ShieldCheck className="h-4 w-4" /> Member approvals</a></Button>
+              <Button variant="outline" onClick={retry} disabled={reference.isFetching}><RefreshCw className={`h-4 w-4 ${reference.isFetching ? "animate-spin" : ""}`} /> Refresh reference</Button>
+              <Button asChild><a href="/projects/ai"><ShieldCheck className="h-4 w-4" /> Member approvals</a></Button>
             </div>
-          </div>
-          <div className="mt-7 flex flex-wrap gap-x-6 gap-y-2 border-t border-white/15 pt-4 text-xs text-white/65">
-            <span className="inline-flex items-center gap-2"><Plug className="h-3.5 w-3.5 text-[hsl(43,68%,72%)]" /> One remote connection endpoint</span>
-            <span className="inline-flex items-center gap-2"><Activity className="h-3.5 w-3.5 text-[hsl(43,68%,72%)]" /> Registry supplied by server</span>
-            <span className="inline-flex items-center gap-2"><Clock3 className="h-3.5 w-3.5 text-[hsl(43,68%,72%)]" /> Provider compatibility not yet live-verified</span>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-9 lg:py-8">
+      <main className="mx-auto max-w-5xl space-y-4 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         {reference.isError && <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" /><AlertTitle>Server reference unavailable</AlertTitle>
           <AlertDescription className="flex flex-wrap items-center justify-between gap-3"><span>The reference could not be loaded. Nothing about member AI connections was changed.</span><Button size="sm" variant="outline" onClick={retry}><RefreshCw className="h-3.5 w-3.5" /> Try again</Button></AlertDescription>
@@ -115,38 +109,27 @@ export default function AdminMcpServerPage() {
 
         {reference.isLoading ? <LoadingState /> : (
           <>
-            <section className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
-              <Card className="overflow-hidden border-[hsl(39,24%,82%)] shadow-sm">
-                <div className="h-1 bg-[hsl(43,67%,59%)]" />
-                <CardHeader className="pb-4">
-                  <SectionHeading icon={Plug} eyebrow="Connect here" title="The one connection URL" description="This is the remote Streamable HTTP MCP endpoint clients connect to. Use the published URL from the public member site in provider workspaces." />
-                  <div className="space-y-4">
-                    <div><p className="mb-1.5 text-xs font-medium text-muted-foreground">Connection name</p><CopyValue label="Connection name" value="FIA Toolkit" /></div>
-                    <div><p className="mb-1.5 text-xs font-medium text-muted-foreground">Published production URL</p><CopyValue label="Published production URL" value={data?.productionEndpoint ?? ""} /></div>
-                  </div>
-                </CardHeader>
-                <CardContent className="border-t bg-muted/20 pt-4">
-                  <div className="grid gap-3 text-sm sm:grid-cols-3">
-                    <div><p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Transport</p><p className="mt-1 font-medium">{data?.transport || "Not reported"}</p></div>
-                    <div><p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Authentication</p><p className="mt-1 font-medium">{data?.auth || "Not reported"}</p></div>
-                    <div><p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Scope boundary</p><div className="mt-1 flex flex-wrap gap-1">{(data?.scopes ?? []).length ? data?.scopes.map((scope) => <Badge key={scope} variant="secondary" className="font-mono text-[10px]">{scope}</Badge>) : <span className="text-muted-foreground">Not reported</span>}</div></div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-[hsl(39,24%,82%)] bg-[hsl(45,44%,91%)] shadow-sm dark:bg-card">
-                <CardHeader>
-                  <SectionHeading icon={KeyRound} eyebrow="Keep the URLs distinct" title="Connection is not OAuth" description="Do not paste an OAuth, website, or API route into the custom connector URL field." />
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm leading-5">
-                  <div className="flex gap-3 rounded-lg border border-[hsl(39,24%,82%)] bg-background/70 p-3"><span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"><Plug className="h-3.5 w-3.5" /></span><p><strong>Connector URL:</strong> the single value above. It is the MCP service address.</p></div>
-                  <div className="flex gap-3 rounded-lg border border-[hsl(39,24%,82%)] bg-background/70 p-3"><span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"><Fingerprint className="h-3.5 w-3.5" /></span><p><strong>OAuth and website routes:</strong> used behind the scenes for sign-in, consent, token exchange, and renewal. The client discovers and manages these automatically.</p></div>
-                  <p className="text-xs leading-5 text-muted-foreground">A private development preview may not be reachable from an external AI provider. Publish the server version first, then configure the published URL.</p>
-                </CardContent>
-              </Card>
+            <section aria-label="FIA Toolkit connection details" className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
+              <div className="grid gap-4 sm:grid-cols-[0.7fr_1.3fr] sm:items-center">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Plug className="h-5 w-5" /></span>
+                  <div className="min-w-0 flex-1"><p className="mb-1.5 text-xs font-medium text-muted-foreground">Copy this name</p><CopyValue label="Connection name" value="FIA Toolkit" /></div>
+                </div>
+                <div><p className="mb-1.5 text-xs font-medium text-muted-foreground">Published connection address</p><CopyValue label="Published production URL" value={data?.productionEndpoint ?? ""} /></div>
+              </div>
+              <p className="mt-3 text-xs leading-5 text-muted-foreground">Copy the name and production URL, then choose instructions for your AI. Use your familiar Academy login when prompted.</p>
+              <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t pt-3 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5"><Activity className="h-3.5 w-3.5" /> Choose the AI you already use</span>
+                <span className="inline-flex items-center gap-1.5"><LockKeyhole className="h-3.5 w-3.5" /> Sign in through the Academy</span>
+              </div>
             </section>
 
-            <section className="grid gap-5 lg:grid-cols-2">
+            <section aria-label="Provider setup instructions" className="space-y-3">
+            <details className="group rounded-xl border border-border bg-card px-4 shadow-sm">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-sm font-semibold [&::-webkit-details-marker]:hidden">
+                <span>Claude setup instructions</span><span aria-hidden="true" className="text-lg text-primary transition-transform group-open:rotate-45">＋</span>
+              </summary>
+              <div className="border-t py-5">
               <Card className="border-[hsl(39,24%,82%)] shadow-sm">
                 <CardHeader><SectionHeading icon={BookOpen} eyebrow="Provider guide" title="Claude custom connector" description="For current Claude setup labels, use the official instructions linked below." /></CardHeader>
                 <CardContent className="space-y-3 text-sm leading-6">
@@ -162,7 +145,13 @@ export default function AdminMcpServerPage() {
                   <a href={CLAUDE_DOCS} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-medium text-primary underline underline-offset-4">Official Claude custom connector guide <ExternalLink className="h-3 w-3" /></a>
                 </CardContent>
               </Card>
-
+              </div>
+            </details>
+            <details className="group rounded-xl border border-border bg-card px-4 shadow-sm">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-sm font-semibold [&::-webkit-details-marker]:hidden">
+                <span>ChatGPT setup instructions</span><span aria-hidden="true" className="text-lg text-primary transition-transform group-open:rotate-45">＋</span>
+              </summary>
+              <div className="border-t py-5">
               <Card className="border-[hsl(39,24%,82%)] shadow-sm">
                 <CardHeader><SectionHeading icon={Code2} eyebrow="Provider guide" title="ChatGPT developer mode" description="Workspace policy and account plan control whether custom connectors are available." /></CardHeader>
                 <CardContent className="space-y-3 text-sm leading-6">
@@ -177,8 +166,36 @@ export default function AdminMcpServerPage() {
                   <a href={OPENAI_DOCS} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-medium text-primary underline underline-offset-4">Official ChatGPT MCP guide <ExternalLink className="h-3 w-3" /></a>
                 </CardContent>
               </Card>
+              </div>
+            </details>
             </section>
 
+            <details className="group rounded-xl border border-border bg-card px-4 shadow-sm">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-sm font-semibold [&::-webkit-details-marker]:hidden">
+                <span>Connection details and URL guidance</span><span aria-hidden="true" className="text-lg text-primary transition-transform group-open:rotate-45">＋</span>
+              </summary>
+              <div className="border-t pb-4 pt-4">
+                <div className="mb-4 grid gap-3 text-sm sm:grid-cols-3">
+                  <div><p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Transport</p><p className="mt-1 font-medium">{data?.transport || "Not reported"}</p></div>
+                  <div><p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Authentication</p><p className="mt-1 font-medium">{data?.auth || "Not reported"}</p></div>
+                  <div><p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Scope boundary</p><div className="mt-1 flex flex-wrap gap-1">{(data?.scopes ?? []).length ? data?.scopes.map((scope) => <Badge key={scope} variant="secondary" className="font-mono text-[10px]">{scope}</Badge>) : <span className="text-muted-foreground">Not reported</span>}</div></div>
+                </div>
+                <div className="rounded-lg border bg-muted/30 p-4">
+                  <SectionHeading icon={KeyRound} eyebrow="Keep the URLs distinct" title="Connection is not OAuth" description="Do not paste an OAuth, website, or API route into the custom connector URL field." />
+                  <div className="space-y-3 text-sm leading-5">
+                    <p><strong>Connector URL:</strong> the published value above. It is the MCP service address.</p>
+                    <p><strong>OAuth and website routes:</strong> used behind the scenes for sign-in, consent, token exchange, and renewal. The client discovers and manages these automatically.</p>
+                    <p className="text-xs leading-5 text-muted-foreground">A private development preview may not be reachable from an external AI provider. Publish the server version first, then configure the published URL.</p>
+                  </div>
+                </div>
+              </div>
+            </details>
+
+            <details className="group rounded-xl border border-border bg-card px-4 shadow-sm">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-sm font-semibold [&::-webkit-details-marker]:hidden">
+                <span>Permissions, safety, and member approvals</span><span aria-hidden="true" className="text-lg text-primary transition-transform group-open:rotate-45">＋</span>
+              </summary>
+              <div className="border-t py-5">
             <section className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
               <Card className="border-[hsl(39,24%,82%)] shadow-sm">
                 <CardHeader><SectionHeading icon={ShieldCheck} eyebrow="Permissions and safety" title="Member consent sets the boundary" description="The server is scoped to Projects. This admin reference page does not make the underlying MCP integration admin-only." /></CardHeader>
@@ -197,6 +214,16 @@ export default function AdminMcpServerPage() {
                 </CardContent>
               </Card>
 
+            </section>
+              </div>
+            </details>
+
+            <details className="group rounded-xl border border-border bg-card px-4 shadow-sm">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-sm font-semibold [&::-webkit-details-marker]:hidden">
+                <span>Compatibility testing, other clients, and troubleshooting</span><span aria-hidden="true" className="text-lg text-primary transition-transform group-open:rotate-45">＋</span>
+              </summary>
+              <div className="space-y-5 border-t py-5">
+            <section className="grid gap-5">
               <Card className="border-[hsl(39,24%,82%)] shadow-sm">
                 <CardHeader><SectionHeading icon={FileText} eyebrow="Verify before rollout" title="A short compatibility test" description="External AI compatibility has not yet been verified using live provider accounts. Run this checklist with a test member account." /></CardHeader>
                 <CardContent>
@@ -207,13 +234,12 @@ export default function AdminMcpServerPage() {
                       ["3", "Check the Academy site", "Confirm the disposable project appears and ordinary edits reflect correctly."],
                       ["4", "Request a deletion", "Ask the client to delete the test project. Confirm no deletion happens until the member reviews it on /projects/ai."],
                       ["5", "Approve on the website", "Approve the pending request from the Academy connection page and confirm the request expires if left untouched."],
-                    ].map(([number, title, text]) => <li key={number} className="flex gap-3 rounded-lg border bg-background/60 p-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[hsl(224,36%,16%)] text-[10px] font-semibold text-[hsl(43,37%,95%)]">{number}</span><div><p className="font-medium">{title}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{text}</p></div></li>)}
+                    ].map(([number, title, text]) => <li key={number} className="flex gap-3 rounded-lg border bg-background/60 p-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">{number}</span><div><p className="font-medium">{title}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{text}</p></div></li>)}
                   </ol>
                   <p className="mt-4 text-[11px] text-muted-foreground">Provider instructions last reviewed October 12, 2026. Labels and availability may change.</p>
                 </CardContent>
               </Card>
             </section>
-
             <section className="rounded-xl border border-[hsl(39,24%,82%)] bg-[hsl(224,36%,16%)] p-5 text-[hsl(43,37%,95%)] sm:p-6">
               <div className="grid gap-6 lg:grid-cols-[0.72fr_1.28fr]">
                 <div>
@@ -234,8 +260,14 @@ export default function AdminMcpServerPage() {
                 </div>
               </div>
             </section>
+              </div>
+            </details>
 
-            <section className="space-y-4">
+            <details className="group rounded-xl border border-border bg-card px-4 shadow-sm">
+              <summary className="flex cursor-pointer items-center justify-between gap-4 py-4 text-sm font-semibold [&::-webkit-details-marker]:hidden">
+                <span>Live endpoint and tool registry</span><span aria-hidden="true" className="text-lg text-primary transition-transform group-open:rotate-45">＋</span>
+              </summary>
+              <section className="space-y-4 border-t py-5">
               <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
                 <div><p className="text-[10px] font-semibold uppercase tracking-[0.17em] text-primary">Live server registry</p><h2 className="mt-1 text-xl font-semibold tracking-tight">Endpoints and tools</h2><p className="mt-1 text-sm text-muted-foreground">Search the complete published reference, including access, descriptions, and required or optional inputs.</p></div>
                 <div className="relative w-full sm:max-w-sm"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search MCP endpoints and tools" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search paths, tools, inputs…" className="pl-9" /></div>
@@ -267,7 +299,8 @@ export default function AdminMcpServerPage() {
                   </CardContent>
                 </Card>
               </>}
-            </section>
+              </section>
+            </details>
 
             <footer className="flex flex-col gap-2 border-t border-[hsl(39,24%,82%)] pt-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
               <span>Registry content is server-owned. After a server update, refresh the tool list in each AI client.</span>

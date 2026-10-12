@@ -38,6 +38,17 @@ capabilities later without making the connection look Projects-specific.
 existing connections when renaming the service. Broader feature access still
 requires an explicit request and appropriate permission scopes.
 
+The setup guide is intended for students who should not need to understand
+technical MCP details. Keep the name and published URL immediately available,
+with provider instructions and deeper material in collapsed, optional sections.
+Do not remove the detailed information when simplifying the page.
+
+**Why:** The user said the instructions should not confuse or overwhelm students;
+most will not need the technical details, but those details should remain available.
+
+**How to apply:** Put the everyday connection steps first, let students open only
+their chosen provider's guide, and keep advanced reference information collapsed.
+
 Use the normal Academy member login for assistant authorization rather than
 reusing a broad member API key.
 
