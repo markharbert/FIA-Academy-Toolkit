@@ -82,7 +82,7 @@ export async function recoverDeletion(row: any, c: ToolContext, inspect: Inspect
       } finally { if (timer) clearTimeout(timer); }
     }
     const result = { ...observation, recovered: true, deletionRepeated: false,
-      message: "The deletion attempt was interrupted. This is a read-only observation of the current target, not proof that this attempt completed. Nothing was retried. Do not reuse this confirmation. Review the current project and any partial file cleanup with the user in this AI client; if deletion is still wanted, request a fresh preview and explicit confirmation." };
+      message: "The deletion attempt was interrupted. This is a read-only observation of the current target, not proof that this attempt completed. Nothing was retried. Do not reuse this confirmation. Review the current project and any partial file cleanup with the user in this AI client; if deletion is still wanted, request a fresh preview and explicit confirmation. For leftover files with missing attachment records, use the cleanup preview tool and original approval/attachment IDs in the observation. Replaced files cannot be cleaned up." };
     const { rows: [updated] } = await pool.query(
       "UPDATE project_mcp_approvals SET status='interrupted',result=$2,error=$3 WHERE id=$1 AND status IN ('executing','pending') RETURNING *",
       [row.id, JSON.stringify(result), result.message]);

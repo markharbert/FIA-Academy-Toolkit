@@ -35,7 +35,7 @@ export function createConfirmationTools(executeApproved: ExecuteApproved, error:
 
   return {
     get_approval: {
-      description: "Check deletion status and safely inspect an interrupted attempt without retrying it. An interrupted result reports current target/file evidence, not proof of completion. All fresh confirmations remain inside this AI client.",
+      description: "Check deletion status and safely inspect an interrupted attempt without retrying it. An interrupted result reports current target/file evidence, not proof of completion. For leftover files, use preview_attachment_cleanup with the original approval and attachment ID, then obtain fresh confirmation inside this AI client.",
       schema: z.object({ approval_id: approvalId }).strict(),
       run: async (a, c) => withDeletionLock(a.approval_id, async () => {
         const row = await previous(a.approval_id, c);

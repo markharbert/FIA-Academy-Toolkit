@@ -832,6 +832,154 @@ test("collaborator access stays tied to the active owner and invite", async () =
   } finally { await pool.query("UPDATE workspace_invites SET status='accepted' WHERE member_id=$1", [members[2]]); }
 });
 
+test("orphan cleanup needs fresh member-owned consent and refuses replaced, linked, legacy, expired or revoked files", async () => {
+  const c = await getRecoveryContext();
+  const getFile = ObjectStorageService.prototype.getObjectEntityFile;
+  const files = new Map<string, string>();
+  let deletes = 0, raceReplacement = false, failDelete = false;
+  const generation = "9007199254740993123";
+  ObjectStorageService.prototype.getObjectEntityFile = async (path) => {
+    if (!files.has(path)) throw new ObjectNotFoundError();
+    return {
+      getMetadata: async () => [{ generation: files.get(path) }],
+      delete: async (options: any) => {
+        assert.equal(typeof options.ifGenerationMatch, "string");
+        if (raceReplacement) { files.set(path, "9007199254740993124"); raceReplacement = false; }
+        if (options.ifGenerationMatch !== files.get(path)) throw Object.assign(new Error("Precondition"), { code: 412 });
+        if (failDelete) throw new Error("Storage unavailable");
+        deletes++;
+        files.delete(path);
+      },
+    } as any;
+  };
+  const p = await storage.createProject(c.workspaceId, insertProjectSchema.parse({ name: "Cleanup fixtures" }));
+  const t = await storage.createTask(c.workspaceId, p.id, { title: "Leftovers", projectId: p.id });
+  async function orphan() {
+    const path = `/objects/uploads/cleanup-${mutation()}`;
+    files.set(path, generation);
+    const att = await storage.createTaskAttachment(t.id, c.workspaceId,
+      { objectPath: path, filename: "leftover.txt", mimeType: "text/plain", size: 5 });
+    const preview = await executeProjectTool("delete_attachment", { request_id: mutation(), attachment_id: att.id }, c);
+    await pool.query("UPDATE project_mcp_approvals SET status='executing' WHERE id=$1", [preview.approvalId]);
+    await storage.deleteTaskAttachment(att.id, c.workspaceId);
+    const status = await executeProjectTool("get_approval", { approval_id: preview.approvalId }, c);
+    assert.equal(status.result.outcome, "partial");
+    assert.deepEqual(status.result.cleanup.attachmentIds, [att.id]);
+    return { path, att, source: preview.approvalId };
+  }
+  const previewArgs = (o: Awaited<ReturnType<typeof orphan>>) =>
+    ({ request_id: mutation(), approval_id: o.source, attachment_id: o.att.id });
+  const confirmArgs = (preview: any) => ({ request_id: mutation(), approval_id: preview.approvalId, confirmed: true });
+  const otherGrant = mutation();
+  try {
+    await pool.query(`INSERT INTO project_mcp_grants(id,client_id,user_id,workspace_id,scopes,resource)
+      SELECT $1,client_id,user_id,workspace_id,scopes,resource FROM project_mcp_grants WHERE id=$2`, [otherGrant, c.grantId]);
+    const o = await orphan();
+    const args = previewArgs(o);
+    await assert.rejects(() => executeProjectTool("preview_attachment_cleanup", args, { ...c, grantId: otherGrant }), /connection/);
+    await assert.rejects(() => executeProjectTool("preview_attachment_cleanup", args, { ...c, userId: members[1] }));
+    await assert.rejects(() => executeProjectTool("preview_attachment_cleanup", args, { ...c, workspaceId: members[1] }));
+    await assert.rejects(() => executeProjectTool("preview_attachment_cleanup", { ...args, request_id: mutation(), attachment_id: mutation() }, c));
+    await assert.rejects(() => executeProjectTool("preview_attachment_cleanup", { ...args, object_path: o.path }, c));
+    await assert.rejects(() => executeProjectTool("preview_attachment_cleanup", args, { ...c, scopes: ["projects:read"] }));
+    await assert.rejects(() => executeProjectTool("confirm_deletion", { request_id: mutation(), approval_id: o.source, confirmed: true }, c));
+    const preview = await executeProjectTool("preview_attachment_cleanup", args, c);
+    assert.equal(preview.status, "approval_required");
+    assert.ok(preview.summary.includes("leftover.txt"));
+    assert.equal(preview.confirmationTool, "confirm_deletion");
+    assert.equal(deletes, 0);
+    assert.deepEqual(await executeProjectTool("preview_attachment_cleanup", args, c), JSON.parse(JSON.stringify(preview)));
+    await executeProjectTool("cancel_deletion", { approval_id: preview.approvalId }, c);
+    await assert.rejects(() => executeProjectTool("confirm_deletion", confirmArgs(preview), c));
+    assert.equal(files.get(o.path), generation);
+    const fresh = await executeProjectTool("preview_attachment_cleanup", previewArgs(o), c);
+    await assert.rejects(() => executeProjectTool("confirm_deletion", confirmArgs(fresh), { ...c, grantId: otherGrant }));
+    const confirmation = confirmArgs(fresh);
+    const completed = await executeProjectTool("confirm_deletion", confirmation, c);
+    assert.equal(completed.result.databaseChanged, false);
+    assert.equal(files.has(o.path), false);
+    assert.deepEqual(await executeProjectTool("confirm_deletion", confirmation, c), completed);
+    assert.equal(deletes, 1);
+
+    for (const scenario of ["before_preview", "after_preview", "atomic_race", "expired", "revoked", "scope_removed", "linked", "legacy", "storage_failure"] as const) {
+      const o = await orphan();
+      if (scenario === "before_preview") {
+        files.set(o.path, "2");
+        await assert.rejects(() => executeProjectTool("preview_attachment_cleanup", previewArgs(o), c), /replaced/);
+        continue;
+      }
+      if (scenario === "legacy") {
+        await pool.query("UPDATE project_mcp_approvals SET recovery_data=$2 WHERE id=$1",
+          [o.source, JSON.stringify({ complete: true, files: [{ id: o.att.id, path: o.path }] })]);
+        await assert.rejects(() => executeProjectTool("preview_attachment_cleanup", previewArgs(o), c), /evidence/);
+        continue;
+      }
+      const preview = await executeProjectTool("preview_attachment_cleanup", previewArgs(o), c);
+      if (scenario === "after_preview") files.set(o.path, "2");
+      if (scenario === "atomic_race") raceReplacement = true;
+      if (scenario === "expired") await pool.query("UPDATE project_mcp_approvals SET expires_at=NOW()-INTERVAL '1 second' WHERE id=$1", [preview.approvalId]);
+      if (scenario === "revoked") await pool.query("UPDATE project_mcp_grants SET revoked_at=NOW() WHERE id=$1", [c.grantId]);
+      if (scenario === "scope_removed") await pool.query("UPDATE project_mcp_grants SET scopes=$2 WHERE id=$1", [c.grantId, ["projects:read"]]);
+      if (scenario === "linked") await storage.createTaskAttachment(t.id, c.workspaceId,
+        { objectPath: o.path, filename: "linked.txt", mimeType: "text/plain", size: 5 });
+      failDelete = scenario === "storage_failure";
+      const count = deletes;
+      try { await assert.rejects(() => executeProjectTool("confirm_deletion", confirmArgs(preview), c)); }
+      finally {
+        failDelete = false;
+        if (scenario === "revoked") await pool.query("UPDATE project_mcp_grants SET revoked_at=NULL WHERE id=$1", [c.grantId]);
+        if (scenario === "scope_removed") await pool.query("UPDATE project_mcp_grants SET scopes=$2 WHERE id=$1", [c.grantId, MCP_SCOPES]);
+      }
+      assert.equal(deletes, count);
+      assert.equal(files.has(o.path), true);
+      if (scenario === "storage_failure") {
+        const status = await executeProjectTool("get_approval", { approval_id: preview.approvalId }, c);
+        assert.equal(status.status, "interrupted");
+        assert.equal(status.result.outcome, "target_unchanged");
+        assert.equal(status.result.cleanup.originalApprovalId, o.source);
+        const retry = await executeProjectTool("preview_attachment_cleanup", previewArgs(o), c);
+        await executeProjectTool("confirm_deletion", confirmArgs(retry), c);
+      }
+    }
+    // Cascading DB removal can leave several independent cloud leftovers.
+    // An interrupted cleanup of one file never silently finishes the others.
+    const multiTask = await storage.createTask(c.workspaceId, p.id, { title: "Partial cascade", projectId: p.id });
+    const attachments = [];
+    for (let index = 0; index < 2; index++) {
+      const path = `/objects/uploads/cascade-${mutation()}`;
+      files.set(path, generation);
+      attachments.push(await storage.createTaskAttachment(multiTask.id, c.workspaceId,
+        { objectPath: path, filename: `leftover-${index}.txt`, mimeType: "text/plain", size: 5 }));
+    }
+    const original = await executeProjectTool("delete_task", { request_id: mutation(), task_id: multiTask.id }, c);
+    await pool.query("UPDATE project_mcp_approvals SET status='executing' WHERE id=$1", [original.approvalId]);
+    await storage.deleteTask(multiTask.id, c.workspaceId);
+    await executeProjectTool("get_approval", { approval_id: original.approvalId }, c);
+    const first = await executeProjectTool("preview_attachment_cleanup",
+      { request_id: mutation(), approval_id: original.approvalId, attachment_id: attachments[0].id }, c);
+    const firstConfirmation = confirmArgs(first);
+    await crashConfirmation(c, firstConfirmation, "deleted");
+    const countAfterDeletion = deletes;
+    const recovered = await executeProjectTool("confirm_deletion", firstConfirmation, c);
+    assert.equal(recovered.status, "interrupted");
+    assert.equal(recovered.result.outcome, "target_absent");
+    assert.equal(deletes, countAfterDeletion);
+    assert.equal(files.has(attachments[1].objectPath), true);
+    const originalRow = (await pool.query("SELECT * FROM project_mcp_approvals WHERE id=$1", [original.approvalId])).rows[0];
+    assert.equal((await inspectInterruptedDeletion(originalRow, c)).storage, "partial");
+    await assert.rejects(() => executeProjectTool("preview_attachment_cleanup",
+      { request_id: mutation(), approval_id: original.approvalId, attachment_id: attachments[0].id }, c), /absent/);
+    const second = await executeProjectTool("preview_attachment_cleanup",
+      { request_id: mutation(), approval_id: original.approvalId, attachment_id: attachments[1].id }, c);
+    assert.equal(deletes, countAfterDeletion);
+    await executeProjectTool("confirm_deletion", confirmArgs(second), c);
+    assert.equal((await inspectInterruptedDeletion(originalRow, c)).storage, "absent");
+  } finally {
+    ObjectStorageService.prototype.getObjectEntityFile = getFile;
+    await pool.query("DELETE FROM project_mcp_grants WHERE id=$1", [otherGrant]);
+  }
+});
+
 test("attachments verify task ownership, upload provenance, and real storage round trip", async () => {
   const { client } = await connection();
   const p = await createProject(client, "Attachment fixture");

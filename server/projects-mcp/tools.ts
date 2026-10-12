@@ -14,6 +14,7 @@ import { hashToken, assertWorkspaceAccess } from "./oauth";
 import { attachmentTools, deleteConfirmedTarget } from "./attachments";
 import { createConfirmationTools, inlineDeletionPreview } from "./confirmations";
 import { readApproval, recoverDeletion, withDeletionLock } from "./recovery";
+import { cleanupSnapshot, executeCleanup, inspectCleanup } from "./cleanup";
 
 export interface ToolContext {
   userId: string; workspaceId: string; grantId: string; scopes: string[]; origin: string;
@@ -106,6 +107,12 @@ function plainNotes(input: any) {
   return { ...input, notes: `<p>${text.replace(/\n/g, "<br>")}</p>` };
 }
 const definitions: Record<string, ToolDefinition> = {
+  preview_attachment_cleanup: {
+    description: "Preview cleanup of one leftover cloud file whose database attachment is gone after an interrupted deletion. Use the original interrupted approval_id and attachment_id from get_approval. No path is accepted. Requires a fresh explicit user confirmation through confirm_deletion; old consent never authorizes cleanup. Replaced files are refused.",
+    write: true, destructive: true,
+    schema: z.object({ request_id: requestId, approval_id: id, attachment_id: id }).strict(),
+    run: executeCleanup,
+  },
   list_projects: {
     description: "List or search your own projects, including counts. Use get_project before editing.",
     schema: z.object({ ...paging, query, status: z.enum(["active", "archived", "all"]).default("all") }).strict(),
@@ -372,7 +379,9 @@ for (const definition of Object.values(projectTools)) {
 async function destructiveSnapshot(name: string, a: any, c: ToolContext) {
   const ordered = (rows: any[]) => [...rows].sort((left, right) => left.id.localeCompare(right.id));
   let value: unknown;
-  if (name === "delete_project" || name === "delete_task") {
+  if (name === "preview_attachment_cleanup") {
+    value = await cleanupSnapshot(a, c);
+  } else if (name === "delete_project" || name === "delete_task") {
     value = await storage.getDeletionSnapshot(name === "delete_project" ? "project" : "task",
       name === "delete_project" ? a.project_id : a.task_id, c.workspaceId);
     if (!value) return notFound("Item");
@@ -406,15 +415,30 @@ const deletionTargets: Record<string, [string, string]> = {
   delete_comment: ["task_comments", "comment_id"], delete_attachment: ["task_attachments", "attachment_id"],
 };
 
-function recoveryManifest(name: string, snapshot: any) {
+async function recoveryManifest(name: string, snapshot: any) {
   // Store only the evidence that vanishes when DB cascades remove attachments.
   // Old previews deliberately recover as unknown rather than guessing paths.
+  if (name === "preview_attachment_cleanup") return { files: [snapshot], complete: true };
   const attachments = ["delete_project", "delete_task", "delete_attachment"].includes(name) ? snapshot.attachments : [];
-  return { files: attachments.slice(0, 100).map((a: any) => ({ id: a.id, path: a.object_path })),
+  const { attachmentObjectGeneration } = await import("./attachments");
+  const generationEvidence = async (path: string) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([attachmentObjectGeneration(path).catch(() => null),
+        new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), 750); })]);
+    } finally { if (timer) clearTimeout(timer); }
+  };
+  return { files: await Promise.all(attachments.slice(0, 100).map(async (a: any) => ({
+    id: a.id, path: a.object_path, filename: a.filename,
+    // Ordinary deletion can still be previewed during a storage outage, but
+    // without generation evidence orphan remediation must fail closed.
+    generation: await generationEvidence(a.object_path),
+  }))),
     complete: attachments.length <= 100 };
 }
 
 export async function inspectInterruptedDeletion(row: any, c: ToolContext) {
+  if (row.tool_name === "preview_attachment_cleanup") return inspectCleanup(row);
   const deadline = Date.now() + 4000;
   const target = deletionTargets[row.tool_name];
   if (!target) return { outcome: "unknown" };
@@ -458,10 +482,19 @@ export async function inspectInterruptedDeletion(row: any, c: ToolContext) {
   const storageState = unknown ? "unknown" : present && absent ? "partial" : present ? "present" : absent ? "absent" : "not_applicable";
   const partial = (targets.length && absent > 0) || (!targets.length && present > 0) || (present > 0 && absent > 0);
   return { outcome: partial ? "partial" : outcome, target: outcome, storage: storageState,
-    files: { present, absent, unknown } };
+    files: { present, absent, unknown },
+    cleanup: manifest.files.length ? {
+      previewTool: "preview_attachment_cleanup", originalApprovalId: row.id,
+      attachmentIds: manifest.files.filter((f: any) => f.generation).map((f: any) => f.id),
+      message: "For each leftover file, request a fresh cleanup preview using this approval and attachment ID. The tool verifies that its database record is gone and the original file version remains. Show the new summary and ask for explicit confirmation in this AI client. No cleanup has been performed.",
+    } : undefined };
 }
 
 async function approvalSummary(name: string, a: any, c: ToolContext) {
+  if (name === "preview_attachment_cleanup") {
+    const file = await cleanupSnapshot(a, c);
+    return `Delete leftover cloud file “${file.filename}” from an interrupted deletion. Its attachment record is already gone. Only the verified original file version will be removed; no database records will change. This cannot be undone.`;
+  }
   if (name === "delete_project") {
     const p = await project(a.project_id, c);
     const count = (await storage.getTasksForProject(p.id, c.workspaceId)).length;
@@ -567,7 +600,7 @@ async function executeProjectToolLocked(name: string, input: unknown, c: ToolCon
       const approvalId = randomUUID();
       const { rows: [created] } = await pool.query(`INSERT INTO project_mcp_approvals(id,grant_id,user_id,workspace_id,tool_name,args,summary,target_hash,recovery_data,expires_at)
          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW()+INTERVAL '10 minutes') RETURNING expires_at`,
-      [approvalId, c.grantId, c.userId, c.workspaceId, name, JSON.stringify(args), summary, targetHash, JSON.stringify(recoveryManifest(name, snapshot))]);
+      [approvalId, c.grantId, c.userId, c.workspaceId, name, JSON.stringify(args), summary, targetHash, JSON.stringify(await recoveryManifest(name, snapshot))]);
       result = inlineDeletionPreview({ status: "approval_required", approvalId, summary,
         expiresAt: created.expires_at });
     } else result = await definition.run(args, c);

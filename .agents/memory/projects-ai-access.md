@@ -41,6 +41,19 @@ or affect content that has changed since consent.
 **How to apply:** Report uncertainty and partial outcomes plainly. Keep recovery
 read-only, even when there appears to be an obvious remaining cleanup step.
 
+Orphan remediation deliberately refuses old previews that lack original cloud
+generation evidence, rather than treating the file currently at the old path as
+the member's original file.
+
+**Why:** A path proves where an attachment used to be, not that a later upload at
+that path belongs to the interrupted deletion. Fresh consent alone must not turn
+uncertain provenance into authority to delete a replacement.
+
+**How to apply:** Preserve the distinction between read-only recovery and freshly
+confirmed remediation. Do not relax legacy-preview refusal merely to make old
+leftovers easier to clean up; an alternative needs independent ownership and
+file-version evidence.
+
 Normal confirmed deletion should prefer leftover stored files over removing
 files that belong to content whose deletion consent became stale. Cloud work
 must not extend a database critical section.

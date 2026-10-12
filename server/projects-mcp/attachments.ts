@@ -66,6 +66,20 @@ export async function deleteAttachmentObject(path: string) {
   await objects.deleteObject(path);
 }
 
+export async function attachmentObjectGeneration(path: string): Promise<string | null> {
+  if (!path.startsWith("/objects/")) throw new Error("Invalid attachment path");
+  try {
+    const file = await objects.getObjectEntityFile(path);
+    const [metadata] = await file.getMetadata();
+    const generation = String(metadata.generation || "");
+    if (!/^[1-9]\d*$/.test(generation)) throw new Error("Storage returned no object generation");
+    return generation;
+  } catch (error) {
+    if (error instanceof ObjectNotFoundError || (error as any)?.code === 404) return null;
+    throw error;
+  }
+}
+
 export async function deleteConfirmedTarget(kind: DeletionKind, targetId: string, c: ToolContext) {
   const snapshot = await storage.getDeletionSnapshot(kind, targetId, c.workspaceId);
   const changed = () => new ProjectToolError(
@@ -136,3 +150,12 @@ export const attachmentTools: Record<string, ToolDefinition> = {
     },
   },
 };
+
+export async function deleteAttachmentGeneration(path: string, generation: string) {
+  if (!path.startsWith("/objects/") || !/^[1-9]\d*$/.test(generation)) throw new Error("Invalid cleanup target");
+  const file = await objects.getObjectEntityFile(path);
+  // Keep the generation as a string: cloud generations can exceed JS's safe
+  // integer range. The service checks this atomically, including replacements
+  // that happen after our last metadata read.
+  await file.delete({ ifGenerationMatch: generation });
+}
