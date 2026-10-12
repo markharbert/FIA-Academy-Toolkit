@@ -101,7 +101,7 @@ export const attachmentTools: Record<string, ToolDefinition> = {
     },
   },
   delete_attachment: {
-    description: "REQUEST deletion of an attachment; the member must approve it in AI Connections.",
+    description: "Preview deletion of an attachment and its stored file. Ask for confirmation in the AI conversation, then use confirm_deletion.",
     write: true, destructive: true, schema: z.object({ ...request, attachment_id: id }).strict(),
     run: async (a, c) => {
       const att = await ownAttachment(a.attachment_id, c);

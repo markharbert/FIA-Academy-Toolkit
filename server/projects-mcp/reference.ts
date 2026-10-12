@@ -18,7 +18,7 @@ export const mcpEndpointReference = [
   { method: "POST", path: "/api/mcp/consent/:requestId", category: "Website management", access: "Member session, same origin, consent nonce", description: "Approves read-only or requested editing access, or denies the request; returns the registered client callback destination." },
   { method: "GET", path: "/api/mcp/connections", category: "Website management", access: "Signed-in member", description: "Lists the member's assistant connections and destructive-action approval queue." },
   { method: "DELETE", path: "/api/mcp/connections/:id", category: "Website management", access: "Owning member session, same origin", description: "Disconnects an assistant and prevents future credential use or renewal for that connection." },
-  { method: "POST", path: "/api/mcp/approvals/:id", category: "Website management", access: "Owning member session, same origin", description: "Approves or denies a destructive action. The assistant's bearer credential cannot approve it. Expired or changed targets require a new request." },
+  { method: "POST", path: "/api/mcp/approvals/:id", category: "Website management", access: "Owning member session, same origin", description: "Optional browser fallback for approving or denying a deletion. Normally the user confirms in their AI client through confirm_deletion or cancel_deletion. This browser endpoint still requires a website session. Expired or changed targets require a fresh preview." },
   { method: "GET", path: "/api/admin/mcp/reference", category: "Admin reference", access: "Signed-in, enabled administrator", description: "Returns this endpoint reference and the current tool registry for the admin-only MCP server guide." },
 ];
 

@@ -95,7 +95,7 @@ export default function AdminMcpServerPage() {
             </div>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={retry} disabled={reference.isFetching}><RefreshCw className={`h-4 w-4 ${reference.isFetching ? "animate-spin" : ""}`} /> Refresh reference</Button>
-              <Button asChild><a href="/projects/ai"><ShieldCheck className="h-4 w-4" /> Member approvals</a></Button>
+              <Button asChild><a href="/projects/ai"><ShieldCheck className="h-4 w-4" /> AI connections</a></Button>
             </div>
           </div>
         </div>
@@ -202,15 +202,15 @@ export default function AdminMcpServerPage() {
                 <CardContent className="space-y-4 text-sm leading-5">
                   <div className="space-y-3">
                     <div className="flex gap-3"><span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><FolderKanban className="h-4 w-4" /></span><p><strong>Read-only is the default.</strong> A member may optionally approve write scope during the Academy consent flow. Connectors do not receive access outside Projects.</p></div>
-                    <div className="flex gap-3"><span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-700/10 text-emerald-800"><FileCheck2 className="h-4 w-4" /></span><p><strong>Ordinary edits</strong> execute with an approved write grant. <strong>Deletions</strong> require a separate website member approval; requests expire after 10 minutes. Changed content needs a fresh request.</p></div>
+                    <div className="flex gap-3"><span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-700/10 text-emerald-800"><FileCheck2 className="h-4 w-4" /></span><p><strong>Ordinary edits</strong> execute with an approved write grant. <strong>Deletions</strong> show a preview and ask for your confirmation inside your AI app. Confirm there—no website visit is required. Requests expire after 10 minutes; changed content needs a fresh preview and confirmation.</p></div>
                     <div className="flex gap-3"><span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><RefreshCw className="h-4 w-4" /></span><p><strong>Credential renewal:</strong> access tokens last 15 minutes; rolling refresh credentials last 30 days. Compatible AI clients renew automatically.</p></div>
                   </div>
                   <div className="rounded-lg border bg-muted/30 p-3 text-xs leading-5 text-muted-foreground">
                     <p><strong className="text-foreground">Operational limits.</strong> Retry a request with its <code className="font-mono">request_id</code> UUID; use the exact <code className="font-mono">expected_version</code> returned by the get tool. Keep notes plain text and subtasks one level deep.</p>
                     <p className="mt-2">File uploads are limited to 25 MB, or 512 KB when directly base64 encoded. Download links expire after 5 minutes.</p>
                   </div>
-                  <Alert><LockKeyhole className="h-4 w-4" /><AlertTitle className="text-sm">Never share secrets in chat</AlertTitle><AlertDescription className="text-xs leading-5">Do not put passwords or API keys in prompts or headers. Sign in through the provider-managed OAuth flow and review approvals on the Academy website.</AlertDescription></Alert>
-                  <Button asChild variant="outline" className="w-full sm:w-auto"><a href="/projects/ai"><ShieldCheck className="h-4 w-4" /> Review member connections and approvals <ArrowUpRight className="h-4 w-4" /></a></Button>
+                  <Alert><LockKeyhole className="h-4 w-4" /><AlertTitle className="text-sm">Never share secrets in chat</AlertTitle><AlertDescription className="text-xs leading-5">Do not put passwords or API keys in prompts or headers. Sign in through the provider-managed OAuth flow. Confirm deletions in your AI conversation; the AI client controls its confirmation prompt. The server requires an explicit confirmation call but cannot independently verify how the client obtained your consent.</AlertDescription></Alert>
+                  <Button asChild variant="outline" className="w-full sm:w-auto"><a href="/projects/ai"><ShieldCheck className="h-4 w-4" /> Manage AI connections <ArrowUpRight className="h-4 w-4" /></a></Button>
                 </CardContent>
               </Card>
 
@@ -232,8 +232,8 @@ export default function AdminMcpServerPage() {
                       ["1", "Connect with read-only scope", "Use the published URL and complete member login. Confirm the provider can list tools and read a project."],
                       ["2", "Create a disposable project", "Only after validating the read boundary, grant optional write access and ask the client to create a throwaway project."],
                       ["3", "Check the Academy site", "Confirm the disposable project appears and ordinary edits reflect correctly."],
-                      ["4", "Request a deletion", "Ask the client to delete the test project. Confirm no deletion happens until the member reviews it on /projects/ai."],
-                      ["5", "Approve on the website", "Approve the pending request from the Academy connection page and confirm the request expires if left untouched."],
+                      ["4", "Request a deletion", "Ask the client to delete the test project. It should show a preview and ask for confirmation without sending you to the website."],
+                      ["5", "Confirm in your AI app", "Confirm in the conversation or the app's approval prompt. The agent uses confirm_deletion to complete it, or cancel_deletion if you decline. Unanswered previews expire after 10 minutes."],
                     ].map(([number, title, text]) => <li key={number} className="flex gap-3 rounded-lg border bg-background/60 p-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">{number}</span><div><p className="font-medium">{title}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{text}</p></div></li>)}
                   </ol>
                   <p className="mt-4 text-[11px] text-muted-foreground">Provider instructions last reviewed October 12, 2026. Labels and availability may change.</p>
@@ -304,7 +304,7 @@ export default function AdminMcpServerPage() {
 
             <footer className="flex flex-col gap-2 border-t border-[hsl(39,24%,82%)] pt-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
               <span>Registry content is server-owned. After a server update, refresh the tool list in each AI client.</span>
-              <a href="/projects/ai" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">Member connections and approval queue <ArrowUpRight className="h-3.5 w-3.5" /></a>
+              <a href="/projects/ai" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">Manage connections and optional website review <ArrowUpRight className="h-3.5 w-3.5" /></a>
             </footer>
           </>
         )}

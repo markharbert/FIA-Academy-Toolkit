@@ -143,7 +143,7 @@ export default function AiConnectionsPage() {
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
               <div className="flex gap-3"><span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-background text-primary"><FolderKanban className="h-4 w-4" /></span><p><strong>Read</strong> lets an assistant inspect project, task, and related workspace content.</p></div>
-              <div className="flex gap-3"><span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-background text-primary"><CheckCircle2 className="h-4 w-4" /></span><p><strong>Write</strong> may create or update workspace content. Destructive actions wait here for your approval and expire if left unanswered.</p></div>
+              <div className="flex gap-3"><span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-background text-primary"><CheckCircle2 className="h-4 w-4" /></span><p><strong>Write</strong> may create or update workspace content. Confirm deletions directly in your AI conversation. Requests expire after 10 minutes; you do not need to visit this page.</p></div>
               <Separator />
               {config.data?.scopes?.length ? <div><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Available permissions</p><Scopes scopes={config.data.scopes} /></div> : null}
               <p className="text-xs leading-5 text-muted-foreground">Your selected AI platform receives the project and task content it accesses. Review that platform’s data handling terms before connecting.</p>
@@ -154,7 +154,7 @@ export default function AiConnectionsPage() {
         <section aria-labelledby="approvals-title">
           <Card>
             <CardHeader className="flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
-              <div><div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground"><Clock3 className="h-3.5 w-3.5" /> Action queue</div><CardTitle id="approvals-title">Waiting for your decision</CardTitle><CardDescription>Destructive actions from connected assistants are held here until you approve or deny them.</CardDescription></div>
+              <div><div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground"><Clock3 className="h-3.5 w-3.5" /> Optional website review</div><CardTitle id="approvals-title">Pending deletion confirmations</CardTitle><CardDescription>Approve or decline in your AI conversation—no website visit is required. You can also review pending requests here if you prefer.</CardDescription></div>
               {pending.length > 0 && <Badge>{pending.length} awaiting review</Badge>}
             </CardHeader>
             <CardContent className="pt-0">
@@ -291,7 +291,7 @@ export function McpAuthorizePage() {
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Requested permissions</p>
                 <div className="space-y-3">
                   {canRead ? <div className="flex gap-3"><FolderKanban className="mt-0.5 h-4 w-4 shrink-0 text-primary" /><div><p className="text-sm font-medium">Read projects</p><p className="text-xs leading-5 text-muted-foreground">View project, task, section, comment, template, attachment, and activity content available to your account.</p></div></div> : <p className="text-sm text-destructive">This request does not include the required project read permission.</p>}
-                  {canWrite && <div className="flex gap-3"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" /><div><p className="text-sm font-medium">Make project changes</p><p className="text-xs leading-5 text-muted-foreground">Create and update supported project content. Destructive actions are held for your approval.</p></div></div>}
+                  {canWrite && <div className="flex gap-3"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" /><div><p className="text-sm font-medium">Make project changes</p><p className="text-xs leading-5 text-muted-foreground">Create and update supported project content. Deletions require your confirmation inside your AI app, without returning to the website.</p></div></div>}
                 </div>
               </div>
               {canWrite && <div className="flex items-start gap-3 rounded-lg border p-4"><Checkbox id="allow-write" checked={writeAllowed} onCheckedChange={(checked) => setWriteAllowed(checked === true)} /><div><Label htmlFor="allow-write" className="cursor-pointer text-sm font-medium">Include write access</Label><p className="mt-1 text-xs leading-5 text-muted-foreground">Leave unchecked to authorize read-only access. You can remove access later from AI connections.</p></div></div>}

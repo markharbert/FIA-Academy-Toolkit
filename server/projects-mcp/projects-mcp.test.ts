@@ -133,6 +133,13 @@ const mutation = () => randomUUID();
 async function createProject(client: Client, name = "Launch fixture") {
   return tool(client, "create_project", { request_id: mutation(), project: { name } });
 }
+async function confirmDeletion(client: Client, preview: any) {
+  const result = await tool(client, "confirm_deletion", {
+    request_id: mutation(), approval_id: preview.approvalId, confirmed: true,
+  });
+  assert.equal(result.status, "approved");
+  return result;
+}
 
 test("FIA Toolkit agent endpoint supports discovery, OAuth, tools, and existing project connections", async () => {
   const metadata = await (await fetch(`${base}/.well-known/oauth-protected-resource/mcp/agent`)).json();
@@ -264,7 +271,7 @@ test("read-only grants, renewal, credential revocation, and immediate membership
   assert.equal((await rpc(renewed.access_token)).status, 401);
 });
 
-test("destructive actions require the member, cannot be spoofed, and reject changed targets", async () => {
+test("optional website fallback stays member-only and rejects changed targets", async () => {
   const { client, access_token } = await connection();
   const p = await createProject(client, "Deletion fixture");
   await tool(client, "delete_project", { request_id: mutation(), project_id: p.id, approved: true }, true);
@@ -290,6 +297,108 @@ test("destructive actions require the member, cannot be spoofed, and reject chan
   const expired = await tool(client, "delete_project", { request_id: mutation(), project_id: changed.id });
   await pool.query("UPDATE project_mcp_approvals SET expires_at=NOW()-INTERVAL '1 second' WHERE id=$1", [expired.approvalId]);
   assert.equal((await browser(`/api/mcp/approvals/${expired.approvalId}`, "POST", { decision: "approve" })).status, 409);
+});
+
+test("in-agent deletion requires explicit confirmation and preserves idempotent results", async () => {
+  const { client } = await connection();
+  const p = await createProject(client, "In-agent deletion");
+  const args = { request_id: mutation(), project_id: p.id };
+  const preview = await tool(client, "delete_project", args);
+  assert.equal(preview.confirmationTool, "confirm_deletion");
+  assert.equal(preview.approvalUrl, undefined);
+  assert.ok(preview.summary.includes(p.name));
+  assert.ok(await storage.getProject(p.id, members[0]));
+  const tools = (await client.listTools()).tools;
+  assert.equal(tools.find((t) => t.name === "delete_project")?.annotations?.readOnlyHint, true);
+  assert.equal(tools.find((t) => t.name === "confirm_deletion")?.annotations?.destructiveHint, true);
+  await tool(client, "confirm_deletion", { request_id: mutation(), approval_id: preview.approvalId }, true);
+  await tool(client, "confirm_deletion", { request_id: mutation(), approval_id: preview.approvalId, confirmed: false }, true);
+  assert.ok(await storage.getProject(p.id, members[0]));
+  const confirm = { request_id: mutation(), approval_id: preview.approvalId, confirmed: true };
+  const completed = await tool(client, "confirm_deletion", confirm);
+  assert.equal(completed.status, "approved");
+  assert.equal(await storage.getProject(p.id, members[0]), undefined);
+  assert.deepEqual(await tool(client, "confirm_deletion", confirm), completed);
+  assert.deepEqual(await tool(client, "confirm_deletion", { ...confirm, request_id: mutation() }), completed);
+  assert.equal((await tool(client, "get_approval", { approval_id: preview.approvalId })).status, "approved");
+  // Existing cached previews must not keep sending an upgraded client to the website.
+  await pool.query("UPDATE project_mcp_operations SET result=$3 WHERE grant_id=$1 AND request_id=$2",
+    [(await pool.query("SELECT grant_id FROM project_mcp_approvals WHERE id=$1", [preview.approvalId])).rows[0].grant_id,
+      args.request_id, JSON.stringify({ ...preview, approvalUrl: `${base}/projects/ai`, message: "Open the website" })]);
+  const retry = await tool(client, "delete_project", args);
+  assert.equal(retry.approvalUrl, undefined);
+  assert.equal(retry.confirmationTool, "confirm_deletion");
+});
+
+test("in-agent confirmations are bound to the connection and reject read-only, stale, expired, and denied previews", async () => {
+  const actor = await connection();
+  const otherConnection = await connection();
+  const foreign = await connection(MCP_SCOPES, members[1]);
+  const readonly = await connection(["projects:read"]);
+  const p = await createProject(actor.client, "Confirmation guard fixture");
+  const pending = await tool(actor.client, "delete_project", { request_id: mutation(), project_id: p.id });
+  for (const other of [otherConnection, foreign, readonly]) {
+    await tool(other.client, "confirm_deletion", { request_id: mutation(), approval_id: pending.approvalId, confirmed: true }, true);
+    await tool(other.client, "cancel_deletion", { request_id: mutation(), approval_id: pending.approvalId }, true);
+  }
+  assert.equal((await tool(actor.client, "get_approval", { approval_id: pending.approvalId })).status, "pending");
+  const cancelled = await tool(actor.client, "cancel_deletion", { request_id: mutation(), approval_id: pending.approvalId });
+  assert.equal(cancelled.status, "denied");
+  await tool(actor.client, "confirm_deletion", { request_id: mutation(), approval_id: pending.approvalId, confirmed: true }, true);
+  const expired = await tool(actor.client, "delete_project", { request_id: mutation(), project_id: p.id });
+  await pool.query("UPDATE project_mcp_approvals SET expires_at=NOW()-INTERVAL '1 second' WHERE id=$1", [expired.approvalId]);
+  const expiry = await tool(actor.client, "confirm_deletion", { request_id: mutation(), approval_id: expired.approvalId, confirmed: true }, true);
+  assert.equal(expiry.error, "confirmation_expired");
+  const stale = await tool(actor.client, "delete_project", { request_id: mutation(), project_id: p.id });
+  await tool(actor.client, "create_task", { request_id: mutation(), project_id: p.id, task: { title: "Added after preview" } });
+  const changed = await tool(actor.client, "confirm_deletion", { request_id: mutation(), approval_id: stale.approvalId, confirmed: true }, true);
+  assert.equal(changed.error, "stale_approval");
+  assert.equal((await tool(actor.client, "get_approval", { approval_id: stale.approvalId })).status, "failed");
+  assert.ok(await storage.getProject(p.id, members[0]));
+});
+
+test("concurrent in-agent confirmations execute a deletion only once", async () => {
+  const { client } = await connection();
+  const p = await createProject(client, "Concurrent confirmations");
+  const preview = await tool(client, "delete_project", { request_id: mutation(), project_id: p.id });
+  const original = projectTools.delete_project.run;
+  let calls = 0;
+  projectTools.delete_project.run = async (a, c) => { calls++; return original(a, c); };
+  try {
+    const results = await Promise.all([mutation(), mutation()].map((request_id) =>
+      client.callTool({ name: "confirm_deletion", arguments: { request_id, approval_id: preview.approvalId, confirmed: true } })));
+    assert.ok(results.some((result) => !result.isError));
+    assert.equal(calls, 1);
+    assert.equal(await storage.getProject(p.id, members[0]), undefined);
+  } finally { projectTools.delete_project.run = original; }
+});
+
+test("in-agent confirmation completes task, comment, section, template and template-task deletion", async () => {
+  // Spread the expanded fixture traffic across real test members rather than
+  // weakening the production per-member request limit.
+  const { client } = await connection(MCP_SCOPES, members[1]);
+  const p = await createProject(client, "All deletion types");
+  const section = await tool(client, "create_section", { request_id: mutation(), project_id: p.id, section: { name: "Delete this section" } });
+  const task = await tool(client, "create_task", { request_id: mutation(), project_id: p.id, task: { title: "Delete parent", columnId: section.id } });
+  const child = await tool(client, "create_task", { request_id: mutation(), project_id: p.id, task: { title: "Delete child", parentTaskId: task.id } });
+  const comment = await tool(client, "add_comment", { request_id: mutation(), task_id: task.id, body: "Delete comment" });
+  const template = await tool(client, "create_template", { request_id: mutation(), template: { name: "Delete template" } });
+  const templateTask = await tool(client, "create_template_task", { request_id: mutation(), template_id: template.id, task: { title: "Delete template task" } });
+  for (const [name, args] of [
+    ["delete_comment", { task_id: task.id, comment_id: comment.id }],
+    ["delete_section", { section_id: section.id }],
+    ["delete_template_task", { template_task_id: templateTask.id }],
+    ["delete_template", { template_id: template.id }],
+    ["delete_task", { task_id: task.id }],
+  ] as const) {
+    await confirmDeletion(client, await tool(client, name, { request_id: mutation(), ...args }));
+  }
+  assert.equal((await tool(client, "list_tasks", { project_id: p.id })).total, 0);
+  await tool(client, "get_task", { task_id: task.id }, true);
+  await tool(client, "get_task", { task_id: child.id }, true);
+  await tool(client, "get_section", { section_id: section.id }, true);
+  await tool(client, "get_template_task", { template_task_id: templateTask.id }, true);
+  await tool(client, "get_template", { template_id: template.id }, true);
 });
 
 test("collaborator access stays tied to the active owner and invite", async () => {
@@ -323,7 +432,7 @@ test("attachments verify task ownership, upload provenance, and real storage rou
     const readonly = await connection(["projects:read"], members[1]);
     await tool(readonly.client, "download_attachment", { attachment_id: attachment.id }, true);
     const pending = await tool(client, "delete_attachment", { request_id: mutation(), attachment_id: attachment.id });
-    assert.equal((await browser(`/api/mcp/approvals/${pending.approvalId}`, "POST", { decision: "approve" })).status, 200);
+    await confirmDeletion(client, pending);
     assert.equal((await tool(client, "list_attachments", { task_id: t.id })).items.length, 0);
   } finally {
     // Even if a check fails, do not leave a generated cloud fixture behind.

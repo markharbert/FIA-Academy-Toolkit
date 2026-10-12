@@ -91,6 +91,8 @@ describe("Admin MCP server guide", () => {
     const summary = screen.getByText("Permissions, safety, and member approvals");
     fireEvent.click(summary);
     expect(details?.open).toBe(true);
+    expect(screen.getByText(/Confirm there—no website visit is required/)).toBeTruthy();
+    expect(screen.queryByText(/require a separate website member approval/)).toBeNull();
     fireEvent.click(summary);
     expect(details?.open).toBe(false);
   });

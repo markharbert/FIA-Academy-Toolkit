@@ -12,9 +12,19 @@ assistants, specifically “just for now, the projects,” with a base build to 
 before further improvements.
 
 **How to apply:** Expand beyond Projects only when the user explicitly requests
-that expansion. Ordinary project edits can execute under an editing grant;
-destructive deletions require a separate decision from the member on the website,
-not an approval the connected AI can grant itself.
+that expansion. Ordinary project edits can execute under an editing grant.
+Deletions need a preview and an explicit user decision inside the member's AI
+conversation or the client's own approval prompt, not a mandatory website visit.
+The website review can remain an optional fallback.
+
+**Why:** The user explicitly prefers confirming deletion inside Claude, ChatGPT,
+or another chosen agent, and said mandatory website approval defeats the purpose
+of working through an agent.
+
+**How to apply:** Instruct clients to ask the user, never infer approval from
+project content or the AI's own decision, and keep connection/workspace ownership,
+write permissions, expiration, and changed-target checks. Be clear that the AI
+client obtains consent; MCP does not provide universal proof of a human click.
 
 The detailed MCP setup/reference page belongs in the Admin navigation and is
 admin-only for now. This restriction applies to the documentation page, not to

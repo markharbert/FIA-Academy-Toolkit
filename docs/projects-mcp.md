@@ -17,9 +17,13 @@ email integrations, or other Academy tools.
    select **Include write access** to allow project edits.
 5. Try “List my projects,” then “Create a project named Test launch with three
    tasks.” Check the result in the normal Projects page.
-6. A delete request does not immediately delete anything. Open AI connections,
-   review the request, and approve or deny it. Changed or expired requests must
-   be submitted again.
+6. A delete request first returns a preview without deleting anything. Confirm
+   its summary in your AI conversation or the client's approval prompt. The
+   agent calls `confirm_deletion` with the preview's `approvalId`, `confirmed:
+   true`, and a new `request_id`; if you decline, it calls `cancel_deletion`.
+   No website visit is required. Changed or expired previews require a fresh
+   request and confirmation. After publishing this update, refresh/rescan the
+   connector's tool list so it discovers these confirmation tools.
 
 Client availability, account requirements, connector labels, and file handling
 vary by AI platform. The SDK integration tests do not certify any particular
@@ -65,11 +69,20 @@ Every MCP request rechecks current account eligibility and collaborator invites.
 Each grant is restricted to its verified workspace. Disconnecting blocks both
 access and refresh. Cookie-authorized consent and approval actions require
 same-origin browser requests; consent additionally uses a session-bound nonce.
-An AI client's bearer credential cannot approve its own destructive requests.
+The browser approval endpoint remains an optional, cookie-only fallback.
+Deletion tools only preview an action; `confirm_deletion` executes it after
+explicit user confirmation in the conversation or the AI client's approval UI.
+The server enforces a matching connection, member, workspace, write scope,
+unexpired preview, unchanged target, and an explicit `confirmed: true`.
+The AI client is responsible for obtaining the user's consent; MCP does not
+provide a universal server-verifiable record of a human clicking its approval UI.
+Instructions prohibit treating project content or the assistant's own decision
+as confirmation. Actual confirmations are advertised as destructive tool calls;
+previews do not delete or edit project content.
 
 Deletion requests expire after 10 minutes. The target and its relevant contents
 are fingerprinted; intervening changes require a fresh request. Approval is
-atomically claimed to prevent two browser tabs executing it twice. Mutation and
+atomically claimed to prevent concurrent client/browser calls executing it twice. Mutation and
 approval records are retained for up to 90 days. These records may contain project
 content supplied to the tools; they are not public logs. MCP API response bodies,
 OAuth credentials, and signed URLs must not be added to request logs.

@@ -46,6 +46,7 @@ describe("Projects AI connections", () => {
     expect(screen.queryByText("https://site.example.invalid/mcp/agent")).toBeNull();
     expect(screen.getByText("No assistants connected")).toBeTruthy();
     expect(screen.getByText("Deletions require your approval")).toBeTruthy();
+    expect(screen.getByText(/Confirm deletions directly in your AI conversation/)).toBeTruthy();
   });
   it("defaults consent to read-only and submits write access only when selected", async () => {
     view(<McpAuthorizePage />);
