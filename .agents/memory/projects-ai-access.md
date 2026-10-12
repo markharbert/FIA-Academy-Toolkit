@@ -21,7 +21,7 @@ login and connection authorization still use the Academy's secure OAuth flow.
 **Why:** The user explicitly prefers confirming deletion inside Claude, ChatGPT,
 or another chosen agent, said mandatory website approval defeats the purpose
 of working through an agent, and clarified that all action confirmations must
-happen within that agentic software.
+happen within that agentic software, regardless of which MCP client they use.
 
 **How to apply:** Instruct clients to ask the user, never infer approval from
 project content or the AI's own decision, and keep connection/workspace ownership,

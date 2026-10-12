@@ -21,6 +21,10 @@ email integrations, or other Academy tools.
    its summary in your AI conversation or the client's approval prompt. The
    agent calls `confirm_deletion` with the preview's `approvalId`, `confirmed:
    true`, and a new `request_id`; if you decline, it calls `cancel_deletion`.
+   Cancellation accepts just `approval_id` (a retry UUID is optional). Successful
+   confirmation and `get_approval` report `completed`, with the deletion result
+   and relevant counts. Repeating the same confirmation UUID returns its saved
+   result; a different UUID cannot execute an already-completed preview.
    No website visit is required. Changed or expired previews require a fresh
    request and confirmation. After publishing this update, refresh/rescan the
    connector's tool list so it discovers these confirmation tools.

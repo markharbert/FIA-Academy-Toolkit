@@ -20,6 +20,9 @@ export function createConfirmationTools(executeApproved: ExecuteApproved, error:
     return row;
   }
   function unavailable(row: any): never {
+    if (row.status === "approved") {
+      throw error("This deletion has already completed. Use get_approval to read its result; it cannot be executed again.", "confirmation_already_completed");
+    }
     if (row.status === "pending" && new Date(row.expires_at).getTime() <= Date.now()) {
       throw error("This deletion preview expired. Request a fresh preview and ask for confirmation again.", "confirmation_expired");
     }
@@ -42,7 +45,6 @@ export function createConfirmationTools(executeApproved: ExecuteApproved, error:
         [a.approval_id, c.grantId, c.userId, c.workspaceId]);
         if (!row) {
           const existing = await previous(a.approval_id, c);
-          if (existing.status === "approved") return { status: "approved", approvalId: existing.id, result: existing.result };
           unavailable(existing);
         }
         try {
@@ -52,7 +54,7 @@ export function createConfirmationTools(executeApproved: ExecuteApproved, error:
           const result = await executeApproved(row.tool_name, row.args, c, row.target_hash);
           await pool.query("UPDATE project_mcp_approvals SET status='approved',result=$2 WHERE id=$1",
             [row.id, JSON.stringify(result)]);
-          return { status: "approved", approvalId: row.id, result };
+          return { status: "completed", approvalId: row.id, summary: row.summary, result };
         } catch (failure) {
           await pool.query("UPDATE project_mcp_approvals SET status='failed',error=$2 WHERE id=$1",
             [row.id, publicError(failure)]);
@@ -63,7 +65,8 @@ export function createConfirmationTools(executeApproved: ExecuteApproved, error:
     cancel_deletion: {
       description: "Cancel a pending deletion preview when the user declines in the AI conversation. Nothing is deleted; cancelled previews cannot later be confirmed.",
       write: true,
-      schema: z.object({ request_id: requestId, approval_id: approvalId }).strict(),
+      schema: z.object({ request_id: requestId.optional().describe("Optional retry UUID. Cancellation also accepts just approval_id and remains safe to repeat."),
+        approval_id: approvalId }).strict(),
       run: async (a, c) => {
         const { rows: [row] } = await pool.query(`UPDATE project_mcp_approvals SET status='denied'
           WHERE id=$1 AND grant_id=$2 AND user_id=$3 AND workspace_id=$4

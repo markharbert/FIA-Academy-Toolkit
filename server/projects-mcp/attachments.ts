@@ -107,7 +107,7 @@ export const attachmentTools: Record<string, ToolDefinition> = {
       const att = await ownAttachment(a.attachment_id, c);
       await deleteAttachmentObject(att.objectPath);
       await storage.deleteTaskAttachment(att.id, c.workspaceId);
-      return { deleted: true, attachmentId: att.id };
+      return { deleted: true, attachmentId: att.id, filename: att.filename, counts: { attachments: 1 } };
     },
   },
 };

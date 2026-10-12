@@ -137,8 +137,22 @@ async function confirmDeletion(client: Client, preview: any) {
   const result = await tool(client, "confirm_deletion", {
     request_id: mutation(), approval_id: preview.approvalId, confirmed: true,
   });
-  assert.equal(result.status, "approved");
+  assert.equal(result.status, "completed");
   return result;
+}
+async function assertDeletionToolsListed(client: Client) {
+  const { tools } = await client.listTools();
+  const confirm = tools.find((t) => t.name === "confirm_deletion");
+  const cancel = tools.find((t) => t.name === "cancel_deletion");
+  assert.ok(confirm, "tools/list must advertise confirm_deletion to every MCP client");
+  assert.ok(cancel, "tools/list must advertise cancel_deletion to every MCP client");
+  assert.deepEqual([...(confirm.inputSchema.required || [])].sort(), ["approval_id", "confirmed", "request_id"]);
+  assert.equal((confirm.inputSchema.properties?.confirmed as any)?.const, true);
+  assert.deepEqual(cancel.inputSchema.required, ["approval_id"]);
+  for (const name of ["delete_project", "delete_task", "delete_section", "delete_template",
+    "delete_template_task", "delete_comment", "delete_attachment"]) {
+    assert.match(tools.find((t) => t.name === name)?.description || "", /only after they explicitly say yes in the conversation/);
+  }
 }
 
 test("FIA Toolkit agent endpoint supports discovery, OAuth, tools, and existing project connections", async () => {
@@ -147,15 +161,16 @@ test("FIA Toolkit agent endpoint supports discovery, OAuth, tools, and existing 
   assert.equal(metadata.resource_name, "FIA Toolkit");
   const actor = await connection(MCP_SCOPES, members[0], "/mcp/agent");
   assert.equal(actor.client.getServerVersion()?.name, "fia-toolkit");
-  assert.ok((await actor.client.listTools()).tools.length > 0);
+  assert.equal(actor.client.getServerVersion()?.version, "1.1.0");
+  await assertDeletionToolsListed(actor.client);
   // Simulate a grant issued before the URL rename, without changing its scope.
   await pool.query("UPDATE project_mcp_grants SET resource=$1 WHERE id=$2", [`${base}/mcp/projects`, actor.grantId]);
-  assert.ok((await actor.client.listTools()).tools.length > 0);
+  await assertDeletionToolsListed(actor.client);
   const legacy = new Client({ name: "legacy-fixture", version: "1.0.0" });
   clients.push(legacy);
   await legacy.connect(new StreamableHTTPClientTransport(new URL(`${base}/mcp/projects`),
     { requestInit: { headers: { Authorization: `Bearer ${actor.access_token}` } } }));
-  assert.ok((await legacy.listTools()).tools.length > 0);
+  await assertDeletionToolsListed(legacy);
   // The alias must not broaden the audience check to other origins.
   await pool.query("UPDATE project_mcp_grants SET resource=$1 WHERE id=$2", ["https://other.example.invalid/mcp/agent", actor.grantId]);
   await assert.rejects(() => actor.client.listTools());
@@ -247,6 +262,7 @@ test("section, comment, and template workflows use the existing project data", a
 
 test("read-only grants, renewal, credential revocation, and immediate membership changes", async () => {
   const readonly = await connection(["projects:read"]);
+  await assertDeletionToolsListed(readonly.client);
   await tool(readonly.client, "list_projects");
   await tool(readonly.client, "create_project", { request_id: mutation(), project: { name: "Not allowed" } }, true);
   const renewal = await fetch(`${base}/api/mcp/oauth/token`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -290,13 +306,15 @@ test("retired website approvals cannot execute or cancel a deletion", async () =
   assert.equal((await browser(`/api/mcp/approvals/${pending.approvalId}`, "POST", { decision: "approve" }, members[1])).status, 410);
   await confirmDeletion(client, pending);
   assert.equal(await storage.getProject(p.id, members[0]), undefined);
-  assert.equal((await tool(client, "get_approval", { approval_id: pending.approvalId })).status, "approved");
+  assert.equal((await tool(client, "get_approval", { approval_id: pending.approvalId })).status, "completed");
   assert.equal((await browser(`/api/mcp/approvals/${pending.approvalId}`, "POST", { decision: "approve" })).status, 410);
 });
 
 test("in-agent deletion requires explicit confirmation and preserves idempotent results", async () => {
   const { client } = await connection();
   const p = await createProject(client, "In-agent deletion");
+  const parent = await tool(client, "create_task", { request_id: mutation(), project_id: p.id, task: { title: "Throwaway parent" } });
+  const child = await tool(client, "create_task", { request_id: mutation(), project_id: p.id, task: { title: "Throwaway child", parentTaskId: parent.id } });
   const args = { request_id: mutation(), project_id: p.id };
   const preview = await tool(client, "delete_project", args);
   assert.equal(preview.confirmationTool, "confirm_deletion");
@@ -311,11 +329,16 @@ test("in-agent deletion requires explicit confirmation and preserves idempotent 
   assert.ok(await storage.getProject(p.id, members[0]));
   const confirm = { request_id: mutation(), approval_id: preview.approvalId, confirmed: true };
   const completed = await tool(client, "confirm_deletion", confirm);
-  assert.equal(completed.status, "approved");
+  assert.equal(completed.status, "completed");
+  assert.equal(completed.result.projectId, p.id);
+  assert.deepEqual(completed.result.counts, { projects: 1, tasks: 2 });
   assert.equal(await storage.getProject(p.id, members[0]), undefined);
+  assert.equal(await storage.getTask(parent.id, members[0]), undefined);
+  assert.equal(await storage.getTask(child.id, members[0]), undefined);
   assert.deepEqual(await tool(client, "confirm_deletion", confirm), completed);
-  assert.deepEqual(await tool(client, "confirm_deletion", { ...confirm, request_id: mutation() }), completed);
-  assert.equal((await tool(client, "get_approval", { approval_id: preview.approvalId })).status, "approved");
+  const repeated = await tool(client, "confirm_deletion", { ...confirm, request_id: mutation() }, true);
+  assert.equal(repeated.error, "confirmation_already_completed");
+  assert.equal((await tool(client, "get_approval", { approval_id: preview.approvalId })).status, "completed");
   // Existing cached previews must not keep sending an upgraded client to the website.
   await pool.query("UPDATE project_mcp_operations SET result=$3 WHERE grant_id=$1 AND request_id=$2",
     [(await pool.query("SELECT grant_id FROM project_mcp_approvals WHERE id=$1", [preview.approvalId])).rows[0].grant_id,
@@ -337,8 +360,9 @@ test("in-agent confirmations are bound to the connection and reject read-only, s
     await tool(other.client, "cancel_deletion", { request_id: mutation(), approval_id: pending.approvalId }, true);
   }
   assert.equal((await tool(actor.client, "get_approval", { approval_id: pending.approvalId })).status, "pending");
-  const cancelled = await tool(actor.client, "cancel_deletion", { request_id: mutation(), approval_id: pending.approvalId });
+  const cancelled = await tool(actor.client, "cancel_deletion", { approval_id: pending.approvalId });
   assert.equal(cancelled.status, "denied");
+  assert.deepEqual(await tool(actor.client, "cancel_deletion", { approval_id: pending.approvalId }), cancelled);
   await tool(actor.client, "confirm_deletion", { request_id: mutation(), approval_id: pending.approvalId, confirmed: true }, true);
   const expired = await tool(actor.client, "delete_project", { request_id: mutation(), project_id: p.id });
   await pool.query("UPDATE project_mcp_approvals SET expires_at=NOW()-INTERVAL '1 second' WHERE id=$1", [expired.approvalId]);
