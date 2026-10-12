@@ -189,7 +189,7 @@ export default function AiConnectionsPage() {
             <CardContent className="space-y-5">
               {config.isLoading ? <div className="space-y-3"><div className="h-5 w-1/3 animate-pulse rounded bg-muted" /><div className="h-12 animate-pulse rounded bg-muted" /></div> : configError ? <p className="text-sm text-muted-foreground">Connection setup details are unavailable. Refresh the page to retry.</p> : (
                 <>
-                  <EndpointField title="This environment" value={config.data?.endpoint ?? ""} />
+                  <EndpointField title="Connection name" value="FIA Toolkit" />
                   <EndpointField title="Published domain" value={config.data?.productionEndpoint ?? ""} />
                   <div className="rounded-lg bg-muted/50 p-4">
                     <p className="mb-2 text-sm font-semibold">Setup steps</p>

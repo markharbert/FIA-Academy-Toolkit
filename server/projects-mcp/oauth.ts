@@ -65,7 +65,7 @@ export class ProjectsOAuthProvider implements OAuthServerProvider {
   // rather than split validation and consumption across two SDK callbacks.
   skipLocalPkceValidation = true;
   readonly endpoint: string;
-  constructor(readonly origin = mcpOrigin()) { this.endpoint = `${origin}/mcp/projects`; }
+  constructor(readonly origin = mcpOrigin()) { this.endpoint = `${origin}/mcp/agent`; }
 
   clientsStore = {
     getClient: async (clientId: string) => {
@@ -90,8 +90,13 @@ export class ProjectsOAuthProvider implements OAuthServerProvider {
     },
   };
 
+  isResource(resource: string) {
+    // Both paths identify the same service. Preserve already-issued grants and
+    // clients while advertising only the new, product-wide connection address.
+    return resource === this.endpoint || resource === `${this.origin}/mcp/projects`;
+  }
   assertResource(resource?: URL) {
-    if (resource && resource.href !== this.endpoint) throw new InvalidRequestError("Resource must be the Academy Projects MCP endpoint");
+    if (resource && !this.isResource(resource.href)) throw new InvalidRequestError("Resource must be the FIA Toolkit MCP endpoint");
   }
   async authorize(client: OAuthClientInformationFull, params: AuthorizationParams, res: Response) {
     this.assertResource(params.resource);
@@ -179,7 +184,7 @@ export class ProjectsOAuthProvider implements OAuthServerProvider {
       `SELECT g.*,t.expires_at FROM project_mcp_tokens t JOIN project_mcp_grants g ON g.id=t.grant_id
        WHERE t.hash=$1 AND t.kind='access' AND t.expires_at>NOW() AND g.revoked_at IS NULL`, [hashToken(token)],
     );
-    if (!grant || grant.resource !== this.endpoint) throw new InvalidTokenError("Connection is expired or revoked");
+    if (!grant || !this.isResource(grant.resource)) throw new InvalidTokenError("Connection is expired or revoked");
     await assertWorkspaceAccess(grant.user_id, grant.workspace_id);
     await pool.query("UPDATE project_mcp_grants SET last_used_at=NOW() WHERE id=$1", [grant.id]);
     return { token, clientId: grant.client_id, scopes: grant.scopes, resource: new URL(grant.resource),

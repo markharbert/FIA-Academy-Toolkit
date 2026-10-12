@@ -73,12 +73,17 @@ export function registerProjectsMcpRoutes(app: Express, requireAuth: RequestHand
     authorization_endpoint: `${origin}/api/mcp/oauth/authorize`, token_endpoint: `${origin}/api/mcp/oauth/token`,
     registration_endpoint: `${origin}/api/mcp/oauth/register`, revocation_endpoint: `${origin}/api/mcp/oauth/revoke` };
   app.use(mcpAuthMetadataRouter({ oauthMetadata, resourceServerUrl: new URL(provider.endpoint),
-    scopesSupported: MCP_SCOPES, resourceName: "Fearless Influencer Academy Projects",
+    scopesSupported: MCP_SCOPES, resourceName: "FIA Toolkit",
     serviceDocumentationUrl: new URL("/projects/ai", origin) }));
   // Root fallback for clients that discover metadata without the endpoint path.
   app.get("/.well-known/oauth-protected-resource", (_req, res) => res.json({
     resource: provider.endpoint, authorization_servers: [origin], scopes_supported: MCP_SCOPES,
-    resource_name: "Fearless Influencer Academy Projects",
+    resource_name: "FIA Toolkit",
+  }));
+  // Compatibility discovery for assistants configured before the path rename.
+  app.get("/.well-known/oauth-protected-resource/mcp/projects", (_req, res) => res.json({
+    resource: `${origin}/mcp/projects`, authorization_servers: [origin], scopes_supported: MCP_SCOPES,
+    resource_name: "FIA Toolkit",
   }));
   app.use("/api/mcp/oauth/authorize", noStore, authorizationHandler({ provider }));
   app.use("/api/mcp/oauth/token", noStore, tokenHandler({ provider }));
@@ -93,7 +98,7 @@ export function registerProjectsMcpRoutes(app: Express, requireAuth: RequestHand
 
   app.get("/api/mcp/config", requireAuth, noStore, api(async (_req, res) => {
     await ensureMcpDatabase();
-    res.json({ ready: true, endpoint: provider.endpoint, productionEndpoint: `${productionOrigin()}/mcp/projects`,
+    res.json({ ready: true, endpoint: provider.endpoint, productionEndpoint: `${productionOrigin()}/mcp/agent`,
       scopes: MCP_SCOPES, capabilities: [
         "Projects: create, edit, reorder, archive, restore, and approved deletion",
         "Tasks and subtasks: details, completion, priorities, deadlines, tags, links, sections, and ordering",
@@ -219,13 +224,14 @@ export function registerProjectsMcpRoutes(app: Express, requireAuth: RequestHand
       });
     });
   }
-  app.options("/mcp/projects", (req, res) => {
+  const transportPaths = ["/mcp/agent", "/mcp/projects"];
+  app.options(transportPaths, (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, MCP-Protocol-Version, MCP-Session-Id");
     res.sendStatus(204);
   });
-  app.post("/mcp/projects", mcpLimit, api(async (req, res) => {
+  app.post(transportPaths, mcpLimit, api(async (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Expose-Headers", "WWW-Authenticate, MCP-Session-Id");
     res.setHeader("Cache-Control", "no-store");
@@ -235,8 +241,8 @@ export function registerProjectsMcpRoutes(app: Express, requireAuth: RequestHand
       if (!match) throw new Error("Missing token");
       auth = await provider.verifyAccessToken(match[1]);
     } catch {
-      res.setHeader("WWW-Authenticate", `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource/mcp/projects", scope="projects:read projects:write"`);
-      res.status(401).json({ error: "invalid_token", message: "Sign in and connect your AI assistant to Academy Projects." }); return;
+      res.setHeader("WWW-Authenticate", `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource${req.path}", scope="projects:read projects:write"`);
+      res.status(401).json({ error: "invalid_token", message: "Sign in and connect your AI assistant to FIA Toolkit." }); return;
     }
     const context: ToolContext = { userId: auth.extra!.userId as string, workspaceId: auth.extra!.workspaceId as string,
       grantId: auth.extra!.grantId as string, scopes: auth.scopes, origin };
@@ -264,7 +270,7 @@ export function registerProjectsMcpRoutes(app: Express, requireAuth: RequestHand
       throw error;
     }
   }));
-  app.all("/mcp/projects", (_req, res) => { res.setHeader("Allow", "POST, OPTIONS"); res.sendStatus(405); });
+  app.all(transportPaths, (_req, res) => { res.setHeader("Allow", "POST, OPTIONS"); res.sendStatus(405); });
 
   void cleanExpiredMcpData().catch(() => console.error("[Projects MCP] Database initialization failed; requests will retry initialization."));
   const cleanup = setInterval(() => {

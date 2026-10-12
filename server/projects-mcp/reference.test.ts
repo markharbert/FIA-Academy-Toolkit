@@ -54,7 +54,7 @@ test("enabled admins receive complete current endpoints and tool definitions", a
   const response = await authenticated(admin);
   assert.equal(response.status, 200);
   const data = await response.json();
-  assert.equal(data.endpoint, `${base}/mcp/projects`);
+  assert.equal(data.endpoint, `${base}/mcp/agent`);
   assert.deepEqual(data.tools.map((tool: any) => tool.name).sort(), Object.keys(projectTools).sort());
   assert.ok(data.endpoints.some((entry: any) => entry.path === "/api/mcp/oauth/register"));
   assert.ok(data.endpoints.some((entry: any) => entry.path === "/api/mcp/approvals/:id"));

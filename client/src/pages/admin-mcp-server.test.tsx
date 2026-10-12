@@ -14,11 +14,11 @@ vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: mocks.user, logout: vi.fn
 vi.mock("@/hooks/use-mobile", () => ({ useIsMobile: () => false }));
 
 const reference = {
-  endpoint: "https://dev.example.invalid/mcp/projects",
-  productionEndpoint: "https://live.example.invalid/mcp/projects",
+  endpoint: "https://dev.example.invalid/mcp/agent",
+  productionEndpoint: "https://live.example.invalid/mcp/agent",
   scopes: ["projects:read", "projects:write"], transport: "Streamable HTTP", auth: "OAuth with S256 PKCE",
   endpoints: [
-    { method: "POST", path: "/mcp/projects", category: "MCP transport", access: "OAuth", description: "Single connection endpoint" },
+    { method: "POST", path: "/mcp/agent", category: "MCP transport", access: "OAuth", description: "Single connection endpoint" },
     { method: "POST", path: "/api/mcp/oauth/register", category: "OAuth flow", access: "Public", description: "Dynamic registration" },
   ],
   tools: [
@@ -44,10 +44,12 @@ beforeEach(() => {
 afterEach(() => { cleanup(); clients.splice(0).forEach((client) => client.clear()); });
 
 describe("Admin MCP server guide", () => {
-  it("provides current connection URLs, provider guides and live registries", async () => {
+  it("provides the connection name and published URL without showing the development URL", async () => {
     view();
     expect(await screen.findByText(reference.productionEndpoint)).toBeTruthy();
-    expect(screen.getByText(reference.endpoint)).toBeTruthy();
+    expect(screen.queryByText(reference.endpoint)).toBeNull();
+    expect(screen.getAllByText("FIA Toolkit").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Current environment URL")).toBeNull();
     expect(screen.getByText("Claude custom connector")).toBeTruthy();
     expect(screen.getByRole("heading", { name: /ChatGPT/ })).toBeTruthy();
     expect(screen.getAllByText("Register automatically").length).toBeGreaterThan(0);
@@ -59,6 +61,11 @@ describe("Admin MCP server guide", () => {
     view();
     fireEvent.click(await screen.findByRole("button", { name: "Copy Published production URL" }));
     await waitFor(() => expect(mocks.writeText).toHaveBeenCalledWith(reference.productionEndpoint));
+  });
+  it("copies FIA Toolkit as the connection name", async () => {
+    view();
+    fireEvent.click(await screen.findByRole("button", { name: "Copy Connection name" }));
+    await waitFor(() => expect(mocks.writeText).toHaveBeenCalledWith("FIA Toolkit"));
   });
   it("filters endpoint and tool references and shows required edit inputs", async () => {
     view();

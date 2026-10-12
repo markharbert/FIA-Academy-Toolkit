@@ -1,4 +1,4 @@
-# Academy Projects AI connection
+# FIA Toolkit AI connection
 
 Open **Projects → AI connections** for endpoint URLs, setup instructions, active
 connections, and pending destructive actions. This integration only exposes the
@@ -10,7 +10,8 @@ email integrations, or other Academy tools.
 1. Publish this version before connecting an AI assistant to the live member site.
 2. In a client supporting custom remote MCP servers and OAuth, add the published
    endpoint shown on the connection page, using Streamable HTTP:
-   `https://toolkit.fearlessmarketinglab.com/mcp/projects`.
+   `https://toolkit.fearlessmarketinglab.com/mcp/agent`.
+   Use **FIA Toolkit** as the connection name.
 3. Sign in on the Academy website using the existing member login.
 4. Review the assistant's name and callback address. Read-only is the default;
    select **Include write access** to allow project edits.

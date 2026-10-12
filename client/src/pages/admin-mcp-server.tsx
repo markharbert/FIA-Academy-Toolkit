@@ -121,7 +121,7 @@ export default function AdminMcpServerPage() {
                 <CardHeader className="pb-4">
                   <SectionHeading icon={Plug} eyebrow="Connect here" title="The one connection URL" description="This is the remote Streamable HTTP MCP endpoint clients connect to. Use the published URL from the public member site in provider workspaces." />
                   <div className="space-y-4">
-                    <div><p className="mb-1.5 text-xs font-medium text-muted-foreground">Current environment URL</p><CopyValue label="Current environment URL" value={data?.endpoint ?? ""} /></div>
+                    <div><p className="mb-1.5 text-xs font-medium text-muted-foreground">Connection name</p><CopyValue label="Connection name" value="FIA Toolkit" /></div>
                     <div><p className="mb-1.5 text-xs font-medium text-muted-foreground">Published production URL</p><CopyValue label="Published production URL" value={data?.productionEndpoint ?? ""} /></div>
                   </div>
                 </CardHeader>
@@ -152,7 +152,7 @@ export default function AdminMcpServerPage() {
                 <CardContent className="space-y-3 text-sm leading-6">
                   <ol className="list-inside list-decimal space-y-2 text-muted-foreground">
                     <li>Open <strong className="text-foreground">Customize → Connectors → Add custom connector</strong>.</li>
-                    <li>Enter a name such as <strong className="text-foreground">Academy Projects</strong> and the published remote HTTPS connection URL above.</li>
+                    <li>Enter the name <strong className="text-foreground">FIA Toolkit</strong> and the published remote HTTPS connection URL above.</li>
                     <li>For authentication, choose <strong className="text-foreground">Sign in now</strong> or the equivalent OAuth sign-in option.</li>
                     <li>Choose OAuth client registration <strong className="text-foreground">Register automatically</strong> (dynamic client registration) when offered.</li>
                     <li>Complete Academy member login and consent. Team or Enterprise owners add the organization connector; members then select <strong className="text-foreground">Connect</strong>.</li>
@@ -170,7 +170,7 @@ export default function AdminMcpServerPage() {
                     <li>In ChatGPT web, enable <strong className="text-foreground">Settings → Apps → Advanced settings → Developer mode</strong>, if available for the account.</li>
                     <li>For a workspace, an owner may need to enable Developer mode and custom MCP connectors under <strong className="text-foreground">Workspace settings → Permissions &amp; Roles</strong>.</li>
                     <li>Go to <strong className="text-foreground">Workspace settings → Apps → Create</strong>, or <strong className="text-foreground">Settings → Apps → Create</strong> for authorized individual accounts.</li>
-                    <li>Name the app <strong className="text-foreground">Academy Projects</strong>, enter the published remote URL, select OAuth, and choose automatic registration if offered.</li>
+                    <li>Name the app <strong className="text-foreground">FIA Toolkit</strong>, enter the published remote URL, select OAuth, and choose automatic registration if offered.</li>
                     <li>Scan tools, finish Academy login and consent, then select <strong className="text-foreground">Create</strong>. Use the app from chat tools or @mention it.</li>
                   </ol>
                   <Alert className="border-[hsl(39,24%,82%)] bg-muted/40"><Info className="h-4 w-4" /><AlertTitle className="text-sm">Availability varies</AlertTitle><AlertDescription className="text-xs leading-5">Full write support is documented in beta for Business, Enterprise, and Edu. Pro may be limited to read/fetch. UI, policy, and plan availability vary; do not assume access on every plan, including Plus. An admin refreshing or publishing an app to a ChatGPT workspace is separate from publishing this website.</AlertDescription></Alert>
@@ -228,7 +228,7 @@ export default function AdminMcpServerPage() {
                     <p className="py-2.5"><strong>Can’t reach endpoint?</strong> Publish the server version and use its externally reachable production URL, not a private development preview.</p>
                     <p className="py-2.5"><strong>OAuth setup stalls?</strong> Choose automatic client registration and provider-managed sign-in. Browser clients handle OAuth endpoints; do not enter credentials into chat.</p>
                     <p className="py-2.5"><strong>Tool list looks stale?</strong> Refresh or rescan tools in the AI client after a server update. This page’s registry updates from the server; refresh this reference after future server changes.</p>
-                    <p className="py-2.5"><strong>Connection or method check?</strong> A GET to <code className="font-mono text-[hsl(43,68%,72%)]">/mcp/projects</code> may return 405 normally; an unauthenticated POST may return 401.</p>
+                    <p className="py-2.5"><strong>Connection or method check?</strong> A GET to <code className="font-mono text-[hsl(43,68%,72%)]">/mcp/agent</code> may return 405 normally; an unauthenticated POST may return 401.</p>
                     <p className="py-2.5"><strong>No write controls?</strong> Confirm member-approved write scope and provider plan/workspace policy. Provider support is not guaranteed on every account.</p>
                   </div>
                 </div>

@@ -27,6 +27,17 @@ connection instructions and endpoint reference, to expand as more tools are adde
 unless the user requests a broader rollout. Keep provider instructions accurate
 to the server's supported OAuth registration method.
 
+Connection setup should present the name **FIA Toolkit** and the published URL,
+not the development URL. The public connection address uses “agent” rather than
+“projects”; this naming does not authorize access beyond the current Projects scope.
+
+**Why:** The user only tests published versions and intends to add other app
+capabilities later without making the connection look Projects-specific.
+
+**How to apply:** Keep the setup instructions production-focused and preserve
+existing connections when renaming the service. Broader feature access still
+requires an explicit request and appropriate permission scopes.
+
 Use the normal Academy member login for assistant authorization rather than
 reusing a broad member API key.
 

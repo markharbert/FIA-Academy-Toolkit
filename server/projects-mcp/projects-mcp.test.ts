@@ -76,7 +76,7 @@ async function browser(path: string, method = "GET", body?: unknown, userId = me
   return fetch(base + path, { method, headers: { Cookie: await cookieFor(userId), Origin: origin, "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body) });
 }
-async function authorize(scopes = MCP_SCOPES, userId = members[0]) {
+async function authorize(scopes = MCP_SCOPES, userId = members[0], endpointPath = "/mcp/projects") {
   const registration = await fetch(`${base}/api/mcp/oauth/register`, { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ client_name: "SDK test assistant", redirect_uris: ["https://ai.example.invalid/oauth/callback"],
       token_endpoint_auth_method: "none", grant_types: ["authorization_code", "refresh_token"], response_types: ["code"] }) });
@@ -85,7 +85,7 @@ async function authorize(scopes = MCP_SCOPES, userId = members[0]) {
   const verifier = randomBytes(32).toString("base64url");
   const parameters = new URLSearchParams({ client_id: info.client_id, response_type: "code",
     redirect_uri: info.redirect_uris[0], scope: scopes.join(" "), state: "fixture-state",
-    resource: `${base}/mcp/projects`, code_challenge: createHash("sha256").update(verifier).digest("base64url"), code_challenge_method: "S256" });
+    resource: `${base}${endpointPath}`, code_challenge: createHash("sha256").update(verifier).digest("base64url"), code_challenge_method: "S256" });
   const response = await fetch(`${base}/api/mcp/oauth/authorize?${parameters}`, { redirect: "manual" });
   assert.equal(response.status, 302);
   const requestId = new URL(response.headers.get("location")!).searchParams.get("request")!;
@@ -100,12 +100,12 @@ async function authorize(scopes = MCP_SCOPES, userId = members[0]) {
   const exchange = async (actualVerifier = verifier) => fetch(`${base}/api/mcp/oauth/token`, {
     method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ grant_type: "authorization_code", client_id: info.client_id,
-      code, code_verifier: actualVerifier, redirect_uri: info.redirect_uris[0], resource: `${base}/mcp/projects` }),
+      code, code_verifier: actualVerifier, redirect_uri: info.redirect_uris[0], resource: `${base}${endpointPath}` }),
   });
   return { info, requestId, code, exchange, details };
 }
-async function connection(scopes = MCP_SCOPES, userId = members[0]) {
-  const auth = await authorize(scopes, userId);
+async function connection(scopes = MCP_SCOPES, userId = members[0], endpointPath = "/mcp/projects") {
+  const auth = await authorize(scopes, userId, endpointPath);
   const response = await auth.exchange();
   assert.equal(response.status, 200);
   const tokens = await response.json();
@@ -114,7 +114,7 @@ async function connection(scopes = MCP_SCOPES, userId = members[0]) {
   refresh.set(grant.grant_id, tokens.refresh_token);
   const client = new Client({ name: "academy-projects-test", version: "1.0.0" });
   clients.push(client);
-  await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/mcp/projects`),
+  await client.connect(new StreamableHTTPClientTransport(new URL(`${base}${endpointPath}`),
     { requestInit: { headers: { Authorization: `Bearer ${tokens.access_token}` } } }));
   return { ...auth, ...tokens, client, grantId: grant.grant_id };
 }
@@ -133,6 +133,26 @@ const mutation = () => randomUUID();
 async function createProject(client: Client, name = "Launch fixture") {
   return tool(client, "create_project", { request_id: mutation(), project: { name } });
 }
+
+test("FIA Toolkit agent endpoint supports discovery, OAuth, tools, and existing project connections", async () => {
+  const metadata = await (await fetch(`${base}/.well-known/oauth-protected-resource/mcp/agent`)).json();
+  assert.equal(metadata.resource, `${base}/mcp/agent`);
+  assert.equal(metadata.resource_name, "FIA Toolkit");
+  const actor = await connection(MCP_SCOPES, members[0], "/mcp/agent");
+  assert.equal(actor.client.getServerVersion()?.name, "fia-toolkit");
+  assert.ok((await actor.client.listTools()).tools.length > 0);
+  // Simulate a grant issued before the URL rename, without changing its scope.
+  await pool.query("UPDATE project_mcp_grants SET resource=$1 WHERE id=$2", [`${base}/mcp/projects`, actor.grantId]);
+  assert.ok((await actor.client.listTools()).tools.length > 0);
+  const legacy = new Client({ name: "legacy-fixture", version: "1.0.0" });
+  clients.push(legacy);
+  await legacy.connect(new StreamableHTTPClientTransport(new URL(`${base}/mcp/projects`),
+    { requestInit: { headers: { Authorization: `Bearer ${actor.access_token}` } } }));
+  assert.ok((await legacy.listTools()).tools.length > 0);
+  // The alias must not broaden the audience check to other origins.
+  await pool.query("UPDATE project_mcp_grants SET resource=$1 WHERE id=$2", ["https://other.example.invalid/mcp/agent", actor.grantId]);
+  await assert.rejects(() => actor.client.listTools());
+});
 
 test("OAuth discovery, PKCE, one-use codes, consent binding, and hashed token storage", async () => {
   const metadata = await (await fetch(`${base}/.well-known/oauth-authorization-server`)).json();

@@ -25,7 +25,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   window.history.replaceState({}, "", `/mcp/authorize?request=${requestId}`);
   responses = {
-    "/api/mcp/config": { endpoint: "https://site.example.invalid/mcp/projects", productionEndpoint: "https://live.example.invalid/mcp/projects",
+    "/api/mcp/config": { endpoint: "https://site.example.invalid/mcp/agent", productionEndpoint: "https://live.example.invalid/mcp/agent",
       ready: true, scopes: ["projects:read", "projects:write"], capabilities: ["Manage projects and tasks"] },
     "/api/mcp/connections": { connections: [], approvals: [] },
     [`/api/mcp/consent/${requestId}`]: { requestId, clientName: "Test assistant", redirectUri: "https://ai.example.invalid/callback",
@@ -41,8 +41,9 @@ afterEach(() => {
 describe("Projects AI connections", () => {
   it("shows both endpoint choices and an understandable empty state", async () => {
     view(<AiConnectionsPage />);
-    expect(await screen.findByText("https://site.example.invalid/mcp/projects")).toBeTruthy();
-    expect(screen.getByText("https://live.example.invalid/mcp/projects")).toBeTruthy();
+    expect(await screen.findByText("https://live.example.invalid/mcp/agent")).toBeTruthy();
+    expect(screen.getByText("FIA Toolkit")).toBeTruthy();
+    expect(screen.queryByText("https://site.example.invalid/mcp/agent")).toBeNull();
     expect(screen.getByText("No assistants connected")).toBeTruthy();
     expect(screen.getByText("Deletions require your approval")).toBeTruthy();
   });
