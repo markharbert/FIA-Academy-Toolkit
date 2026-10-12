@@ -16,6 +16,17 @@ that expansion. Ordinary project edits can execute under an editing grant;
 destructive deletions require a separate decision from the member on the website,
 not an approval the connected AI can grant itself.
 
+The detailed MCP setup/reference page belongs in the Admin navigation and is
+admin-only for now. This restriction applies to the documentation page, not to
+the existing member connection and approval flows.
+
+**Why:** The user specifically requested an admin-only “MCP server” page with
+connection instructions and endpoint reference, to expand as more tools are added.
+
+**How to apply:** Keep both the reference page and its data API admin-protected
+unless the user requests a broader rollout. Keep provider instructions accurate
+to the server's supported OAuth registration method.
+
 Use the normal Academy member login for assistant authorization rather than
 reusing a broad member API key.
 

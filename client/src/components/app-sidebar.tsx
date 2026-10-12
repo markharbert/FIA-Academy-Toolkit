@@ -44,6 +44,7 @@ import {
   BookMarked,
   LayoutList,
   DollarSign,
+  Plug,
 } from "lucide-react";
 import logoImage from "@assets/image_1788559097620.png";
 import cfLogo from "@/assets/cf-logo.png";
@@ -446,6 +447,17 @@ export function AppSidebar() {
                     >
                       <img src={cfLogo} alt="ClickFunnels" className="h-4 w-4 object-contain" />
                       <span>ClickFunnels</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={location === "/admin/mcp-server"}
+                      tooltip="MCP server"
+                      onClick={() => setLocation("/admin/mcp-server")}
+                      data-testid="nav-admin-mcp-server"
+                    >
+                      <Plug className={location === "/admin/mcp-server" ? undefined : "text-violet-400"} />
+                      <span>MCP server</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 </SidebarMenu>

@@ -10,6 +10,8 @@ import { revocationHandler } from "@modelcontextprotocol/sdk/server/auth/handler
 import { InvalidTokenError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import { createOAuthMetadata, mcpAuthMetadataRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
 import { pool } from "../db";
+import { storage } from "../storage";
+import { buildMcpReference } from "./reference";
 import { cleanExpiredMcpData, ensureMcpDatabase } from "./database";
 import { ProjectsOAuthProvider, MCP_SCOPES, opaqueToken, hashToken, assertWorkspaceAccess, productionOrigin } from "./oauth";
 import { createProjectsMcpServer, executeProjectTool, projectTools, publicToolError, type ToolContext } from "./tools";
@@ -57,6 +59,14 @@ function approvalView(row: any, clientName: string) {
 export function registerProjectsMcpRoutes(app: Express, requireAuth: RequestHandler, options: { origin?: string } = {}) {
   const provider = new ProjectsOAuthProvider(options.origin);
   const origin = provider.origin;
+  app.get("/api/admin/mcp/reference", requireAuth, noStore, api(async (req, res) => {
+    const user = await storage.getUser(req.session.userId!);
+    if (!user?.isAdmin || user.isDisabled) {
+      res.status(403).json({ message: "Admin access required" });
+      return;
+    }
+    res.json(buildMcpReference(origin));
+  }));
   const metadata = createOAuthMetadata({ provider, issuerUrl: new URL(origin), scopesSupported: MCP_SCOPES,
     serviceDocumentationUrl: new URL("/projects/ai", origin) });
   const oauthMetadata = { ...metadata,

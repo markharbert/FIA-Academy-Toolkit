@@ -67,6 +67,7 @@ const DashboardPage              = lazyPage(() => import("@/pages/dashboard"));
 const VideoScorePage             = lazyPage(() => import("@/pages/video-score"));
 const SessionPage                = lazyPage(() => import("@/pages/session"));
 const AdminPage                  = lazyPage(() => import("@/pages/admin"));
+const AdminMcpServerPage         = lazyPage(() => import("@/pages/admin-mcp-server"));
 const AccountPage                = lazyPage(() => import("@/pages/account"));
 const TopicPulsePage             = lazyPage(() => import("@/pages/topic-pulse"));
 const TopicPulseExplorePage      = lazyPage(() => import("@/pages/topic-pulse-explore"));
@@ -237,6 +238,9 @@ function ProtectedRoutes() {
   return (
     <Suspense fallback={<PageLoader />}>
     <Switch>
+      <Route path="/admin/mcp-server">
+        {() => <AdminRoute component={AdminMcpServerPage} />}
+      </Route>
       <Route path="/dashboard">
         {() => <ProtectedRoute component={DashboardPage} />}
       </Route>
