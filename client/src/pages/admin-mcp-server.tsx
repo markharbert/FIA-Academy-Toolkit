@@ -304,7 +304,7 @@ export default function AdminMcpServerPage() {
 
             <footer className="flex flex-col gap-2 border-t border-[hsl(39,24%,82%)] pt-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
               <span>Registry content is server-owned. After a server update, refresh the tool list in each AI client.</span>
-              <a href="/projects/ai" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">Manage connections and optional website review <ArrowUpRight className="h-3.5 w-3.5" /></a>
+              <a href="/projects/ai" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">Manage connections and view request status <ArrowUpRight className="h-3.5 w-3.5" /></a>
             </footer>
           </>
         )}

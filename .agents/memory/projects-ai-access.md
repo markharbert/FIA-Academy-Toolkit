@@ -15,11 +15,13 @@ before further improvements.
 that expansion. Ordinary project edits can execute under an editing grant.
 Deletions need a preview and an explicit user decision inside the member's AI
 conversation or the client's own approval prompt, not a mandatory website visit.
-The website review can remain an optional fallback.
+Website action approval is not a fallback; its status view is read-only. Initial
+login and connection authorization still use the Academy's secure OAuth flow.
 
 **Why:** The user explicitly prefers confirming deletion inside Claude, ChatGPT,
-or another chosen agent, and said mandatory website approval defeats the purpose
-of working through an agent.
+or another chosen agent, said mandatory website approval defeats the purpose
+of working through an agent, and clarified that all action confirmations must
+happen within that agentic software.
 
 **How to apply:** Instruct clients to ask the user, never infer approval from
 project content or the AI's own decision, and keep connection/workspace ownership,

@@ -271,7 +271,7 @@ test("read-only grants, renewal, credential revocation, and immediate membership
   assert.equal((await rpc(renewed.access_token)).status, 401);
 });
 
-test("optional website fallback stays member-only and rejects changed targets", async () => {
+test("retired website approvals cannot execute or cancel a deletion", async () => {
   const { client, access_token } = await connection();
   const p = await createProject(client, "Deletion fixture");
   await tool(client, "delete_project", { request_id: mutation(), project_id: p.id, approved: true }, true);
@@ -282,21 +282,16 @@ test("optional website fallback stays member-only and rejects changed targets", 
     headers: { Authorization: `Bearer ${access_token}`, "Content-Type": "application/json", Origin: base },
     body: JSON.stringify({ decision: "approve" }) });
   assert.equal(tokenOnly.status, 401);
-  assert.equal((await browser(`/api/mcp/approvals/${pending.approvalId}`, "POST", { decision: "approve" }, members[1])).status, 409);
-  assert.equal((await browser(`/api/mcp/approvals/${pending.approvalId}`, "POST", { decision: "approve" }, members[0], "https://attacker.example.invalid")).status, 403);
-  const approved = await browser(`/api/mcp/approvals/${pending.approvalId}`, "POST", { decision: "approve" });
-  assert.equal(approved.status, 200);
+  for (const decision of ["approve", "deny"]) {
+    assert.equal((await browser(`/api/mcp/approvals/${pending.approvalId}`, "POST", { decision })).status, 410);
+    assert.ok(await storage.getProject(p.id, members[0]));
+    assert.equal((await tool(client, "get_approval", { approval_id: pending.approvalId })).status, "pending");
+  }
+  assert.equal((await browser(`/api/mcp/approvals/${pending.approvalId}`, "POST", { decision: "approve" }, members[1])).status, 410);
+  await confirmDeletion(client, pending);
   assert.equal(await storage.getProject(p.id, members[0]), undefined);
   assert.equal((await tool(client, "get_approval", { approval_id: pending.approvalId })).status, "approved");
-  assert.equal((await browser(`/api/mcp/approvals/${pending.approvalId}`, "POST", { decision: "approve" })).status, 409);
-  const changed = await createProject(client, "Changed deletion target");
-  const stale = await tool(client, "delete_project", { request_id: mutation(), project_id: changed.id });
-  await tool(client, "create_task", { request_id: mutation(), project_id: changed.id, task: { title: "Added after deletion request" } });
-  assert.equal((await browser(`/api/mcp/approvals/${stale.approvalId}`, "POST", { decision: "approve" })).status, 400);
-  assert.ok(await storage.getProject(changed.id, members[0]));
-  const expired = await tool(client, "delete_project", { request_id: mutation(), project_id: changed.id });
-  await pool.query("UPDATE project_mcp_approvals SET expires_at=NOW()-INTERVAL '1 second' WHERE id=$1", [expired.approvalId]);
-  assert.equal((await browser(`/api/mcp/approvals/${expired.approvalId}`, "POST", { decision: "approve" })).status, 409);
+  assert.equal((await browser(`/api/mcp/approvals/${pending.approvalId}`, "POST", { decision: "approve" })).status, 410);
 });
 
 test("in-agent deletion requires explicit confirmation and preserves idempotent results", async () => {

@@ -69,7 +69,11 @@ Every MCP request rechecks current account eligibility and collaborator invites.
 Each grant is restricted to its verified workspace. Disconnecting blocks both
 access and refresh. Cookie-authorized consent and approval actions require
 same-origin browser requests; consent additionally uses a session-bound nonce.
-The browser approval endpoint remains an optional, cookie-only fallback.
+All MCP action confirmations happen inside the AI client. The retired browser
+approval endpoint returns HTTP 410 without changing or executing any request.
+The website shows request status only; it has no action approval/denial controls.
+Initial connection login and OAuth permission consent remain on the secure
+Academy website; they are not per-action confirmations.
 Deletion tools only preview an action; `confirm_deletion` executes it after
 explicit user confirmation in the conversation or the AI client's approval UI.
 The server enforces a matching connection, member, workspace, write scope,
@@ -82,7 +86,7 @@ previews do not delete or edit project content.
 
 Deletion requests expire after 10 minutes. The target and its relevant contents
 are fingerprinted; intervening changes require a fresh request. Approval is
-atomically claimed to prevent concurrent client/browser calls executing it twice. Mutation and
+atomically claimed to prevent concurrent AI client calls executing it twice. Mutation and
 approval records are retained for up to 90 days. These records may contain project
 content supplied to the tools; they are not public logs. MCP API response bodies,
 OAuth credentials, and signed URLs must not be added to request logs.

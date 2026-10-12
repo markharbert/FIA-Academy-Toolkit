@@ -55,17 +55,6 @@ export default function AiConnectionsPage() {
     },
     onError: (error: Error) => toast({ title: "Could not remove connection", description: error.message, variant: "destructive" }),
   });
-  const decideApproval = useMutation({
-    mutationFn: async ({ id, decision }: { id: string; decision: "approve" | "deny" }) => {
-      const response = await apiRequest("POST", `/api/mcp/approvals/${encodeURIComponent(id)}`, { decision });
-      return response.json() as Promise<{ ok: true; status: string; result?: string; error?: string }>;
-    },
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: CONNECTIONS_KEY });
-      toast({ title: variables.decision === "approve" ? "Action approved" : "Action denied" });
-    },
-    onError: (error: Error) => toast({ title: "Approval could not be completed", description: error.message, variant: "destructive" }),
-  });
   const configError = config.isError;
   const connectionsError = connections.isError;
   const items = connections.data?.connections ?? [];
@@ -154,7 +143,7 @@ export default function AiConnectionsPage() {
         <section aria-labelledby="approvals-title">
           <Card>
             <CardHeader className="flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
-              <div><div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground"><Clock3 className="h-3.5 w-3.5" /> Optional website review</div><CardTitle id="approvals-title">Pending deletion confirmations</CardTitle><CardDescription>Approve or decline in your AI conversation—no website visit is required. You can also review pending requests here if you prefer.</CardDescription></div>
+              <div><div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground"><Clock3 className="h-3.5 w-3.5" /> Read-only status</div><CardTitle id="approvals-title">Pending deletion confirmations</CardTitle><CardDescription>Confirm or cancel requests only inside your AI app. This page shows their status; it cannot approve or deny them.</CardDescription></div>
               {pending.length > 0 && <Badge>{pending.length} awaiting review</Badge>}
             </CardHeader>
             <CardContent className="pt-0">
@@ -172,10 +161,7 @@ export default function AiConnectionsPage() {
                       <p className="mt-1 text-sm text-muted-foreground">{approval.summary}</p>
                       <p className="mt-2 text-xs text-muted-foreground">Expires {readableDate(approval.expiresAt)}</p>
                     </div>
-                    <div className="flex shrink-0 gap-2">
-                      <Button variant="outline" size="sm" onClick={() => decideApproval.mutate({ id: approval.id, decision: "deny" })} disabled={decideApproval.isPending}><X className="h-3.5 w-3.5" /> Deny</Button>
-                      <Button size="sm" onClick={() => decideApproval.mutate({ id: approval.id, decision: "approve" })} disabled={decideApproval.isPending}><Check className="h-3.5 w-3.5" /> Approve</Button>
-                    </div>
+                    <p className="max-w-xs text-sm text-muted-foreground">Return to {approval.clientName} to confirm or cancel this request.</p>
                   </div>
                 </div>
               ))}</div>}

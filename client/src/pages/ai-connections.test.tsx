@@ -74,13 +74,15 @@ describe("Projects AI connections", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Remove access" }));
     await waitFor(() => expect(mocks.apiRequest).toHaveBeenCalledWith("DELETE", `/api/mcp/connections/${connectionId}`));
   });
-  it("submits a website approval for only the selected pending action", async () => {
+  it("shows request status without website approval or denial controls", async () => {
     responses["/api/mcp/connections"] = { connections: [], approvals: [{ id: approvalId, connectionId,
       clientName: "Test assistant", toolName: "delete_project", summary: "Delete the Launch project and its tasks.",
       status: "pending", createdAt: "2026-10-12T17:00:00Z", expiresAt: "2099-10-12T17:00:00Z" }] };
     view(<AiConnectionsPage />);
     expect(await screen.findByText("Delete the Launch project and its tasks.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
-    await waitFor(() => expect(mocks.apiRequest).toHaveBeenCalledWith("POST", `/api/mcp/approvals/${approvalId}`, { decision: "approve" }));
+    expect(screen.getByText("Return to Test assistant to confirm or cancel this request.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Deny" })).toBeNull();
+    expect(mocks.apiRequest).not.toHaveBeenCalled();
   });
 });

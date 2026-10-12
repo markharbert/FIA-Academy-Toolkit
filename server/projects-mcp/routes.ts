@@ -14,7 +14,7 @@ import { storage } from "../storage";
 import { buildMcpReference } from "./reference";
 import { cleanExpiredMcpData, ensureMcpDatabase } from "./database";
 import { ProjectsOAuthProvider, MCP_SCOPES, opaqueToken, hashToken, assertWorkspaceAccess, productionOrigin } from "./oauth";
-import { createProjectsMcpServer, executeProjectTool, projectTools, publicToolError, type ToolContext } from "./tools";
+import { createProjectsMcpServer, projectTools, publicToolError, type ToolContext } from "./tools";
 
 declare module "express-session" {
   interface SessionData {
@@ -182,31 +182,9 @@ export function registerProjectsMcpRoutes(app: Express, requireAuth: RequestHand
     res.json({ ok: true });
   }));
   app.post("/api/mcp/approvals/:id", requireAuth, noStore, api(async (req, res) => {
-    if (!browserWrite(req, res)) return;
-    if (req.session.impersonatingAdminId) { res.status(403).json({ message: "Stop impersonating before approving AI actions." }); return; }
-    const approvalId = uuid.parse(req.params.id);
-    const { decision } = z.object({ decision: z.enum(["approve", "deny"]) }).strict().parse(req.body);
-    const userId = req.session.userId!;
-    // Atomic claim: two browser tabs cannot execute the same deletion twice.
-    const { rows: [row] } = await pool.query(`UPDATE project_mcp_approvals SET status=$3
-      WHERE id=$1 AND user_id=$2 AND status='pending' AND expires_at>NOW() RETURNING *`,
-    [approvalId, userId, decision === "deny" ? "denied" : "executing"]);
-    if (!row) { res.status(409).json({ message: "This request expired or was already handled." }); return; }
-    if (decision === "deny") { res.json({ ok: true, status: "denied" }); return; }
-    try {
-      const { rows: [grant] } = await pool.query("SELECT * FROM project_mcp_grants WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL", [row.grant_id, userId]);
-      if (!grant || !grant.scopes.includes("projects:write")) throw new Error("Connection no longer permits editing");
-      if (!/^[a-f0-9]{64}$/.test(row.target_hash || "")) throw new Error("A fresh deletion request is required");
-      const result = await executeProjectTool(row.tool_name, row.args, {
-        userId, workspaceId: row.workspace_id, grantId: grant.id, scopes: grant.scopes, origin,
-      }, row.target_hash);
-      await pool.query("UPDATE project_mcp_approvals SET status='approved',result=$2 WHERE id=$1", [approvalId, JSON.stringify(result)]);
-      res.json({ ok: true, status: "approved", result });
-    } catch (error) {
-      const message = publicToolError(error);
-      await pool.query("UPDATE project_mcp_approvals SET status='failed',error=$2 WHERE id=$1", [approvalId, message]);
-      res.status(400).json({ message });
-    }
+    // Explicit retirement response for older website clients. Never claim or
+    // execute a preview here; confirmations belong exclusively to the AI client.
+    res.status(410).json({ message: "Website action approvals are no longer available. Confirm or cancel this request in your AI app using confirm_deletion or cancel_deletion." });
   }));
 
   const mcpLimit = rateLimit({ windowMs: 60_000, max: 1000, standardHeaders: true, legacyHeaders: false });
