@@ -1,0 +1,42 @@
+Our MCP server's destructive tools (delete_project, delete_task, delete_section,
+delete_template, delete_template_task, delete_comment, delete_attachment) return
+{"status":"approval_required","approvalId":..., "confirmationTool":"confirm_deletion",
+"cancellationTool":"cancel_deletion"}.
+
+Problem: confirm_deletion and cancel_deletion are NOT registered in the MCP
+tools/list response, so the AI client can't call them. The only way to approve
+right now is the AI Connections page in the web app.
+
+Please make these changes:
+
+1. Register two new MCP tools so they appear in tools/list:
+   - confirm_deletion
+     inputs: approval_id (uuid, required), confirmed (boolean, must be true),
+             request_id (uuid, required, for idempotent retries)
+     behavior: if the approval exists, belongs to the authenticated member,
+               is still "pending", and is not expired, run the original
+               destructive action and mark the approval "completed".
+               Return the result (what was deleted, counts).
+   - cancel_deletion
+     inputs: approval_id (uuid, required)
+     behavior: mark the approval "denied". Nothing is deleted.
+
+2. Keep the two-step flow. The delete_* tools should still only CREATE a
+   pending approval. Deletion happens only through confirm_deletion. This
+   gives the member a chance to say yes or no in the chat before anything
+   is removed.
+
+3. Safety checks inside confirm_deletion:
+   - Reject if the approval belongs to a different user.
+   - Reject if expired (current 10-minute window is fine).
+   - Reject if already completed or denied.
+   - Reuse of the same request_id returns the original result, no double delete.
+
+4. Update the tool description on each delete_* tool to say:
+   "Creates a pending deletion. Show the summary to the member and call
+   confirm_deletion only after they explicitly say yes in the conversation."
+
+5. Keep the AI Connections approval page working as a second way to approve.
+
+6. Test: request delete on a throwaway project, call confirm_deletion,
+   verify the project and its tasks are gone and get_approval shows "completed".
