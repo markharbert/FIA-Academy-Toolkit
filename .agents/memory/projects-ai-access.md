@@ -28,6 +28,19 @@ project content or the AI's own decision, and keep connection/workspace ownershi
 write permissions, expiration, and changed-target checks. Be clear that the AI
 client obtains consent; MCP does not provide universal proof of a human click.
 
+After an interrupted deletion, a missing target is evidence of its current
+state, not proof that the particular confirmed attempt completed. Recovery must
+not silently finish file cleanup or retry the deletion; any further destructive
+work needs a fresh preview and explicit consent inside the AI client.
+
+**Why:** Other actions can remove or change the same target while the server is
+unavailable, and attachment storage and database deletion can finish separately.
+Claiming success or automatically completing cleanup could misreport the action
+or affect content that has changed since consent.
+
+**How to apply:** Report uncertainty and partial outcomes plainly. Keep recovery
+read-only, even when there appears to be an obvious remaining cleanup step.
+
 The detailed MCP setup/reference page belongs in the Admin navigation and is
 admin-only for now. This restriction applies to the documentation page, not to
 the existing member connection and approval flows.

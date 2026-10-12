@@ -11,7 +11,9 @@ import { insertProjectSchema } from "../../shared/schema";
 import { registerProjectsMcpRoutes } from "./routes";
 import { ensureMcpDatabase } from "./database";
 import { hashToken, MCP_SCOPES } from "./oauth";
-import { projectTools } from "./tools";
+import { executeProjectTool, inspectInterruptedDeletion, projectTools, type ToolContext } from "./tools";
+import { withDeletionLock } from "./recovery";
+import { ObjectNotFoundError, ObjectStorageService } from "../replit_integrations/object_storage/objectStorage";
 
 // Isolated test-only HTTP server. No test login/bypass is registered in the app.
 const members = [randomUUID(), randomUUID(), randomUUID()];
@@ -390,6 +392,208 @@ test("concurrent in-agent confirmations execute a deletion only once", async () 
     assert.equal(calls, 1);
     assert.equal(await storage.getProject(p.id, members[0]), undefined);
   } finally { projectTools.delete_project.run = original; }
+});
+
+// Fail the shared DB interface at a precise crash boundary, including all
+// subsequent error/result writes. The durable rows are exactly those a new
+// process sees; the real PostgreSQL session lock is released on unwind.
+async function crashConfirmation(context: ToolContext, args: any, boundary: "claimed" | "deleted" | "approved") {
+  const query = pool.query;
+  let disconnected = false;
+  (pool as any).query = async (...parameters: any[]) => {
+    if (disconnected) throw new Error("Injected process exit");
+    const sql = String(parameters[0]);
+    if (boundary === "deleted" && sql.includes("SET status='approved'")) {
+      disconnected = true;
+      throw new Error("Injected exit before result persistence");
+    }
+    const result = await (query as any).apply(pool, parameters);
+    if ((boundary === "claimed" && sql.includes("SET status='executing'")) ||
+        (boundary === "approved" && sql.includes("SET status='approved'"))) {
+      disconnected = true;
+      throw new Error("Injected process exit");
+    }
+    return result;
+  };
+  try {
+    await assert.rejects(() => executeProjectTool("confirm_deletion", args, context), /Injected/);
+    assert.ok(disconnected, "fault boundary must actually be reached");
+  } finally { pool.query = query; }
+}
+
+let recoveryContext: ToolContext | undefined;
+async function getRecoveryContext() {
+  // Reuse one real authorized grant; expanded fault cases must not weaken or
+  // exhaust the production OAuth registration limiter.
+  if (!recoveryContext) {
+    const actor = await connection();
+    recoveryContext = { userId: members[0], workspaceId: members[0], grantId: actor.grantId, scopes: MCP_SCOPES, origin: base };
+  }
+  return recoveryContext;
+}
+
+test("restart recovery before execution never retries and preserves changed targets, ownership and expiry", async () => {
+  const c = await getRecoveryContext();
+  const p = await executeProjectTool("create_project", { request_id: mutation(), project: { name: "Before execution" } }, c);
+  const preview = await executeProjectTool("delete_project", { request_id: mutation(), project_id: p.id }, c);
+  const args = { request_id: mutation(), approval_id: preview.approvalId, confirmed: true };
+  await crashConfirmation(c, args, "claimed");
+  await storage.updateProject(p.id, members[0], { name: "Newer content must survive" });
+  await assert.rejects(() => executeProjectTool("get_approval", { approval_id: preview.approvalId }, { ...c, workspaceId: members[1] }));
+  const status = await executeProjectTool("get_approval", { approval_id: preview.approvalId }, c);
+  assert.equal(status.status, "interrupted");
+  assert.equal(status.result.outcome, "target_changed");
+  assert.equal(status.result.deletionRepeated, false);
+  assert.ok(!JSON.stringify(status).includes("approvalUrl"));
+  const retry = await executeProjectTool("confirm_deletion", args, c);
+  assert.equal(retry.status, "interrupted");
+  await assert.rejects(() => executeProjectTool("confirm_deletion", { ...args, request_id: mutation() }, c));
+  assert.equal((await storage.getProject(p.id, members[0]))?.name, "Newer content must survive");
+  const expired = await executeProjectTool("delete_project", { request_id: mutation(), project_id: p.id }, c);
+  await pool.query("UPDATE project_mcp_approvals SET expires_at=NOW()-INTERVAL '1 second' WHERE id=$1", [expired.approvalId]);
+  assert.equal((await executeProjectTool("get_approval", { approval_id: expired.approvalId }, c)).status, "expired");
+});
+
+test("restart after deletion or approval persistence recovers the exact retry without another delete", async () => {
+  const c = await getRecoveryContext();
+  for (const boundary of ["claimed", "deleted", "approved"] as const) {
+    const p = await executeProjectTool("create_project", { request_id: mutation(), project: { name: boundary } }, c);
+    const preview = await executeProjectTool("delete_project", { request_id: mutation(), project_id: p.id }, c);
+    const args = { request_id: mutation(), approval_id: preview.approvalId, confirmed: true };
+    const run = projectTools.delete_project.run;
+    let calls = 0;
+    projectTools.delete_project.run = async (...params) => { calls++; return run(...params); };
+    try {
+      await crashConfirmation(c, args, boundary);
+      const recovered = await executeProjectTool("confirm_deletion", args, c);
+      assert.equal(recovered.status, boundary === "approved" ? "completed" : "interrupted");
+      if (boundary !== "approved") {
+        assert.equal(recovered.result.outcome, boundary === "claimed" ? "target_unchanged" : "target_absent");
+      } else assert.equal(recovered.result.projectId, p.id);
+      assert.equal(calls, boundary === "claimed" ? 0 : 1);
+      assert.deepEqual(await executeProjectTool("confirm_deletion", args, c), recovered);
+      await assert.rejects(() => executeProjectTool("confirm_deletion", { ...args, approval_id: randomUUID() }, c), /different arguments/);
+      const { rows: [operation] } = await pool.query("SELECT status FROM project_mcp_operations WHERE grant_id=$1 AND request_id=$2", [c.grantId, args.request_id]);
+      assert.equal(operation.status, "done");
+    } finally { projectTools.delete_project.run = run; }
+  }
+});
+
+test("recovery waits for live execution and treats a pre-claim running operation as not started", async () => {
+  const c = await getRecoveryContext();
+  const p = await executeProjectTool("create_project", { request_id: mutation(), project: { name: "Live attempt" } }, c);
+  const preview = await executeProjectTool("delete_project", { request_id: mutation(), project_id: p.id }, c);
+  await withDeletionLock(preview.approvalId, () => { throw new Error("Lock unavailable"); }, async () => {
+    const status = await executeProjectTool("get_approval", { approval_id: preview.approvalId }, c);
+    assert.equal(status.status, "executing");
+    assert.equal((await pool.query("SELECT status FROM project_mcp_approvals WHERE id=$1", [preview.approvalId])).rows[0].status, "pending");
+  });
+  const args = { request_id: mutation(), approval_id: preview.approvalId, confirmed: true };
+  await pool.query(`INSERT INTO project_mcp_operations(id,grant_id,request_id,tool_name,args_hash,status,approval_id)
+    VALUES($1,$2,$3,'confirm_deletion',$4,'running',$5)`,
+    [mutation(), c.grantId, args.request_id, hashToken(JSON.stringify(args)), null]);
+  const status = await executeProjectTool("get_approval", { approval_id: preview.approvalId }, c);
+  assert.equal(status.status, "interrupted");
+  assert.equal(status.result.outcome, "not_started");
+  assert.ok(await storage.getProject(p.id, members[0]));
+});
+
+test("recovery is bounded, handles failed observations conservatively, and rechecks grant access", async () => {
+  const c = await getRecoveryContext();
+  const p = await executeProjectTool("create_project", { request_id: mutation(), project: { name: "Bounded recovery" } }, c);
+  const preview = await executeProjectTool("delete_project", { request_id: mutation(), project_id: p.id }, c);
+  const args = { request_id: mutation(), approval_id: preview.approvalId, confirmed: true };
+  await crashConfirmation(c, args, "claimed");
+  await pool.query("UPDATE project_mcp_grants SET scopes=$2 WHERE id=$1", [c.grantId, ["projects:write"]]);
+  await assert.rejects(() => executeProjectTool("get_approval", { approval_id: preview.approvalId }, c), /access has been removed/);
+  assert.equal((await pool.query("SELECT status FROM project_mcp_approvals WHERE id=$1", [preview.approvalId])).rows[0].status, "executing");
+  await pool.query("UPDATE project_mcp_grants SET scopes=$2 WHERE id=$1", [c.grantId, MCP_SCOPES]);
+  const { rows: [row] } = await pool.query("SELECT * FROM project_mcp_approvals WHERE id=$1", [preview.approvalId]);
+  const getFile = ObjectStorageService.prototype.getObjectEntityFile;
+  let probes = 0;
+  ObjectStorageService.prototype.getObjectEntityFile = async () => {
+    probes++;
+    return new Promise(() => {}); // Slow/unavailable cloud service.
+  };
+  try {
+    const oversize = await inspectInterruptedDeletion({ ...row, recovery_data: { complete: true, files: Array.from({ length: 101 }, () => ({ path: "/objects/uploads/fixture" })) } }, c);
+    assert.equal(oversize.storage, "unknown");
+    assert.equal(probes, 0);
+    const started = Date.now();
+    const result = await inspectInterruptedDeletion({ ...row, recovery_data: { complete: true, files: [{ path: "/objects/uploads/fixture" }] } }, c);
+    assert.equal(result.storage, "unknown");
+    assert.ok(Date.now() - started < 2000);
+  } finally { ObjectStorageService.prototype.getObjectEntityFile = getFile; }
+  const query = pool.query;
+  (pool as any).query = async (...parameters: any[]) => {
+    if (String(parameters[0]).includes("SELECT id FROM projects WHERE")) throw new Error("Observation failure");
+    return (query as any).apply(pool, parameters);
+  };
+  try {
+    const status = await executeProjectTool("get_approval", { approval_id: preview.approvalId }, c);
+    assert.equal(status.status, "interrupted");
+    assert.equal(status.result.outcome, "unknown");
+    assert.equal(status.result.deletionRepeated, false);
+  } finally { pool.query = query; }
+  assert.ok(await storage.getProject(p.id, members[0]));
+});
+
+test("attachment interruption distinguishes storage/database partial outcomes and probe failures without cleanup", async () => {
+  const c = await getRecoveryContext();
+  const p = await executeProjectTool("create_project", { request_id: mutation(), project: { name: "Partial attachments" } }, c);
+  const t = await executeProjectTool("create_task", { request_id: mutation(), project_id: p.id, task: { title: "Files" } }, c);
+  const files = new Set<string>();
+  const getFile = ObjectStorageService.prototype.getObjectEntityFile;
+  const deleteFile = ObjectStorageService.prototype.deleteObject;
+  const deleteRow = storage.deleteTaskAttachment;
+  let failProbe = false, failDatabase = false;
+  let deletes = 0;
+  ObjectStorageService.prototype.getObjectEntityFile = async (path) => {
+    if (failProbe) throw new Error("Storage unavailable");
+    if (!files.has(path)) throw new ObjectNotFoundError();
+    return {} as any;
+  };
+  ObjectStorageService.prototype.deleteObject = async (path) => { deletes++; files.delete(path); };
+  storage.deleteTaskAttachment = async (...params) => {
+    if (failDatabase) throw new Error("Database deletion unavailable");
+    return deleteRow.apply(storage, params);
+  };
+  try {
+    for (const scenario of ["file_removed", "database_removed", "both_removed", "unknown", "legacy"] as const) {
+      const path = `/objects/uploads/recovery-${mutation()}`;
+      files.add(path);
+      const attachment = await storage.createTaskAttachment(t.id, c.workspaceId, { objectPath: path, filename: "fixture.txt", mimeType: "text/plain", size: 5 });
+      const preview = await executeProjectTool("delete_attachment", { request_id: mutation(), attachment_id: attachment.id }, c);
+      const args = { request_id: mutation(), approval_id: preview.approvalId, confirmed: true };
+      if (scenario === "file_removed") {
+        failDatabase = true;
+        await assert.rejects(() => executeProjectTool("confirm_deletion", args, c));
+        failDatabase = false;
+      } else if (scenario === "both_removed") {
+        await crashConfirmation(c, args, "deleted");
+      } else {
+        await crashConfirmation(c, args, "claimed");
+        if (scenario === "database_removed") await deleteRow.call(storage, attachment.id, c.workspaceId);
+        if (scenario === "legacy") await pool.query("UPDATE project_mcp_approvals SET recovery_data=NULL WHERE id=$1", [preview.approvalId]);
+      }
+      failProbe = scenario === "unknown";
+      const countBeforeRecovery = deletes;
+      const status = await executeProjectTool("get_approval", { approval_id: preview.approvalId }, c);
+      assert.equal(status.status, "interrupted");
+      assert.equal(status.result.outcome, ["file_removed", "database_removed"].includes(scenario) ? "partial"
+        : scenario === "both_removed" ? "target_absent" : "target_unchanged");
+      assert.equal(status.result.storage, ["unknown", "legacy"].includes(scenario) ? "unknown"
+        : scenario === "database_removed" ? "present" : "absent");
+      assert.equal(deletes, countBeforeRecovery);
+      await assert.rejects(() => executeProjectTool("confirm_deletion", { ...args, request_id: mutation() }, c));
+      assert.equal(files.has(path), ["database_removed", "unknown", "legacy"].includes(scenario));
+      failProbe = false;
+    }
+  } finally {
+    ObjectStorageService.prototype.getObjectEntityFile = getFile;
+    ObjectStorageService.prototype.deleteObject = deleteFile;
+    storage.deleteTaskAttachment = deleteRow;
+  }
 });
 
 test("in-agent confirmation completes task, comment, section, template and template-task deletion", async () => {

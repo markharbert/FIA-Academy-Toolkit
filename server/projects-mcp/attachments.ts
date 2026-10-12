@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { storage } from "../storage";
-import { ObjectStorageService } from "../replit_integrations/object_storage/objectStorage";
+import { ObjectNotFoundError, ObjectStorageService } from "../replit_integrations/object_storage/objectStorage";
 import type { ToolContext, ToolDefinition } from "./tools";
 
 const objects = new ObjectStorageService();
@@ -64,6 +64,13 @@ export async function deleteAttachmentObject(path: string) {
   await objects.deleteObject(path);
 }
 
+export async function attachmentObjectExists(path: string) {
+  // Only paths captured in the owned preview are inspected. Storage failures
+  // must not be confused with a verified missing file.
+  if (!path.startsWith("/objects/")) throw new Error("Invalid attachment path");
+  try { await objects.getObjectEntityFile(path); return true; }
+  catch (error) { if (error instanceof ObjectNotFoundError) return false; throw error; }
+}
 export const attachmentTools: Record<string, ToolDefinition> = {
   list_attachments: {
     description: "List attachment metadata for a task you can access.",

@@ -41,12 +41,15 @@ export function ensureMcpDatabase() {
       );
       CREATE INDEX IF NOT EXISTS project_mcp_approvals_member_idx ON project_mcp_approvals(user_id);
       ALTER TABLE project_mcp_approvals ADD COLUMN IF NOT EXISTS target_hash TEXT NOT NULL DEFAULT '';
+      ALTER TABLE project_mcp_approvals ADD COLUMN IF NOT EXISTS recovery_data JSONB;
       CREATE TABLE IF NOT EXISTS project_mcp_operations (
         id VARCHAR PRIMARY KEY, grant_id VARCHAR NOT NULL REFERENCES project_mcp_grants(id) ON DELETE CASCADE,
         request_id VARCHAR NOT NULL, tool_name TEXT NOT NULL, args_hash TEXT NOT NULL,
         status TEXT NOT NULL, result JSONB, error TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
       CREATE UNIQUE INDEX IF NOT EXISTS project_mcp_operations_request_idx ON project_mcp_operations(grant_id, request_id);
+      ALTER TABLE project_mcp_operations ADD COLUMN IF NOT EXISTS approval_id VARCHAR;
+      CREATE INDEX IF NOT EXISTS project_mcp_operations_approval_idx ON project_mcp_operations(approval_id);
     `).then(() => undefined).catch((error) => { ready = undefined; throw error; });
   }
   return ready;

@@ -12,6 +12,7 @@ import {
 import { hashToken, assertWorkspaceAccess } from "./oauth";
 import { attachmentTools } from "./attachments";
 import { createConfirmationTools, inlineDeletionPreview } from "./confirmations";
+import { readApproval, recoverDeletion, withDeletionLock } from "./recovery";
 
 export interface ToolContext {
   userId: string; workspaceId: string; grantId: string; scopes: string[]; origin: string;
@@ -364,23 +365,9 @@ const definitions: Record<string, ToolDefinition> = {
       return { deleted: true, templateTaskId: t.id, title: t.title, counts: { templateTasks: 1 + children.length } };
     },
   },
-  get_approval: {
-    description: "Check whether a deletion preview is pending, completed, denied, expired, or failed. The user can confirm or cancel inside the AI client using confirm_deletion or cancel_deletion.",
-    schema: z.object({ approval_id: id }).strict(),
-    run: async (a, c) => {
-      const { rows: [row] } = await pool.query(
-        "SELECT id,tool_name,summary,status,expires_at,result,error FROM project_mcp_approvals WHERE id=$1 AND grant_id=$2 AND user_id=$3",
-        [a.approval_id, c.grantId, c.userId],
-      );
-      if (!row) return notFound("Approval");
-      if (row.status === "approved") row.status = "completed";
-      if (row.status === "pending" && new Date(row.expires_at).getTime() <= Date.now()) row.status = "expired";
-      return row;
-    },
-  },
 };
 export const projectTools: Record<string, ToolDefinition> = { ...definitions, ...attachmentTools,
-  ...createConfirmationTools(executeProjectTool, (message, code) => new ProjectToolError(message, code), publicToolError) };
+  ...createConfirmationTools(executeProjectTool, (message, code) => new ProjectToolError(message, code), publicToolError, inspectInterruptedDeletion) };
 
 for (const definition of Object.values(projectTools)) {
   if (definition.destructive && !definition.confirmation) {
@@ -388,7 +375,7 @@ for (const definition of Object.values(projectTools)) {
   }
 }
 
-export async function destructiveFingerprint(name: string, a: any, c: ToolContext) {
+async function destructiveSnapshot(name: string, a: any, c: ToolContext) {
   const ordered = (rows: any[]) => [...rows].sort((left, right) => left.id.localeCompare(right.id));
   let value: unknown;
   if (name === "delete_project" || name === "delete_task") {
@@ -416,7 +403,74 @@ export async function destructiveFingerprint(name: string, a: any, c: ToolContex
     value = await storage.getTaskAttachment(a.attachment_id, c.workspaceId);
     if (!value) return notFound("Attachment");
   } else throw new ProjectToolError("Unsupported destructive action");
-  return hashToken(JSON.stringify(value));
+  return value;
+}
+
+export async function destructiveFingerprint(name: string, a: any, c: ToolContext) {
+  return hashToken(JSON.stringify(await destructiveSnapshot(name, a, c)));
+}
+
+const deletionTargets: Record<string, [string, string]> = {
+  delete_project: ["projects", "project_id"], delete_task: ["project_tasks", "task_id"],
+  delete_section: ["project_columns", "section_id"], delete_template: ["project_templates", "template_id"],
+  delete_template_task: ["project_template_tasks", "template_task_id"],
+  delete_comment: ["task_comments", "comment_id"], delete_attachment: ["task_attachments", "attachment_id"],
+};
+
+function recoveryManifest(name: string, snapshot: any) {
+  // Store only the evidence that vanishes when DB cascades remove attachments.
+  // Old previews deliberately recover as unknown rather than guessing paths.
+  const attachments = name === "delete_attachment" ? [snapshot]
+    : ["delete_project", "delete_task"].includes(name) ? snapshot.tasks.flatMap((t: any) => t.attachments) : [];
+  return { files: attachments.slice(0, 100).map((a: any) => ({ id: a.id, path: a.objectPath })),
+    complete: attachments.length <= 100 };
+}
+
+export async function inspectInterruptedDeletion(row: any, c: ToolContext) {
+  const deadline = Date.now() + 4000;
+  const target = deletionTargets[row.tool_name];
+  if (!target) return { outcome: "unknown" };
+  const [table, key] = target;
+  const { rows: targets } = await pool.query(
+    `SELECT id FROM ${table} WHERE id=$1 AND user_id=$2`, [row.args[key], c.workspaceId]);
+  let outcome = "target_absent";
+  if (targets.length) {
+    // Avoid the unbounded project-tree fan-out used for a normal preview.
+    // A large workspace can still report root/file evidence, but must not
+    // claim its full content is unchanged without a bounded fingerprint read.
+    const countQuery = { text: `SELECT
+      (SELECT COUNT(*) FROM (SELECT id FROM project_tasks WHERE user_id=$1 LIMIT 101) t) +
+      (SELECT COUNT(*) FROM (SELECT id FROM task_comments WHERE user_id=$1 LIMIT 101) t) +
+      (SELECT COUNT(*) FROM (SELECT id FROM task_attachments WHERE user_id=$1 LIMIT 101) t) +
+      (SELECT COUNT(*) FROM (SELECT id FROM project_template_tasks WHERE user_id=$1 LIMIT 101) t) AS count`,
+      values: [c.workspaceId], query_timeout: 1000 };
+    const { rows: [size] } = await pool.query(countQuery);
+    outcome = Number(size.count) > 100 ? "target_present_unverified"
+      : await destructiveFingerprint(row.tool_name, row.args, c) === row.target_hash ? "target_unchanged" : "target_changed";
+  }
+  const manifest = row.recovery_data;
+  if (!manifest || !Array.isArray(manifest.files) || !manifest.complete || manifest.files.length > 100) {
+    return { outcome, storage: "unknown", messageDetail: "Stored-file cleanup cannot be verified for this preview." };
+  }
+  const { attachmentObjectExists } = await import("./attachments");
+  // Read-only, bounded fan-out. A timeout/error becomes unknown, never success.
+  let present = 0, absent = 0, unknown = 0;
+  for (let start = 0; start < manifest.files.length; start += 5) {
+    if (Date.now() >= deadline) { unknown += manifest.files.length - start; break; }
+    const results = await Promise.all(manifest.files.slice(start, start + 5).map(async (file: any) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        return await Promise.race([attachmentObjectExists(file.path),
+          new Promise<undefined>((resolve) => { timer = setTimeout(() => resolve(undefined), 750); })]);
+      } catch { return undefined; }
+      finally { if (timer) clearTimeout(timer); }
+    }));
+    for (const exists of results) exists === true ? present++ : exists === false ? absent++ : unknown++;
+  }
+  const storageState = unknown ? "unknown" : present && absent ? "partial" : present ? "present" : absent ? "absent" : "not_applicable";
+  const partial = (targets.length && absent > 0) || (!targets.length && present > 0) || (present > 0 && absent > 0);
+  return { outcome: partial ? "partial" : outcome, target: outcome, storage: storageState,
+    files: { present, absent, unknown } };
 }
 
 async function approvalSummary(name: string, a: any, c: ToolContext) {
@@ -456,7 +510,11 @@ export function publicToolError(error: unknown) {
   return "The request could not be completed. Check the project and try again; do not repeat a mutation with a new request ID until you have checked its result.";
 }
 
-export async function executeProjectTool(name: string, input: unknown, c: ToolContext, approvedTargetHash?: string) {
+export async function executeProjectTool(name: string, input: unknown, c: ToolContext, approvedTargetHash?: string): Promise<any> {
+  return executeProjectToolLocked(name, input, c, approvedTargetHash);
+}
+
+async function executeProjectToolLocked(name: string, input: unknown, c: ToolContext, approvedTargetHash?: string, lockHeld = false): Promise<any> {
   const definition = projectTools[name];
   if (!definition) throw new ProjectToolError("Unknown Projects tool");
   if (!c.scopes.includes("projects:read") || (definition.write && !c.scopes.includes("projects:write"))) {
@@ -467,11 +525,18 @@ export async function executeProjectTool(name: string, input: unknown, c: ToolCo
   const { rows: [grant] } = await pool.query("SELECT id,scopes FROM project_mcp_grants WHERE id=$1 AND user_id=$2 AND workspace_id=$3 AND revoked_at IS NULL",
     [c.grantId, c.userId, c.workspaceId]);
   if (!grant) throw new ProjectToolError("Connection is revoked", "revoked");
-  if (definition.write && !grant.scopes.includes("projects:write")) throw new ProjectToolError("Editing access has been removed.", "insufficient_scope");
+  if (!grant.scopes.includes("projects:read") || (definition.write && !grant.scopes.includes("projects:write"))) {
+    throw new ProjectToolError("Required Projects access has been removed.", "insufficient_scope");
+  }
   const args = definition.schema.parse(input);
-  // Required UUIDs are enforced by each mutation's schema. Cancellation may
-  // omit one: its atomic pending→denied transition is inherently repeat-safe.
-  if (definition.write && args.request_id === undefined) args.request_id = randomUUID();
+  // Cancellation's pending→denied transition is inherently repeat-safe and
+  // remains available to clients that supply only approval_id.
+  if (name === "cancel_deletion" && args.request_id === undefined) args.request_id = randomUUID();
+  if (name === "confirm_deletion" && !lockHeld) {
+    return withDeletionLock(args.approval_id, () => {
+      throw new ProjectToolError("This deletion is already running. Use get_approval to check its result.", "confirmation_in_progress");
+    }, () => executeProjectToolLocked(name, input, c, approvedTargetHash, true));
+  }
   if (!definition.write) return definition.run(args, c);
   if (approvedTargetHash) {
     if (!definition.destructive || await destructiveFingerprint(name, args, c) !== approvedTargetHash) {
@@ -481,13 +546,23 @@ export async function executeProjectTool(name: string, input: unknown, c: ToolCo
   }
   const fingerprint = hashToken(JSON.stringify(args));
   const { rows: inserted } = await pool.query(
-    `INSERT INTO project_mcp_operations(id,grant_id,request_id,tool_name,args_hash,status)
-     VALUES($1,$2,$3,$4,$5,'running') ON CONFLICT(grant_id,request_id) DO NOTHING RETURNING id`,
-    [randomUUID(), c.grantId, args.request_id, name, fingerprint],
+    `INSERT INTO project_mcp_operations(id,grant_id,request_id,tool_name,args_hash,status,approval_id)
+     VALUES($1,$2,$3,$4,$5,'running',$6) ON CONFLICT(grant_id,request_id) DO NOTHING RETURNING id`,
+    [randomUUID(), c.grantId, args.request_id, name, fingerprint, name === "confirm_deletion" ? args.approval_id : null],
   );
   if (!inserted.length) {
     const { rows: [old] } = await pool.query("SELECT * FROM project_mcp_operations WHERE grant_id=$1 AND request_id=$2", [c.grantId, args.request_id]);
     if (old.tool_name !== name || old.args_hash !== fingerprint) throw new ProjectToolError("This request ID was already used for different arguments", "request_id_conflict");
+    if (name === "confirm_deletion" && old.status === "running") {
+      const approval = await readApproval(args.approval_id, c);
+      if (!approval) return notFound("Approval");
+      // Link pre-migration running attempts only after exact argument-hash and
+      // ownership checks. This cannot execute anything.
+      await pool.query("UPDATE project_mcp_operations SET approval_id=$2 WHERE id=$1", [old.id, approval.id]);
+      await recoverDeletion(approval, c, inspectInterruptedDeletion);
+      const { rows: [recovered] } = await pool.query("SELECT * FROM project_mcp_operations WHERE id=$1", [old.id]);
+      if (recovered.status === "done") return recovered.result;
+    }
      if (old.status === "done") return definition.destructive && !definition.confirmation
        ? inlineDeletionPreview(old.result) : old.result;
     if (old.status === "failed") throw new ProjectToolError(old.error, "previous_request_failed");
@@ -497,20 +572,25 @@ export async function executeProjectTool(name: string, input: unknown, c: ToolCo
     let result: any;
     if (definition.destructive && !definition.confirmation) {
       const summary = await approvalSummary(name, args, c);
-      const targetHash = await destructiveFingerprint(name, args, c);
+      const snapshot = await destructiveSnapshot(name, args, c);
+      const targetHash = hashToken(JSON.stringify(snapshot));
       const { rows: [{ count }] } = await pool.query("SELECT COUNT(*)::int AS count FROM project_mcp_approvals WHERE user_id=$1 AND status='pending' AND expires_at>NOW()", [c.userId]);
       if (count >= 20) throw new ProjectToolError("Too many pending confirmations. Confirm or cancel older requests in your AI app, or let them expire.");
       const approvalId = randomUUID();
-      const { rows: [created] } = await pool.query(`INSERT INTO project_mcp_approvals(id,grant_id,user_id,workspace_id,tool_name,args,summary,target_hash,expires_at)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,NOW()+INTERVAL '10 minutes') RETURNING expires_at`,
-      [approvalId, c.grantId, c.userId, c.workspaceId, name, JSON.stringify(args), summary, targetHash]);
+      const { rows: [created] } = await pool.query(`INSERT INTO project_mcp_approvals(id,grant_id,user_id,workspace_id,tool_name,args,summary,target_hash,recovery_data,expires_at)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW()+INTERVAL '10 minutes') RETURNING expires_at`,
+      [approvalId, c.grantId, c.userId, c.workspaceId, name, JSON.stringify(args), summary, targetHash, JSON.stringify(recoveryManifest(name, snapshot))]);
       result = inlineDeletionPreview({ status: "approval_required", approvalId, summary,
         expiresAt: created.expires_at });
     } else result = await definition.run(args, c);
     await pool.query("UPDATE project_mcp_operations SET status='done',result=$3 WHERE grant_id=$1 AND request_id=$2", [c.grantId, args.request_id, JSON.stringify(result)]);
     return result;
   } catch (error) {
-    await pool.query("UPDATE project_mcp_operations SET status='failed',error=$3 WHERE grant_id=$1 AND request_id=$2",
+    if (name === "confirm_deletion" && (error as any)?.code !== "confirmation_already_completed") {
+      const approval = await readApproval(args.approval_id, c);
+      if (approval) await recoverDeletion(approval, c, inspectInterruptedDeletion);
+    }
+    await pool.query("UPDATE project_mcp_operations SET status='failed',error=$3 WHERE grant_id=$1 AND request_id=$2 AND status='running'",
       [c.grantId, args.request_id, publicToolError(error)]);
     throw error;
   }
