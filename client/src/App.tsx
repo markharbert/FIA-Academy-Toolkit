@@ -85,6 +85,8 @@ const InboxIntelTrackerPage      = lazyPage(() => import("@/pages/inbox-intel-tr
 const InboxIntelEmailPage        = lazyPage(() => import("@/pages/inbox-intel-email"));
 const DmoTrackerPage             = lazyPage(() => import("@/pages/dmo-tracker"));
 const ProjectsPage               = lazyPage(() => import("@/pages/projects"));
+const AiConnectionsPage          = lazyPage(() => import("@/pages/ai-connections"));
+const McpAuthorizePage            = lazyPage(() => import("@/pages/ai-connections").then((module) => ({ default: module.McpAuthorizePage })));
 const ProjectDetailPage          = lazyPage(() => import("@/pages/project-detail"));
 const TemplateDetailPage         = lazyPage(() => import("@/pages/template-detail"));
 const FunnelPlannerIndexPage     = lazyPage(() => import("@/pages/funnel-planner/index"));
@@ -340,6 +342,12 @@ function ProtectedRoutes() {
       <Route path="/dmo-tracker">
         {() => <ProtectedRoute component={DmoTrackerPage} />}
       </Route>
+      <Route path="/projects/ai">
+        {() => <ProtectedRoute component={AiConnectionsPage} />}
+      </Route>
+      <Route path="/mcp/authorize">
+        {() => <ProtectedRoute component={McpAuthorizePage} />}
+      </Route>
       <Route path="/projects">
         {() => <ProtectedRoute component={ProjectsPage} />}
       </Route>
@@ -421,6 +429,12 @@ function ProtectedRoutes() {
 function PublicRoutes() {
   return (
     <Switch>
+      <Route path="/projects/ai">
+        {() => <ProtectedRoute component={AiConnectionsPage} />}
+      </Route>
+      <Route path="/mcp/authorize">
+        {() => <ProtectedRoute component={McpAuthorizePage} />}
+      </Route>
       <Route path="/">
         {() => <PublicOnlyRoute component={LoginPage} />}
       </Route>

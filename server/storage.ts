@@ -557,12 +557,12 @@ export interface IStorage {
   getProjectsForUser(userId: string): Promise<ProjectWithCounts[]>;
   getProject(id: string, userId: string): Promise<Project | undefined>;
   createProject(userId: string, data: InsertProject): Promise<Project>;
-  updateProject(id: string, userId: string, data: Partial<InsertProject>): Promise<Project | undefined>;
+  updateProject(id: string, userId: string, data: Partial<InsertProject>, expectedUpdatedAt?: string): Promise<Project | undefined>;
   deleteProject(id: string, userId: string): Promise<void>;
   getTasksForProject(projectId: string, userId: string): Promise<ProjectTask[]>;
   getTask(id: string, userId: string): Promise<ProjectTask | undefined>;
   createTask(userId: string, projectId: string, data: InsertProjectTask): Promise<ProjectTask>;
-  updateTask(id: string, userId: string, data: UpdateProjectTask): Promise<ProjectTask | undefined>;
+  updateTask(id: string, userId: string, data: UpdateProjectTask, expectedUpdatedAt?: string): Promise<ProjectTask | undefined>;
   reorderTasks(projectId: string, userId: string, updates: { id: string; columnId: string; sortOrder: number }[]): Promise<void>;
   deleteTask(id: string, userId: string): Promise<void>;
   getDashboardProjectsSummary(userId: string): Promise<{
@@ -593,7 +593,7 @@ export interface IStorage {
   // Project Board Columns
   getColumnsForProject(projectId: string, userId: string): Promise<ProjectColumn[]>;
   createColumn(userId: string, projectId: string, data: InsertProjectColumn): Promise<ProjectColumn>;
-  updateColumn(id: string, userId: string, data: Partial<InsertProjectColumn>): Promise<ProjectColumn | undefined>;
+  updateColumn(id: string, userId: string, data: Partial<InsertProjectColumn>, expectedUpdatedAt?: string): Promise<ProjectColumn | undefined>;
   deleteColumn(id: string, userId: string): Promise<void>;
   seedColumnsForProject(projectId: string, userId: string): Promise<ProjectColumn[]>;
 
@@ -601,12 +601,12 @@ export interface IStorage {
   getTemplatesForUser(userId: string): Promise<ProjectTemplateWithCounts[]>;
   getTemplate(id: string, userId: string): Promise<ProjectTemplate | undefined>;
   createTemplate(userId: string, data: InsertProjectTemplate): Promise<ProjectTemplate>;
-  updateTemplate(id: string, userId: string, data: Partial<InsertProjectTemplate>): Promise<ProjectTemplate | undefined>;
+  updateTemplate(id: string, userId: string, data: Partial<InsertProjectTemplate>, expectedUpdatedAt?: string): Promise<ProjectTemplate | undefined>;
   deleteTemplate(id: string, userId: string): Promise<void>;
   duplicateTemplate(id: string, userId: string): Promise<ProjectTemplate | undefined>;
   getTemplateTasks(templateId: string, userId: string): Promise<ProjectTemplateTask[]>;
   createTemplateTask(userId: string, templateId: string, data: InsertProjectTemplateTask): Promise<ProjectTemplateTask>;
-  updateTemplateTask(id: string, userId: string, data: UpdateProjectTemplateTask): Promise<ProjectTemplateTask | undefined>;
+  updateTemplateTask(id: string, userId: string, data: UpdateProjectTemplateTask, expectedUpdatedAt?: string): Promise<ProjectTemplateTask | undefined>;
   deleteTemplateTask(id: string, userId: string): Promise<void>;
   instantiateProjectFromTemplate(userId: string, templateId: string, project: Project): Promise<void>;
   snapshotProjectAsTemplate(userId: string, projectId: string, name: string): Promise<ProjectTemplate>;
@@ -3434,8 +3434,8 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateProject(id: string, userId: string, data: Partial<InsertProject>): Promise<Project | undefined> {
-    const update: Record<string, unknown> = { updatedAt: new Date() };
+  async updateProject(id: string, userId: string, data: Partial<InsertProject>, expectedUpdatedAt?: string): Promise<Project | undefined> {
+    const update: Record<string, unknown> = { updatedAt: expectedUpdatedAt ? sql`clock_timestamp()` : new Date() };
     if (data.name !== undefined) update.name = data.name;
     if (data.description !== undefined) update.description = data.description;
     if (data.color !== undefined) update.color = data.color;
@@ -3444,7 +3444,8 @@ export class DatabaseStorage implements IStorage {
     if (data.sortOrder !== undefined) update.sortOrder = data.sortOrder;
     const [updated] = await db.update(projects)
       .set(update)
-      .where(and(eq(projects.id, id), eq(projects.userId, userId)))
+      .where(and(eq(projects.id, id), eq(projects.userId, userId),
+        expectedUpdatedAt ? sql`${projects.updatedAt} = ${expectedUpdatedAt}::timestamp` : undefined))
       .returning();
     return updated || undefined;
   }
@@ -3509,11 +3510,11 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateTask(id: string, userId: string, data: UpdateProjectTask): Promise<ProjectTask | undefined> {
+  async updateTask(id: string, userId: string, data: UpdateProjectTask, expectedUpdatedAt?: string): Promise<ProjectTask | undefined> {
     const existing = await this.getTask(id, userId);
     if (!existing) return undefined;
 
-    const update: Record<string, unknown> = { updatedAt: new Date() };
+    const update: Record<string, unknown> = { updatedAt: expectedUpdatedAt ? sql`clock_timestamp()` : new Date() };
     if (data.title !== undefined) update.title = data.title;
     if (data.notes !== undefined) update.notes = data.notes;
     if (data.priority !== undefined) update.priority = data.priority;
@@ -3552,7 +3553,8 @@ export class DatabaseStorage implements IStorage {
     }
     const [updated] = await db.update(projectTasks)
       .set(update)
-      .where(and(eq(projectTasks.id, id), eq(projectTasks.userId, userId)))
+      .where(and(eq(projectTasks.id, id), eq(projectTasks.userId, userId),
+        expectedUpdatedAt ? sql`${projectTasks.updatedAt} = ${expectedUpdatedAt}::timestamp` : undefined))
       .returning();
     if (updated) {
       if (data.title !== undefined && data.title !== existing.title) {
@@ -3736,14 +3738,15 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateColumn(id: string, userId: string, data: Partial<InsertProjectColumn>): Promise<ProjectColumn | undefined> {
-    const update: Record<string, unknown> = { updatedAt: new Date() };
+  async updateColumn(id: string, userId: string, data: Partial<InsertProjectColumn>, expectedUpdatedAt?: string): Promise<ProjectColumn | undefined> {
+    const update: Record<string, unknown> = { updatedAt: expectedUpdatedAt ? sql`clock_timestamp()` : new Date() };
     if (data.name !== undefined) update.name = data.name;
     if (data.color !== undefined) update.color = data.color;
     if (data.sortOrder !== undefined) update.sortOrder = data.sortOrder;
     const [updated] = await db.update(projectColumns)
       .set(update)
-      .where(and(eq(projectColumns.id, id), eq(projectColumns.userId, userId)))
+      .where(and(eq(projectColumns.id, id), eq(projectColumns.userId, userId),
+        expectedUpdatedAt ? sql`${projectColumns.updatedAt} = ${expectedUpdatedAt}::timestamp` : undefined))
       .returning();
     return updated || undefined;
   }
@@ -4009,15 +4012,16 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateTemplate(id: string, userId: string, data: Partial<InsertProjectTemplate>): Promise<ProjectTemplate | undefined> {
-    const update: Record<string, unknown> = { updatedAt: new Date() };
+  async updateTemplate(id: string, userId: string, data: Partial<InsertProjectTemplate>, expectedUpdatedAt?: string): Promise<ProjectTemplate | undefined> {
+    const update: Record<string, unknown> = { updatedAt: expectedUpdatedAt ? sql`clock_timestamp()` : new Date() };
     if (data.name !== undefined) update.name = data.name;
     if (data.description !== undefined) update.description = data.description;
     if (data.color !== undefined) update.color = data.color;
     if (data.sortOrder !== undefined) update.sortOrder = data.sortOrder;
     const [updated] = await db.update(projectTemplates)
       .set(update)
-      .where(and(eq(projectTemplates.id, id), eq(projectTemplates.userId, userId)))
+      .where(and(eq(projectTemplates.id, id), eq(projectTemplates.userId, userId),
+        expectedUpdatedAt ? sql`${projectTemplates.updatedAt} = ${expectedUpdatedAt}::timestamp` : undefined))
       .returning();
     return updated || undefined;
   }
@@ -4107,7 +4111,7 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateTemplateTask(id: string, userId: string, data: UpdateProjectTemplateTask): Promise<ProjectTemplateTask | undefined> {
+  async updateTemplateTask(id: string, userId: string, data: UpdateProjectTemplateTask, expectedUpdatedAt?: string): Promise<ProjectTemplateTask | undefined> {
     const existing = await this.getTemplateTask(id, userId);
     if (!existing) return undefined;
     const update: Record<string, unknown> = { updatedAt: new Date() };
@@ -4132,8 +4136,9 @@ export class DatabaseStorage implements IStorage {
       }
     }
     const [updated] = await db.update(projectTemplateTasks)
-      .set(update)
-      .where(and(eq(projectTemplateTasks.id, id), eq(projectTemplateTasks.userId, userId)))
+      .set({ ...update, ...(expectedUpdatedAt ? { updatedAt: sql`clock_timestamp()` } : {}) })
+      .where(and(eq(projectTemplateTasks.id, id), eq(projectTemplateTasks.userId, userId),
+        expectedUpdatedAt ? sql`${projectTemplateTasks.updatedAt} = ${expectedUpdatedAt}::timestamp` : undefined))
       .returning();
     return updated || undefined;
   }

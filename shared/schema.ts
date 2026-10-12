@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+export * from "./projects-mcp-schema";
 import { pgTable, text, varchar, integer, serial, timestamp, jsonb, boolean, real, unique, index, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";

@@ -47,6 +47,7 @@ declare module "http" {
 // Gzip/Brotli all text responses — skip streaming and large upload routes
 app.use(compression({
   filter: (req, res) => {
+    if (req.path === "/mcp/projects") return false;
     // Compression buffers small streaming chunks, preventing live progress
     // updates from reaching the browser until the operation is complete.
     if (req.path.startsWith("/api/sessions") && req.method === "POST") return false;
@@ -107,6 +108,7 @@ export function log(message: string, source = "express") {
 }
 
 const SENSITIVE_LOG_PATHS = [
+  "/api/mcp/",
   "/api/inbox-analyzer/",
   "/api/admin/cf/recurring-revenue",
   "/api/admin/cf/regular-revenue",

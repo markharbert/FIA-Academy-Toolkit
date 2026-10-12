@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Express, Request, Response, NextFunction } from "express";
+import { registerProjectsMcpRoutes } from "./projects-mcp/routes";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { registerExtensionAuthRoutes, requireExtensionAccess, resolveExtensionAccess, revokeExtensionSessions } from "./extension-auth";
@@ -1304,7 +1305,8 @@ export async function registerRoutes(
 
     app.get("/api/auth/oauth/google", (req: Request, _res: Response, next: NextFunction) => {
       const redirect = typeof req.query.redirect === "string" ? req.query.redirect : "";
-      if (/^\/extension\/connect\?request=[\w-]{43}$/.test(redirect)) {
+      if (/^\/extension\/connect\?request=[\w-]{43}$/.test(redirect) ||
+          /^\/mcp\/authorize\?request=[0-9a-f-]{36}$/.test(redirect)) {
         req.session.extensionGoogleReturnTo = redirect;
       } else {
         delete req.session.extensionGoogleReturnTo;
@@ -9829,6 +9831,8 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       res.status(500).json({ message: "Failed to create project from funnel" });
     }
   });
+
+  registerProjectsMcpRoutes(app, requireAuth);
 
   app.get("/api/projects", requireAuth, async (req: Request, res: Response) => {
     try {

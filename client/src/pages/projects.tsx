@@ -1411,7 +1411,10 @@ export default function ProjectsPage() {
               <h1 className="mt-1 text-3xl font-bold tracking-tight text-white" data-testid="text-projects-title">{possessive} Projects</h1>
               <p className="mt-1 text-sm text-white/80">Plan, organize, and complete the work that runs your business.</p>
             </div>
-            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
+                <Button asChild variant="ghost" className="bg-white/10 text-white hover:bg-white/20 border border-white/20" data-testid="link-ai-connections">
+                  <Link href="/projects/ai"><Globe2 className="h-4 w-4" /> AI connections</Link>
+                </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button

@@ -201,7 +201,7 @@ export default function LoginPage() {
             </form>
           </Form>
 
-          {redirectTo.startsWith("/extension/connect?") && (
+          {(redirectTo.startsWith("/extension/connect?") || redirectTo.startsWith("/mcp/authorize?")) && (
             <button
               type="button"
               className="mt-3 w-full rounded-lg border border-white/20 px-4 py-2.5 text-sm font-medium text-white hover:bg-white/5"
