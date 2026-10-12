@@ -408,6 +408,139 @@ test("concurrent in-agent confirmations execute a deletion only once", async () 
   } finally { projectTools.delete_project.run = original; }
 });
 
+test("writes during cloud cleanup preparation survive and require fresh in-client consent", { timeout: 30000 }, async () => {
+  const c = await getRecoveryContext();
+  const getFile = ObjectStorageService.prototype.getObjectEntityFile;
+  const deleteFile = ObjectStorageService.prototype.deleteObject;
+  const files = new Set<string>();
+  let deletes = 0;
+  try {
+    for (const scenario of ["project", "task", "attachment"] as const) {
+      const p = await storage.createProject(c.workspaceId, { name: `Cleanup race ${scenario}` });
+      const t = await storage.createTask(c.workspaceId, p.id, { title: "Approved task" });
+      const path = `/objects/uploads/${mutation()}`;
+      files.add(path);
+      const att = await storage.createTaskAttachment(t.id, c.workspaceId,
+        { objectPath: path, filename: "approved.txt", mimeType: "text/plain", size: 5 });
+      const name = `delete_${scenario}`;
+      const target = scenario === "project" ? { project_id: p.id }
+        : scenario === "task" ? { task_id: t.id } : { attachment_id: att.id };
+      const preview = await executeProjectTool(name, { request_id: mutation(), ...target }, c);
+      let entered!: () => void;
+      let resume!: () => void;
+      const paused = new Promise<void>((resolve) => { entered = resolve; });
+      const gate = new Promise<void>((resolve) => { resume = resolve; });
+      let first = true;
+      ObjectStorageService.prototype.getObjectEntityFile = async (objectPath) => {
+        if (first) { first = false; entered(); await gate; }
+        if (!files.has(objectPath)) throw new ObjectNotFoundError();
+        return {} as any;
+      };
+      ObjectStorageService.prototype.deleteObject = async (objectPath) => {
+        // Irreversible cleanup must be after the database target disappears.
+        const remaining = scenario === "project" ? await storage.getProject(p.id, c.workspaceId)
+          : scenario === "task" ? await storage.getTask(t.id, c.workspaceId)
+            : await storage.getTaskAttachment(att.id, c.workspaceId);
+        assert.equal(remaining, undefined);
+        deletes++;
+        files.delete(objectPath);
+      };
+      const args = { request_id: mutation(), approval_id: preview.approvalId, confirmed: true };
+      const attempt = executeProjectTool("confirm_deletion", args, c);
+      const rejected = assert.rejects(attempt, (error: any) => {
+        assert.equal(error.code, "stale_approval");
+        assert.match(error.message, /Nothing was deleted/);
+        assert.match(error.message, /fresh deletion preview/);
+        assert.match(error.message, /explicit confirmation inside the AI client/);
+        return true;
+      });
+      let added: any;
+      let child: any;
+      let newAttachment: any;
+      const beforeDeletes = deletes;
+      await paused;
+      try {
+        // Independent pooled SQL writer: no MCP-specific lock or version protocol.
+        if (scenario === "project") {
+          added = await storage.createTask(c.workspaceId, p.id, { title: "New website task" });
+          await pool.query("UPDATE projects SET description='New website edit' WHERE id=$1", [p.id]);
+          await storage.createColumn(c.workspaceId, p.id, { name: "New board section" });
+        } else if (scenario === "task") {
+          await pool.query("UPDATE project_tasks SET notes='New website notes' WHERE id=$1", [t.id]);
+          child = await storage.createTask(c.workspaceId, p.id, { title: "New subtask", parentTaskId: t.id });
+          const newPath = `/objects/uploads/${mutation()}`;
+          files.add(newPath);
+          newAttachment = await storage.createTaskAttachment(child.id, c.workspaceId,
+            { objectPath: newPath, filename: "new.txt", mimeType: "text/plain", size: 3 });
+          await storage.addTaskComment(t.id, c.workspaceId, "New website comment");
+        } else {
+          await pool.query("UPDATE task_attachments SET filename='new-name.txt' WHERE id=$1", [att.id]);
+        }
+      } finally { resume(); }
+      await rejected;
+      assert.equal(deletes, beforeDeletes, "A changed target must retain every stored file");
+      assert.ok(files.has(path));
+      assert.ok(await storage.getProject(p.id, c.workspaceId));
+      assert.ok(await storage.getTask(t.id, c.workspaceId));
+      assert.ok(await storage.getTaskAttachment(att.id, c.workspaceId));
+      if (added) assert.ok(await storage.getTask(added.id, c.workspaceId));
+      if (child) {
+        assert.equal((await storage.getTask(t.id, c.workspaceId))?.notes, "New website notes");
+        assert.ok(await storage.getTask(child.id, c.workspaceId));
+        assert.ok(await storage.getTaskAttachment(newAttachment.id, c.workspaceId));
+        assert.equal((await storage.getTaskComments(t.id, c.workspaceId)).length, 1);
+      }
+      if (scenario === "attachment") assert.equal((await storage.getTaskAttachment(att.id, c.workspaceId))?.filename, "new-name.txt");
+      assert.equal((await executeProjectTool("get_approval", { approval_id: preview.approvalId }, c)).status, "failed");
+      const retry = await executeProjectTool("confirm_deletion", args, c);
+      assert.equal(retry.status, "failed");
+      assert.match(retry.error, /changed during deletion preparation/);
+      await assert.rejects(() => executeProjectTool("confirm_deletion", { ...args, request_id: mutation() }, c));
+      assert.equal(deletes, beforeDeletes);
+      const fresh = await executeProjectTool(name, { request_id: mutation(), ...target }, c);
+      assert.equal(deletes, beforeDeletes, "A fresh preview is not consent");
+      const completed = await executeProjectTool("confirm_deletion",
+        { request_id: mutation(), approval_id: fresh.approvalId, confirmed: true }, c);
+      assert.equal(completed.status, "completed");
+      assert.equal(completed.result.counts[scenario === "project" ? "tasks" : scenario === "task" ? "tasks" : "attachments"],
+        scenario === "attachment" ? 1 : 2);
+      assert.ok(!files.has(path));
+      if (newAttachment) assert.ok(!files.has(newAttachment.objectPath));
+    }
+  } finally {
+    ObjectStorageService.prototype.getObjectEntityFile = getFile;
+    ObjectStorageService.prototype.deleteObject = deleteFile;
+  }
+});
+
+test("final conditional deletion waits for an uncommitted writer and preserves its new content", { timeout: 15000 }, async () => {
+  const c = await getRecoveryContext();
+  const p = await storage.createProject(c.workspaceId, { name: "Final database race" });
+  const snapshot = await storage.getDeletionSnapshot("project", p.id, c.workspaceId);
+  const writer = await pool.connect();
+  try {
+    await writer.query("BEGIN");
+    const { rows: [t] } = await writer.query(
+      "INSERT INTO project_tasks(user_id,project_id,title) VALUES($1,$2,'Concurrent uncommitted task') RETURNING id",
+      [c.workspaceId, p.id]);
+    const deletion = storage.deleteUnchangedTarget("project", p.id, c.workspaceId, hashToken(JSON.stringify(snapshot)));
+    let waiting = false;
+    for (let attempt = 0; attempt < 100 && !waiting; attempt++) {
+      waiting = (await pool.query(`SELECT 1 FROM pg_locks
+        WHERE relation='project_tasks'::regclass AND mode='ShareRowExclusiveLock' AND NOT granted`)).rows.length > 0;
+      if (!waiting) await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.ok(waiting, "The conditional delete must wait for the independent writer");
+    await writer.query("COMMIT");
+    assert.equal(await deletion, false);
+    assert.ok(await storage.getProject(p.id, c.workspaceId));
+    assert.ok(await storage.getTask(t.id, c.workspaceId));
+  } finally {
+    await writer.query("ROLLBACK");
+    writer.release();
+  }
+});
+
 // Fail the shared DB interface at a precise crash boundary, including all
 // subsequent error/result writes. The durable rows are exactly those a new
 // process sees; the real PostgreSQL session lock is released on unwind.
@@ -445,6 +578,59 @@ async function getRecoveryContext() {
   }
   return recoveryContext;
 }
+
+test("deletion snapshots independently detect every cascading content change without timestamp updates", async () => {
+  const c = await getRecoveryContext();
+  for (const change of ["project", "task", "child", "comment", "attachment", "column"] as const) {
+    const p = await storage.createProject(c.workspaceId, { name: "Snapshot content" });
+    const t = await storage.createTask(c.workspaceId, p.id, { title: "Snapshot task" });
+    const snapshot = await storage.getDeletionSnapshot("project", p.id, c.workspaceId);
+    if (change === "project") await pool.query("UPDATE projects SET name='Changed' WHERE id=$1", [p.id]);
+    if (change === "task") await pool.query("UPDATE project_tasks SET title='Changed' WHERE id=$1", [t.id]);
+    if (change === "child") await storage.createTask(c.workspaceId, p.id, { title: "New child", parentTaskId: t.id });
+    if (change === "comment") await storage.addTaskComment(t.id, c.workspaceId, "New comment");
+    if (change === "attachment") await storage.createTaskAttachment(t.id, c.workspaceId,
+      { objectPath: `/objects/uploads/${mutation()}`, filename: "new.txt", mimeType: "text/plain", size: 3 });
+    if (change === "column") await storage.createColumn(c.workspaceId, p.id, { name: "New column" });
+    assert.equal(await storage.deleteUnchangedTarget("project", p.id, c.workspaceId, hashToken(JSON.stringify(snapshot))), false, change);
+    assert.ok(await storage.getProject(p.id, c.workspaceId));
+    assert.ok(await storage.getTask(t.id, c.workspaceId));
+  }
+});
+
+test("post-commit cloud failure reports partial deletion and read-only recovery never repeats cleanup", async () => {
+  const c = await getRecoveryContext();
+  const p = await storage.createProject(c.workspaceId, { name: "Post-commit cleanup failure" });
+  const t = await storage.createTask(c.workspaceId, p.id, { title: "Task with file" });
+  const att = await storage.createTaskAttachment(t.id, c.workspaceId,
+    { objectPath: `/objects/uploads/${mutation()}`, filename: "leftover.txt", mimeType: "text/plain", size: 5 });
+  const getFile = ObjectStorageService.prototype.getObjectEntityFile;
+  const deleteFile = ObjectStorageService.prototype.deleteObject;
+  let attempts = 0;
+  ObjectStorageService.prototype.getObjectEntityFile = async () => ({} as any);
+  ObjectStorageService.prototype.deleteObject = async () => {
+    attempts++;
+    assert.equal(await storage.getTask(t.id, c.workspaceId), undefined);
+    throw new Error("Cloud cleanup unavailable");
+  };
+  try {
+    const preview = await executeProjectTool("delete_task", { request_id: mutation(), task_id: t.id }, c);
+    const args = { request_id: mutation(), approval_id: preview.approvalId, confirmed: true };
+    await assert.rejects(() => executeProjectTool("confirm_deletion", args, c));
+    assert.equal(await storage.getTaskAttachment(att.id, c.workspaceId), undefined);
+    const status = await executeProjectTool("get_approval", { approval_id: preview.approvalId }, c);
+    assert.equal(status.status, "interrupted");
+    assert.equal(status.result.outcome, "partial");
+    assert.equal(status.result.target, "target_absent");
+    assert.equal(status.result.storage, "present");
+    const retry = await executeProjectTool("confirm_deletion", args, c);
+    assert.equal(retry.status, "interrupted");
+    assert.equal(attempts, 1);
+  } finally {
+    ObjectStorageService.prototype.getObjectEntityFile = getFile;
+    ObjectStorageService.prototype.deleteObject = deleteFile;
+  }
+});
 
 test("restart recovery before execution never retries and preserves changed targets, ownership and expiry", async () => {
   const c = await getRecoveryContext();
@@ -560,7 +746,7 @@ test("attachment interruption distinguishes storage/database partial outcomes an
   const getFile = ObjectStorageService.prototype.getObjectEntityFile;
   const deleteFile = ObjectStorageService.prototype.deleteObject;
   const deleteRow = storage.deleteTaskAttachment;
-  let failProbe = false, failDatabase = false;
+  let failProbe = false;
   let deletes = 0;
   ObjectStorageService.prototype.getObjectEntityFile = async (path) => {
     if (failProbe) throw new Error("Storage unavailable");
@@ -568,10 +754,6 @@ test("attachment interruption distinguishes storage/database partial outcomes an
     return {} as any;
   };
   ObjectStorageService.prototype.deleteObject = async (path) => { deletes++; files.delete(path); };
-  storage.deleteTaskAttachment = async (...params) => {
-    if (failDatabase) throw new Error("Database deletion unavailable");
-    return deleteRow.apply(storage, params);
-  };
   try {
     for (const scenario of ["file_removed", "database_removed", "both_removed", "unknown", "legacy"] as const) {
       const path = `/objects/uploads/recovery-${mutation()}`;
@@ -580,9 +762,9 @@ test("attachment interruption distinguishes storage/database partial outcomes an
       const preview = await executeProjectTool("delete_attachment", { request_id: mutation(), attachment_id: attachment.id }, c);
       const args = { request_id: mutation(), approval_id: preview.approvalId, confirmed: true };
       if (scenario === "file_removed") {
-        failDatabase = true;
-        await assert.rejects(() => executeProjectTool("confirm_deletion", args, c));
-        failDatabase = false;
+        // Historical cloud-first interrupted attempts remain read-only.
+        await crashConfirmation(c, args, "claimed");
+        files.delete(path);
       } else if (scenario === "both_removed") {
         await crashConfirmation(c, args, "deleted");
       } else {

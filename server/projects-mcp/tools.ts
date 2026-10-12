@@ -11,12 +11,14 @@ import {
   updateProjectTemplateTaskSchema,
 } from "../../shared/schema";
 import { hashToken, assertWorkspaceAccess } from "./oauth";
-import { attachmentTools } from "./attachments";
+import { attachmentTools, deleteConfirmedTarget } from "./attachments";
 import { createConfirmationTools, inlineDeletionPreview } from "./confirmations";
 import { readApproval, recoverDeletion, withDeletionLock } from "./recovery";
 
 export interface ToolContext {
   userId: string; workspaceId: string; grantId: string; scopes: string[]; origin: string;
+  /** Internal execution-only consent hash; never taken from tool arguments. */
+  deletionTargetHash?: string;
 }
 export interface ToolDefinition {
   description: string;
@@ -147,12 +149,7 @@ const definitions: Record<string, ToolDefinition> = {
     description: "Preview deletion of a project and its tasks. Show the summary and ask for confirmation in the AI conversation, then use confirm_deletion. No website visit is required.",
     write: true, destructive: true, schema: z.object({ request_id: requestId, project_id: id }).strict(),
     run: async (a, c) => {
-      const p = await project(a.project_id, c);
-      // Match app cleanup of cloud attachments before cascading project deletion.
-      const tasks = await storage.getTasksForProject(p.id, c.workspaceId);
-      const { deleteAttachmentObject } = await import("./attachments");
-      for (const t of tasks) for (const att of await storage.getTaskAttachments(t.id, c.workspaceId)) await deleteAttachmentObject(att.objectPath);
-      await storage.deleteProject(p.id, c.workspaceId);
+      const { root: p, tasks } = await deleteConfirmedTarget("project", a.project_id, c);
       return { deleted: true, projectId: p.id, projectName: p.name, counts: { projects: 1, tasks: tasks.length } };
     },
   },
@@ -204,13 +201,9 @@ const definitions: Record<string, ToolDefinition> = {
     description: "Preview deletion of a task and its subtasks. Ask for confirmation in the AI conversation, then use confirm_deletion.",
     write: true, destructive: true, schema: z.object({ request_id: requestId, task_id: id }).strict(),
     run: async (a, c) => {
-      const t = await task(a.task_id, c);
-      const children = (await storage.getTasksForProject(t.projectId, c.workspaceId)).filter((child) => child.parentTaskId === t.id);
-      const { deleteAttachmentObject } = await import("./attachments");
-      for (const item of [t, ...children]) for (const att of await storage.getTaskAttachments(item.id, c.workspaceId)) await deleteAttachmentObject(att.objectPath);
-      await storage.deleteTask(t.id, c.workspaceId);
-      fireWebhooks(c.workspaceId, "task.deleted", { id: t.id, projectId: t.projectId });
-      return { deleted: true, taskId: t.id, title: t.title, counts: { tasks: 1 + children.length } };
+      const { root: t, tasks } = await deleteConfirmedTarget("task", a.task_id, c);
+      fireWebhooks(c.workspaceId, "task.deleted", { id: t.id, projectId: t.project_id });
+      return { deleted: true, taskId: t.id, title: t.title, counts: { tasks: tasks.length } };
     },
   },
   list_sections: {
@@ -380,14 +373,9 @@ async function destructiveSnapshot(name: string, a: any, c: ToolContext) {
   const ordered = (rows: any[]) => [...rows].sort((left, right) => left.id.localeCompare(right.id));
   let value: unknown;
   if (name === "delete_project" || name === "delete_task") {
-    const root = name === "delete_project" ? await readEntity("projects", a.project_id, c.workspaceId)
-      : await readEntity("project_tasks", a.task_id, c.workspaceId);
-    const tasks = await storage.getTasksForProject(name === "delete_project" ? a.project_id : root.projectId, c.workspaceId);
-    const selected = name === "delete_project" ? tasks : tasks.filter((t) => t.id === a.task_id || t.parentTaskId === a.task_id);
-    value = { root, tasks: await Promise.all(ordered(selected).map(async (t) => ({
-      task: t, comments: ordered(await storage.getTaskComments(t.id, c.workspaceId)),
-      attachments: ordered(await storage.getTaskAttachments(t.id, c.workspaceId)),
-    }))) };
+    value = await storage.getDeletionSnapshot(name === "delete_project" ? "project" : "task",
+      name === "delete_project" ? a.project_id : a.task_id, c.workspaceId);
+    if (!value) return notFound("Item");
   } else if (name === "delete_section") {
     const root = await readEntity("project_columns", a.section_id, c.workspaceId);
     value = { root, tasks: ordered((await storage.getTasksForProject(root.projectId, c.workspaceId)).filter((t) => t.columnId === root.id)) };
@@ -401,7 +389,7 @@ async function destructiveSnapshot(name: string, a: any, c: ToolContext) {
     value = (await storage.getTaskComments(a.task_id, c.workspaceId)).find((t) => t.id === a.comment_id && t.userId === c.workspaceId);
     if (!value) return notFound("Comment");
   } else if (name === "delete_attachment") {
-    value = await storage.getTaskAttachment(a.attachment_id, c.workspaceId);
+    value = await storage.getDeletionSnapshot("attachment", a.attachment_id, c.workspaceId);
     if (!value) return notFound("Attachment");
   } else throw new ProjectToolError("Unsupported destructive action");
   return value;
@@ -421,9 +409,8 @@ const deletionTargets: Record<string, [string, string]> = {
 function recoveryManifest(name: string, snapshot: any) {
   // Store only the evidence that vanishes when DB cascades remove attachments.
   // Old previews deliberately recover as unknown rather than guessing paths.
-  const attachments = name === "delete_attachment" ? [snapshot]
-    : ["delete_project", "delete_task"].includes(name) ? snapshot.tasks.flatMap((t: any) => t.attachments) : [];
-  return { files: attachments.slice(0, 100).map((a: any) => ({ id: a.id, path: a.objectPath })),
+  const attachments = ["delete_project", "delete_task", "delete_attachment"].includes(name) ? snapshot.attachments : [];
+  return { files: attachments.slice(0, 100).map((a: any) => ({ id: a.id, path: a.object_path })),
     complete: attachments.length <= 100 };
 }
 
@@ -541,9 +528,9 @@ async function executeProjectToolLocked(name: string, input: unknown, c: ToolCon
   if (!definition.write) return definition.run(args, c);
   if (approvedTargetHash) {
     if (!definition.destructive || await destructiveFingerprint(name, args, c) !== approvedTargetHash) {
-      throw new ProjectToolError("The item or its contents changed since this deletion was requested. Ask the assistant for a fresh request and review it again.", "stale_approval");
+      throw new ProjectToolError("The item or its contents changed since this deletion was requested. Create a fresh deletion preview, show it to the user, and obtain explicit confirmation inside the AI client before trying again.", "stale_approval");
     }
-    return definition.run(args, c);
+    return definition.run(args, { ...c, deletionTargetHash: approvedTargetHash });
   }
   const fingerprint = hashToken(JSON.stringify(args));
   const { rows: inserted } = await pool.query(

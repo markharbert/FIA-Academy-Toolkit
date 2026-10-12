@@ -41,6 +41,21 @@ or affect content that has changed since consent.
 **How to apply:** Report uncertainty and partial outcomes plainly. Keep recovery
 read-only, even when there appears to be an obvious remaining cleanup step.
 
+Normal confirmed deletion should prefer leftover stored files over removing
+files that belong to content whose deletion consent became stale. Cloud work
+must not extend a database critical section.
+
+**Why:** Database deletion and cloud storage cannot commit together. A failed
+cleanup can leave orphan files for separately confirmed recovery, but deleting
+files before discovering a concurrent edit would damage surviving content.
+Short predicate-protecting database locks were chosen over cooperation-only
+locks because website and independent SQL writers must also be protected.
+
+**How to apply:** Keep irreversible cloud removal after a successful conditional
+database commit. Any future finer-grained concurrency approach must protect new
+children and attachments as well as existing rows, without holding database
+locks during cloud requests.
+
 The detailed MCP setup/reference page belongs in the Admin navigation and is
 admin-only for now. This restriction applies to the documentation page, not to
 the existing member connection and approval flows.

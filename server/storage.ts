@@ -73,6 +73,7 @@ import { collectCourseModuleSubtreeIds } from "@shared/course-structure";
 import { slugify } from "@shared/slug";
 import crypto from "crypto";
 import { db, pool } from "./db";
+import { readDeletionSnapshot, deleteUnchangedTarget, type DeletionKind, type DeletionSnapshot } from "./project-deletion";
 import { eq, and, lt, lte, gte, isNull, desc, gt, sql, or, ilike, count, asc, inArray } from "drizzle-orm";
 
 // Email normalization helper - centralizes email handling to prevent duplicates
@@ -559,6 +560,8 @@ export interface IStorage {
   createProject(userId: string, data: InsertProject): Promise<Project>;
   updateProject(id: string, userId: string, data: Partial<InsertProject>, expectedUpdatedAt?: string): Promise<Project | undefined>;
   deleteProject(id: string, userId: string): Promise<void>;
+  getDeletionSnapshot(kind: DeletionKind, id: string, userId: string): Promise<DeletionSnapshot | undefined>;
+  deleteUnchangedTarget(kind: DeletionKind, id: string, userId: string, expectedHash: string): Promise<boolean>;
   getTasksForProject(projectId: string, userId: string): Promise<ProjectTask[]>;
   getTask(id: string, userId: string): Promise<ProjectTask | undefined>;
   createTask(userId: string, projectId: string, data: InsertProjectTask): Promise<ProjectTask>;
@@ -3453,6 +3456,14 @@ export class DatabaseStorage implements IStorage {
   async deleteProject(id: string, userId: string): Promise<void> {
     await db.delete(projects)
       .where(and(eq(projects.id, id), eq(projects.userId, userId)));
+  }
+
+  async getDeletionSnapshot(kind: DeletionKind, id: string, userId: string): Promise<DeletionSnapshot | undefined> {
+    return readDeletionSnapshot(pool, kind, id, userId);
+  }
+
+  async deleteUnchangedTarget(kind: DeletionKind, id: string, userId: string, expectedHash: string): Promise<boolean> {
+    return deleteUnchangedTarget(pool, kind, id, userId, expectedHash);
   }
 
   async getTasksForProject(projectId: string, userId: string): Promise<ProjectTask[]> {

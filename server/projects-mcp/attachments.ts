@@ -2,6 +2,8 @@ import { z } from "zod";
 import { storage } from "../storage";
 import { ObjectNotFoundError, ObjectStorageService } from "../replit_integrations/object_storage/objectStorage";
 import type { ToolContext, ToolDefinition } from "./tools";
+import { ProjectToolError } from "./tools";
+import { deletionSnapshotHash, type DeletionKind } from "../project-deletion";
 
 const objects = new ObjectStorageService();
 const id = z.string().uuid();
@@ -64,6 +66,24 @@ export async function deleteAttachmentObject(path: string) {
   await objects.deleteObject(path);
 }
 
+export async function deleteConfirmedTarget(kind: DeletionKind, targetId: string, c: ToolContext) {
+  const snapshot = await storage.getDeletionSnapshot(kind, targetId, c.workspaceId);
+  const changed = () => new ProjectToolError(
+    "The item or its contents changed during deletion preparation. Nothing was deleted. Create a fresh deletion preview, show it to the user, and obtain explicit confirmation inside the AI client before trying again.",
+    "stale_approval");
+  if (!c.deletionTargetHash || !snapshot || deletionSnapshotHash(snapshot) !== c.deletionTargetHash) throw changed();
+
+  // Prepare cleanup without removing files. Another writer can freely edit here.
+  // Missing files are safe to clean up again; other storage errors fail explicitly.
+  for (const attachment of snapshot.attachments) await attachmentObjectExists(attachment.object_path);
+  if (!await storage.deleteUnchangedTarget(kind, targetId, c.workspaceId, c.deletionTargetHash)) throw changed();
+
+  // Only the files in the committed, approved snapshot can now be removed.
+  // Failure here is a partial deletion handled by read-only interruption recovery.
+  for (const attachment of snapshot.attachments) await deleteAttachmentObject(attachment.object_path);
+  return snapshot;
+}
+
 export async function attachmentObjectExists(path: string) {
   // Only paths captured in the owned preview are inspected. Storage failures
   // must not be confused with a verified missing file.
@@ -111,9 +131,7 @@ export const attachmentTools: Record<string, ToolDefinition> = {
     description: "Preview deletion of an attachment and its stored file. Ask for confirmation in the AI conversation, then use confirm_deletion.",
     write: true, destructive: true, schema: z.object({ ...request, attachment_id: id }).strict(),
     run: async (a, c) => {
-      const att = await ownAttachment(a.attachment_id, c);
-      await deleteAttachmentObject(att.objectPath);
-      await storage.deleteTaskAttachment(att.id, c.workspaceId);
+      const { root: att } = await deleteConfirmedTarget("attachment", a.attachment_id, c);
       return { deleted: true, attachmentId: att.id, filename: att.filename, counts: { attachments: 1 } };
     },
   },
