@@ -1,0 +1,52 @@
+:root {
+  --background: 38 31% 97%;
+  --foreground: 222 48% 15%;
+  --card: 40 38% 99%;
+  --card-foreground: 222 48% 15%;
+  --popover: 40 38% 99%;
+  --popover-foreground: 222 48% 15%;
+  --primary: 358 100% 43%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 203 34% 92%;
+  --secondary-foreground: 222 48% 15%;
+  --muted: 203 25% 94%;
+  --muted-foreground: 218 16% 46%;
+  --accent: 203 45% 91%;
+  --accent-foreground: 222 48% 15%;
+  --destructive: 358 100% 43%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 220 24% 87%;
+  --input: 220 24% 84%;
+  --ring: 203 54% 53%;
+  --brand-red: 358 100% 43%;
+  --brand-light: 203 54% 53%;
+  --radius: .9rem;
+}
+
+.dark {
+  --background: 230 50% 6%;
+  --foreground: 0 0% 95%;
+  --border: 230 30% 18%;
+  --card: 230 50% 8%;
+  --card-foreground: 0 0% 95%;
+  --popover: 230 50% 10%;
+  --popover-foreground: 0 0% 95%;
+  --primary: 358 100% 50%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 230 30% 18%;
+  --secondary-foreground: 0 0% 95%;
+  --muted: 230 30% 15%;
+  --muted-foreground: 0 0% 65%;
+  --accent: 203 54% 20%;
+  --accent-foreground: 203 54% 90%;
+  --destructive: 358 100% 50%;
+  --destructive-foreground: 0 0% 100%;
+  --input: 230 30% 28%;
+  --ring: 203 54% 53%;
+  --brand-dark: 230 75% 10%;
+  --brand-light: 203 54% 53%;
+  --brand-red: 358 100% 50%;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: hsl(var(--background)); color: hsl(var(--foreground)); }

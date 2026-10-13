@@ -52,6 +52,7 @@ import { Label } from "@/components/ui/label";
 import { getCommonTimezones } from "@shared/datetime";
 import { useMemo } from "react";
 import type { NotificationPreferences } from "@shared/schema";
+import "./account-settings.css";
 
 interface AccountData {
   id: string;
@@ -382,15 +383,14 @@ export default function AccountPage() {
   const items = activity?.items ?? [];
 
   return (
-    <div className="min-h-full flex flex-col">
+    <div className="account-settings min-h-full flex flex-col">
       {/* Hero header */}
       <div className="relative overflow-hidden border-b border-border shrink-0">
-        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(200_60%_15%)]" />
-        <div className="absolute -bottom-24 -right-12 h-72 w-72 rounded-full bg-sky-500/20 blur-3xl" />
-        <div className="absolute -top-16 -left-8 h-64 w-64 rounded-full bg-blue-500/10 blur-3xl" />
-        <div className="relative container mx-auto max-w-5xl px-4 py-8">
-          <div className="flex items-center gap-4">
-            <Avatar className="h-14 w-14 shrink-0 ring-2 ring-white/20">
+        <div className="account-settings__hero absolute inset-0" />
+        <div className="account-settings__hero-rule absolute bottom-0 left-0 right-0" />
+        <div className="relative container mx-auto max-w-6xl px-4 py-8 sm:py-10">
+          <div className="flex items-center gap-4 sm:gap-5">
+            <Avatar className="h-16 w-16 shrink-0 ring-2 ring-white/25 sm:h-[4.5rem] sm:w-[4.5rem]">
               <AvatarImage
                 src={`${getGravatarUrl(account.gravatarHash)}&v=${gravatarKey}`}
                 alt={account.displayName || "Profile"}
@@ -400,10 +400,11 @@ export default function AccountPage() {
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0">
-              <h1 className="text-2xl font-bold text-white leading-tight truncate" data-testid="text-account-title">
+              <p className="account-settings__eyebrow">FEARLESS INFLUENCER ACADEMY <span>·</span> YOUR ACCOUNT</p>
+              <h1 className="account-settings__hero-title truncate" data-testid="text-account-title">
                 {account.displayName || account.firstName || "Account"}
               </h1>
-              <p className="text-sm text-white/60 truncate" data-testid="text-profile-email">
+              <p className="text-sm text-white/70 truncate" data-testid="text-profile-email">
                 {account.email || "No email on file"}
               </p>
             </div>
@@ -420,12 +421,20 @@ export default function AccountPage() {
           </div>
         </div>
       </div>
-      <div className="container mx-auto max-w-5xl px-4 py-8">
+      <div className="container mx-auto max-w-6xl px-4 py-7 sm:py-9">
+      <div className="account-settings__intro mb-6 sm:mb-8">
+        <div>
+          <p className="account-settings__section-kicker">ACCOUNT CENTER</p>
+          <h2>Make this space yours.</h2>
+          <p>Keep your profile, preferences, and access exactly where you need them.</p>
+        </div>
+        <span className="account-settings__intro-mark" aria-hidden="true">FIA <i> / </i> TOOLKIT</span>
+      </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <div className="flex gap-8 items-start">
+        <div className="account-settings__layout flex gap-8 items-start">
           {/* ── Left nav ───────────────────────────────────────── */}
-          <nav className="w-52 shrink-0 sticky top-6 rounded-xl border border-border/60 bg-card p-2 space-y-0.5" data-testid="tabs-account">
+          <nav role="tablist" aria-label="Account settings sections" className="account-settings__nav w-52 shrink-0 sticky top-6 rounded-xl border border-border/60 bg-card p-2 space-y-0.5" data-testid="tabs-account">
             {(
               [
                 { value: "profile",       label: "Profile",       icon: User },
@@ -439,7 +448,22 @@ export default function AccountPage() {
             ).map(({ value, label, icon: Icon }) => (
               <button
                 key={value}
+                id={`tab-${value}`}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === value}
+                aria-controls={`account-panel-${value}`}
+                tabIndex={activeTab === value ? 0 : -1}
                 onClick={() => setActiveTab(value)}
+                onKeyDown={(event) => {
+                  const current = event.currentTarget.parentElement;
+                  const tabs = current ? Array.from(current.querySelectorAll<HTMLButtonElement>('[role="tab"]')) : [];
+                  const index = tabs.indexOf(event.currentTarget);
+                  const next = event.key === "ArrowDown" || event.key === "ArrowRight" ? (index + 1) % tabs.length
+                    : event.key === "ArrowUp" || event.key === "ArrowLeft" ? (index - 1 + tabs.length) % tabs.length
+                    : event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : -1;
+                  if (next >= 0) { event.preventDefault(); tabs[next]?.focus(); tabs[next]?.click(); }
+                }}
                 data-testid={`tab-${value}`}
                 className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${
                   activeTab === value
@@ -457,7 +481,7 @@ export default function AccountPage() {
           <div className="flex-1 min-w-0">
 
         {/* ─── Profile Tab ─────────────────────────────────────── */}
-        <TabsContent value="profile">
+        <TabsContent value="profile" id="account-panel-profile" role="tabpanel" aria-labelledby="tab-profile" tabIndex={0}>
           <Card>
             <CardHeader>
               <CardTitle>Profile</CardTitle>
@@ -588,7 +612,7 @@ export default function AccountPage() {
         </TabsContent>
 
         {/* ─── Time Zone Tab ───────────────────────────────────── */}
-        <TabsContent value="timezone">
+        <TabsContent value="timezone" id="account-panel-timezone" role="tabpanel" aria-labelledby="tab-timezone" tabIndex={0}>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -645,7 +669,7 @@ export default function AccountPage() {
         </TabsContent>
 
         {/* ─── Membership Tab ──────────────────────────────────── */}
-        <TabsContent value="membership">
+        <TabsContent value="membership" id="account-panel-membership" role="tabpanel" aria-labelledby="tab-membership" tabIndex={0}>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -697,7 +721,7 @@ export default function AccountPage() {
         </TabsContent>
 
         {/* ─── Notifications Tab ───────────────────────────────── */}
-        <TabsContent value="notifications">
+        <TabsContent value="notifications" id="account-panel-notifications" role="tabpanel" aria-labelledby="tab-notifications" tabIndex={0}>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -809,7 +833,7 @@ export default function AccountPage() {
         </TabsContent>
 
         {/* ─── Activity Tab ────────────────────────────────────── */}
-        <TabsContent value="activity">
+        <TabsContent value="activity" id="account-panel-activity" role="tabpanel" aria-labelledby="tab-activity" tabIndex={0}>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -878,7 +902,7 @@ export default function AccountPage() {
 
         {/* ─── Team Tab ────────────────────────────────────────── */}
         {!isCollaborator && (
-          <TabsContent value="team">
+          <TabsContent value="team" id="account-panel-team" role="tabpanel" aria-labelledby="tab-team" tabIndex={0}>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1035,7 +1059,7 @@ export default function AccountPage() {
         )}
 
         {apiKeyData?.accessEnabled && (
-          <TabsContent value="api">
+          <TabsContent value="api" id="account-panel-api" role="tabpanel" aria-labelledby="tab-api" tabIndex={0}>
             <Card>
               <CardHeader>
                 <div className="flex items-center gap-2">

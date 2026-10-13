@@ -1,0 +1,210 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap");
+
+.account-settings {
+  --account-ink: 222 55% 13%;
+  --account-blue: 203 54% 48%;
+  --account-red: 358 100% 43%;
+  --account-paper: 38 31% 97%;
+  color: hsl(var(--foreground));
+  font-family: "DM Sans", sans-serif;
+  background:
+    radial-gradient(ellipse at 85% 25%, hsl(203 45% 90% / .18), transparent 34rem),
+    hsl(var(--account-paper));
+}
+
+.account-settings__hero {
+  background:
+    radial-gradient(ellipse at 81% 125%, hsl(203 73% 58% / .26), transparent 31rem),
+    linear-gradient(116deg, hsl(222 55% 12%) 0%, hsl(220 48% 16%) 56%, hsl(208 52% 19%) 100%);
+}
+
+.account-settings__hero-rule {
+  height: 3px;
+  background: linear-gradient(90deg, hsl(var(--brand-red)), hsl(203 66% 62%) 44%, transparent 83%);
+}
+
+.account-settings__eyebrow,
+.account-settings__section-kicker {
+  margin: 0 0 .55rem;
+  color: hsl(203 58% 77%);
+  font: 700 .64rem/1.2 "DM Sans", sans-serif;
+  letter-spacing: .18em;
+}
+
+.account-settings__eyebrow span { color: hsl(var(--brand-red)); padding: 0 .3rem; }
+
+.account-settings__hero-title {
+  margin: 0;
+  color: hsl(38 35% 98%);
+  font: 600 clamp(1.45rem, 3vw, 2rem)/1.12 "DM Sans", sans-serif;
+  letter-spacing: -.045em;
+}
+
+.account-settings__intro {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.account-settings__intro h2 {
+  margin: 0;
+  color: hsl(var(--foreground));
+  font: 600 clamp(1.4rem, 2vw, 1.8rem)/1.15 "DM Sans", sans-serif;
+  letter-spacing: -.045em;
+}
+
+.account-settings__intro p:not(.account-settings__section-kicker) {
+  margin: .45rem 0 0;
+  color: hsl(var(--muted-foreground));
+  font-size: .9rem;
+}
+
+.account-settings__section-kicker { color: hsl(var(--brand-red)); }
+.account-settings__intro-mark {
+  color: hsl(var(--foreground) / .45);
+  font: 700 .65rem/1 "DM Sans", sans-serif;
+  letter-spacing: .14em;
+  white-space: nowrap;
+}
+.account-settings__intro-mark i { color: hsl(var(--brand-red)); font-style: normal; padding: 0 .3rem; }
+
+.account-settings__nav {
+  border-color: hsl(222 28% 87%);
+  background: hsl(40 38% 99% / .86);
+  box-shadow: 0 12px 34px hsl(222 38% 20% / .045);
+}
+
+.account-settings__nav [role="tab"] {
+  min-height: 2.75rem;
+  border: 1px solid transparent;
+  transition: background-color .18s ease, color .18s ease, border-color .18s ease, transform .18s ease;
+}
+
+.account-settings__nav [role="tab"][aria-selected="true"] {
+  color: hsl(222 52% 15%);
+  border-color: hsl(203 42% 86%);
+  background: linear-gradient(100deg, hsl(203 58% 92%), hsl(203 40% 96%));
+  box-shadow: inset 3px 0 hsl(var(--brand-red));
+}
+
+.account-settings__nav [role="tab"]:focus-visible,
+.account-settings :is(button, a, input, [role="switch"], [role="combobox"]):focus-visible {
+  outline: 3px solid hsl(var(--brand-light) / .42);
+  outline-offset: 2px;
+}
+
+.account-settings .shadcn-card,
+.account-settings .rounded-lg.border,
+.account-settings .rounded-xl.border {
+  border-color: hsl(222 25% 87%);
+}
+
+.account-settings .shadcn-card {
+  border-radius: 1rem;
+  background: hsl(40 38% 99% / .94);
+  box-shadow: 0 16px 44px hsl(222 38% 20% / .055);
+}
+
+.account-settings .shadcn-card > div:first-child {
+  padding: 1.55rem 1.65rem 1.1rem;
+}
+
+.account-settings .shadcn-card > div:last-child {
+  padding: .8rem 1.65rem 1.65rem;
+}
+
+.account-settings .shadcn-card > div > .text-2xl {
+  font-family: "DM Sans", sans-serif;
+  font-size: 1.16rem;
+  letter-spacing: -.025em;
+}
+
+.account-settings input,
+.account-settings [role="combobox"] {
+  border-color: hsl(220 20% 83%);
+  border-radius: .65rem;
+}
+
+.account-settings input:not(:disabled):hover,
+.account-settings [role="combobox"]:hover {
+  border-color: hsl(var(--brand-light) / .7);
+}
+
+.account-settings .bg-muted\/30,
+.account-settings .bg-muted\/40 {
+  background-color: hsl(203 35% 95% / .72);
+}
+
+.account-settings__layout { min-width: 0; }
+
+/* Keep the polished surfaces legible when the app follows a dark theme. */
+.dark .account-settings { --account-paper: 230 50% 6%; }
+.dark .account-settings__nav,
+.dark .account-settings .shadcn-card {
+  background: hsl(var(--card));
+  border-color: hsl(222 25% 27%);
+  box-shadow: 0 16px 44px hsl(0 0% 0% / .18);
+}
+.dark .account-settings__nav [role="tab"][aria-selected="true"] {
+  color: hsl(var(--foreground));
+  border-color: hsl(203 35% 38%);
+  background: linear-gradient(100deg, hsl(203 40% 23%), hsl(222 35% 19%));
+}
+.dark .account-settings .rounded-lg.border,
+.dark .account-settings .rounded-xl.border {
+  border-color: hsl(222 25% 27%);
+}
+.dark .account-settings input,
+.dark .account-settings [role="combobox"] {
+  border-color: hsl(220 20% 42%);
+}
+.dark .account-settings .bg-muted\/30,
+.dark .account-settings .bg-muted\/40 {
+  background-color: hsl(203 27% 16% / .72);
+}
+
+@media (max-width: 767px) {
+  .account-settings__intro { align-items: start; }
+  .account-settings__intro-mark { display: none; }
+  .account-settings__layout { display: block; }
+  .account-settings__nav {
+    position: relative;
+    top: auto;
+    display: flex;
+    width: 100%;
+    margin-bottom: 1rem;
+    padding: .45rem;
+    gap: .35rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    border-radius: .9rem;
+    scrollbar-width: thin;
+  }
+  .account-settings__nav [role="tab"] {
+    flex: 0 0 auto;
+    width: auto;
+    min-height: 2.45rem;
+    padding: .55rem .75rem;
+    font-size: .78rem;
+  }
+  .account-settings__nav [role="tab"][aria-selected="true"] { box-shadow: inset 0 -2px hsl(var(--brand-red)); }
+  .account-settings .shadcn-card > div:first-child { padding: 1.25rem 1.15rem .85rem; }
+  .account-settings .shadcn-card > div:last-child { padding: .65rem 1.15rem 1.25rem; }
+}
+
+@media (max-width: 420px) {
+  .account-settings__eyebrow { font-size: .56rem; letter-spacing: .12em; }
+  .account-settings__intro p:not(.account-settings__section-kicker) { max-width: 27rem; font-size: .82rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .account-settings *,
+  .account-settings *::before,
+  .account-settings *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
