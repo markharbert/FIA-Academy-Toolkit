@@ -15,6 +15,7 @@ import { db as startupDb, pool } from "./db";
 import { sql, eq, and } from "drizzle-orm";
 import { teleprompterScripts, teleprompterRecordings } from "@shared/schema";
 import { slugify } from "@shared/slug";
+import { ensureCalendarFeedGrantsTable } from "./calendar-subscriptions";
 
 // Prevent stray async errors (e.g. TLS socket events fired after a promise
 // resolves) from crashing the entire process.
@@ -108,6 +109,7 @@ export function log(message: string, source = "express") {
 }
 
 const SENSITIVE_LOG_PATHS = [
+  "/api/calendar/",
   "/api/mcp/",
   "/api/inbox-analyzer/",
   "/api/admin/cf/recurring-revenue",
@@ -132,7 +134,8 @@ app.use((req, res, next) => {
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
+      const loggedPath = path.startsWith("/api/calendar/ical/") ? "/api/calendar/ical/[redacted]" : path;
+      let logLine = `${req.method} ${loggedPath} ${res.statusCode} in ${duration}ms`;
       const isProduction = process.env.NODE_ENV === "production" || process.env.REPLIT_DEPLOYMENT === "1";
       const sensitiveResponse = path.startsWith("/api/extension/auth") || path === "/api/account/api-key";
       if (capturedJsonResponse && !isProduction && !sensitiveResponse) {
@@ -806,6 +809,7 @@ async function runStartupMigrations() {
     await db.execute(sql`ALTER TABLE workspace_invites ADD COLUMN IF NOT EXISTS invite_first_name TEXT`);
     await db.execute(sql`ALTER TABLE workspace_invites ADD COLUMN IF NOT EXISTS invite_last_name TEXT`);
     console.log("[startup] workspace_invites migration complete");
+    await ensureCalendarFeedGrantsTable();
 
     // Prune DMO entries older than 5 years (1825 days) — runs at every startup
     await db.execute(sql`

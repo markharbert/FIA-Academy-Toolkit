@@ -10,7 +10,7 @@ export interface WorkspaceChoice { id: string; name: string; isOwn: boolean }
 
 export function isSharedWorkspaceRequestAllowed(path: string) {
   return /^\/api\/(projects|project-templates|project-columns|tasks|task-attachments|account|workspace)(\/|$)/.test(path) ||
-    path === "/api/dashboard/projects" || path === "/api/calendar/ical-url" || path === "/api/activity/feature" ||
+    path === "/api/dashboard/projects" || path === "/api/calendar/ical-url" || path === "/api/calendar/rotate-ical-token" || path === "/api/activity/feature" ||
     /^\/api\/mcp\//.test(path);
 }
 

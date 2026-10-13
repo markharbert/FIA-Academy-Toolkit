@@ -3941,6 +3941,7 @@ export class DatabaseStorage implements IStorage {
       FROM project_tasks t
       JOIN projects p ON p.id = t.project_id
       WHERE t.user_id = ${userId}
+        AND p.user_id = ${userId}
         AND t.status <> 'done'
         AND t.due_date IS NOT NULL
         AND p.status = 'active'

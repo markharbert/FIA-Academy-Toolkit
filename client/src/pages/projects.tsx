@@ -17,6 +17,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
+import { CalendarSync } from "@/components/calendar-sync";
 import { dayDiffInTz, dueDateKey as dueDateKeyInTz, dueHasTime, formatInTz } from "@shared/datetime";
 import { Briefcase, Plus, MoreVertical, Archive, ArchiveRestore, Trash2, ChevronRight, ChevronLeft, CalendarClock, CalendarDays, CircleCheck, CircleDot, Loader2, Pencil, LayoutGrid, List, Flame, Clock, AlertTriangle, X, ListChecks, Inbox, Layers, Copy, FileText, Upload, ExternalLink, Globe2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -547,74 +548,6 @@ function AllTasksList({ tasks, isLoading, tz, onTaskClick }: { tasks: OpenTask[]
           </ul>
         </div>
       ))}
-    </div>
-  );
-}
-
-function CalendarSync() {
-  const { toast } = useToast();
-  const [copied, setCopied] = useState(false);
-
-  const { data, isLoading } = useQuery<{ url: string }>({
-    queryKey: ["/api/calendar/ical-url"],
-  });
-
-  const handleCopy = () => {
-    if (!data?.url) return;
-    navigator.clipboard.writeText(data.url).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-      toast({ title: "Link copied!", description: 'Paste it in Google Calendar → Other calendars → "From URL".' });
-    });
-  };
-
-  return (
-    <div className="mb-4 rounded-xl border border-border bg-card overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/30">
-        <CalendarDays className="h-4 w-4 text-indigo-500 shrink-0" />
-        <span className="text-sm font-semibold">Subscribe to Google Calendar</span>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <a
-                href="https://calendar.google.com/calendar/r/settings/addbyurl"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
-                data-testid="link-open-google-calendar"
-              >
-                Open Google Calendar <ExternalLink className="h-3 w-3" />
-              </a>
-            </TooltipTrigger>
-            <TooltipContent>Opens Google Calendar's "Add by URL" page</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-      <div className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
-        <p className="text-xs text-muted-foreground shrink-0">
-          Your private feed URL — copy and paste into any calendar app.
-        </p>
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <input
-            readOnly
-            value={isLoading ? "Generating…" : (data?.url ?? "")}
-            className="flex-1 min-w-0 text-xs font-mono bg-muted/50 border border-border rounded-md px-2.5 py-1.5 text-muted-foreground focus:outline-none truncate"
-            onClick={e => (e.target as HTMLInputElement).select()}
-            data-testid="input-ical-url"
-          />
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleCopy}
-            disabled={!data?.url}
-            className="shrink-0"
-            data-testid="button-copy-ical-url"
-          >
-            <Copy className="h-3.5 w-3.5 mr-1.5" />
-            {copied ? "Copied!" : "Copy"}
-          </Button>
-        </div>
-      </div>
     </div>
   );
 }

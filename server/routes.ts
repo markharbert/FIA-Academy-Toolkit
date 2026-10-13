@@ -62,6 +62,7 @@ import { listVimeoProjects, listVimeoVideos, searchVimeoVideos, extractVimeoVide
 import { FIA_EVENT_CALENDAR_ID, FIA_EVENT_CALENDAR_NAME, FIA_EVENT_CALENDAR_SUBSCRIBE_URL, FIA_EVENT_CALENDAR_TIMEZONE, GoogleCalendarError, getTrainingCalendarEvents } from "./googleCalendar";
 import { enqueueImportedReplayTranscripts } from "./trainingReplayTranscriptWorker";
 import { createTopicPulseSearchHandler } from "./topic-pulse-search-route";
+import { registerCalendarSubscriptionRoutes, registerProjectCalendarFeedRoute } from "./calendar-subscriptions";
 
 const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
@@ -345,7 +346,7 @@ async function requireAuth(req: Request, res: Response, next: NextFunction) {
       if (!owner || owner.isDisabled) {
         return res.status(403).json({ message: "Workspace access has been revoked" });
       }
-      if (!owner.isAdmin && process.env.CF_API_TOKEN && process.env.CF_COURSE_ID && (owner.cfEnrolled !== true || owner.cfRevokedAt)) {
+      if (!owner.isAdmin && (owner.cfEnrolled !== true || owner.cfRevokedAt)) {
         return res.status(403).json({ message: "Workspace access has been revoked" });
       }
       if (!user.isAdmin && !isImpersonating && !isSharedWorkspaceRequestAllowed(req.path)) {
@@ -908,10 +909,18 @@ export async function registerRoutes(
 
     const isImpersonating = !!req.session.impersonatingAdminId;
 
-    // When CF is configured, enforce active membership here too so the client
-    // cannot stay in an authenticated-looking state after membership is revoked.
-    // Skip this check when an admin is impersonating.
-    if (!isImpersonating && process.env.CF_API_TOKEN && process.env.CF_COURSE_ID && !user.isAdmin) {
+    // A shared workspace grants collaboration, not the actor's paid membership.
+    // Refresh identity against the selected invitation and owner's membership
+    // just like protected Projects requests. Reject a stale workspace without
+    // destroying the actor's login or access to other available workspaces.
+    if (req.session.workspaceOwnerId) {
+      const invite = await storage.getActiveInviteForMember(user.id, req.session.workspaceOwnerId);
+      const owner = invite ? await storage.getUser(req.session.workspaceOwnerId) : undefined;
+      if (!invite || !owner || owner.isDisabled || (!owner.isAdmin && (owner.cfEnrolled !== true || owner.cfRevokedAt))) {
+        return res.status(403).json({ message: "Workspace access has been revoked" });
+      }
+    } else if (!isImpersonating && process.env.CF_API_TOKEN && process.env.CF_COURSE_ID && !user.isAdmin) {
+      // Personal access keeps its existing configured-membership checks.
       if (user.cfEnrolled !== true) {
         req.session.destroy(() => {});
         return res.status(403).json({
@@ -11982,49 +11991,10 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     return s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
   }
 
-  // Returns the user's current iCal subscription URL (generates token if missing)
-  app.get("/api/calendar/ical-url", requireAuth, async (req: Request, res: Response) => {
-    try {
-      let user = await storage.getUser(req.session.userId!);
-      if (!user) return res.status(404).json({ message: "User not found" });
-      let token = user.icalToken;
-      if (!token) token = await storage.rotateIcalToken(req.session.userId!);
-      const proto = req.headers["x-forwarded-proto"] || req.protocol;
-      const host = req.headers["x-forwarded-host"] || req.get("host");
-      const url = `${proto}://${host}/api/calendar/ical/${token}.ics`;
-      res.json({ url });
-    } catch (err) {
-      console.error("[ical] get-url error:", err);
-      res.status(500).json({ message: "Failed to get iCal URL" });
-    }
-  });
-
-  // Regenerates the token, invalidating the old link
-  app.post("/api/calendar/rotate-ical-token", requireAuth, async (req: Request, res: Response) => {
-    try {
-      const token = await storage.rotateIcalToken(req.session.userId!);
-      const proto = req.headers["x-forwarded-proto"] || req.protocol;
-      const host = req.headers["x-forwarded-host"] || req.get("host");
-      const url = `${proto}://${host}/api/calendar/ical/${token}.ics`;
-      res.json({ url });
-    } catch (err) {
-      console.error("[ical] rotate-token error:", err);
-      res.status(500).json({ message: "Failed to rotate token" });
-    }
-  });
+  registerCalendarSubscriptionRoutes(app, requireAuth);
 
   // Public iCal feed — secured by the opaque token, no session required
-  app.get("/api/calendar/ical/:token", async (req: Request, res: Response) => {
-    try {
-      const token = req.params.token.replace(/\.ics$/, "");
-      const user = await storage.getUserByIcalToken(token);
-      if (!user) return res.status(404).type("text/plain").send("Calendar not found");
-
-      const [tasks, projects] = await Promise.all([
-        storage.getAllTasksWithDueDatesForUser(user.id),
-        storage.getProjectsForUser(user.id),
-      ]);
-
+  registerProjectCalendarFeedRoute(app, ({ user, tasks, projects }) => {
       const now = new Date();
       const dtstamp = icalDtstamp(now);
       const appHost = "toolkit.fearlessmarketinglab.com";
@@ -12164,14 +12134,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
       lines.push("END:VCALENDAR");
 
-      res.set("Content-Type", "text/calendar; charset=utf-8");
-      res.set("Content-Disposition", 'attachment; filename="academy-toolkit.ics"');
-      res.set("Cache-Control", "no-cache, no-store, must-revalidate");
-      res.send(lines.join("\r\n"));
-    } catch (err) {
-      console.error("[ical] feed error:", err);
-      res.status(500).type("text/plain").send("Failed to generate calendar");
-    }
+      return lines.join("\r\n");
   });
 
   // ─── Funnel Planner ───────────────────────────────────────────────────────

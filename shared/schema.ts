@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 export * from "./projects-mcp-schema";
-import { pgTable, text, varchar, integer, serial, timestamp, jsonb, boolean, real, unique, index, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, serial, timestamp, jsonb, boolean, real, unique, index, primaryKey, check, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -1965,6 +1965,17 @@ export const workspaceInvites = pgTable("workspace_invites", {
 
 export type WorkspaceInvite = typeof workspaceInvites.$inferSelect;
 export type InsertWorkspaceInvite = typeof workspaceInvites.$inferInsert;
+
+// Shared subscriptions are per actor and workspace, not the owner's personal bearer.
+export const calendarFeedGrants = pgTable("calendar_feed_grants", {
+  actorId: varchar("actor_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  ownerId: varchar("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  inviteId: varchar("invite_id").notNull().references(() => workspaceInvites.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  scope: text("scope").notNull().default("projects"),
+  revokedAt: timestamp("revoked_at"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [primaryKey({ columns: [table.actorId, table.ownerId] }), check("calendar_feed_grants_scope_check", sql`${table.scope} = 'projects'`)]);
 
 // ── Analytics ─────────────────────────────────────────────────────────────────
 
