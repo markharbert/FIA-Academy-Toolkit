@@ -61,13 +61,28 @@ must not extend a database critical section.
 **Why:** Database deletion and cloud storage cannot commit together. A failed
 cleanup can leave orphan files for separately confirmed recovery, but deleting
 files before discovering a concurrent edit would damage surviving content.
-Short predicate-protecting database locks were chosen over cooperation-only
+Predicate-protecting database locks are required rather than cooperation-only
 locks because website and independent SQL writers must also be protected.
 
 **How to apply:** Keep irreversible cloud removal after a successful conditional
 database commit. Any future finer-grained concurrency approach must protect new
 children and attachments as well as existing rows, without holding database
 locks during cloud requests.
+
+Fine-grained deletion locks must rely on immediate database-enforced foreign
+keys, including the subtask parent link. Keep that parent relationship
+non-cascading: a recursive cascade could delete deeper content that the existing
+one-level task preview never showed.
+
+**Why:** Locking only existing rows does not protect phantom children or incoming
+moves on an unconstrained parent link. Database relationship checks make direct
+SQL writers participate without application-specific cooperation. Broad writer
+locks unnecessarily block other projects and workspaces.
+
+**How to apply:** Fail closed if the required immediate relationship checks are
+missing. Lock referenced parents before discovering and locking their contents;
+compare a fresh snapshot after waiting for writers. Keep schema changes in the
+normal schema/publish flow, not request-time or startup-time DDL.
 
 The detailed MCP setup/reference page belongs in the Admin navigation and is
 admin-only for now. This restriction applies to the documentation page, not to

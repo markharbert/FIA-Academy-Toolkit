@@ -157,5 +157,11 @@ export async function deleteAttachmentGeneration(path: string, generation: strin
   // Keep the generation as a string: cloud generations can exceed JS's safe
   // integer range. The service checks this atomically, including replacements
   // that happen after our last metadata read.
-  await file.delete({ ifGenerationMatch: generation });
+  // File.delete options do not declare preconditions. Configure the reference
+  // instead, and do not use FileOptions.generation (the SDK converts it to a
+  // Number). preconditionOpts is copied to the request without losing precision.
+  const conditionalFile = file.bucket.file(file.name, {
+    preconditionOpts: { ifGenerationMatch: generation },
+  });
+  await conditionalFile.delete();
 }

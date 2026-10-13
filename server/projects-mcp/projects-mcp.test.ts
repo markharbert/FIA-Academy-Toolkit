@@ -14,6 +14,10 @@ import { hashToken, MCP_SCOPES } from "./oauth";
 import { executeProjectTool, inspectInterruptedDeletion, projectTools, type ToolContext } from "./tools";
 import { withDeletionLock } from "./recovery";
 import { ObjectNotFoundError, ObjectStorageService } from "../replit_integrations/object_storage/objectStorage";
+import type { Pool } from "pg";
+import { Storage } from "@google-cloud/storage";
+import { deleteUnchangedTarget, type DeletionKind } from "../project-deletion";
+import { ensureProjectDeletionConstraints } from "../project-deletion-constraints";
 
 // Isolated test-only HTTP server. No test login/bypass is registered in the app.
 const members = [randomUUID(), randomUUID(), randomUUID()];
@@ -27,6 +31,7 @@ let foreignSection: string;
 
 before(async () => {
   await ensureMcpDatabase();
+  await ensureProjectDeletionConstraints(pool);
   await pool.query(`INSERT INTO users(id,email,cf_enrolled,is_admin,is_disabled) VALUES
     ($1,$2,true,false,false),($3,$4,true,false,false),($5,$6,false,false,false)`,
   members.flatMap((id) => [id, `mcp-fixture-${id}@example.invalid`]));
@@ -513,6 +518,57 @@ test("writes during cloud cleanup preparation survive and require fresh in-clien
   }
 });
 
+async function waitForBlockedWriter(blockerPid: number, waiterPid?: number) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const { rows } = await pool.query(
+      "SELECT pid FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid)) AND ($2::int IS NULL OR pid=$2)",
+      [blockerPid, waiterPid ?? null]);
+    if (rows.length) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.fail("Expected an independent PostgreSQL writer to be blocked by the target's row locks");
+}
+
+// Pause with real PostgreSQL locks held, immediately before the final snapshot.
+// Only the deletion's connection is wrapped; every competing writer is plain SQL.
+async function withPausedConditionalDeletion(
+  kind: DeletionKind, id: string, owner: string, whileLocked: (pid: number) => Promise<void>,
+) {
+  const snapshot = await storage.getDeletionSnapshot(kind, id, owner);
+  let resume!: () => void;
+  let reached!: (pid: number) => void;
+  const gate = new Promise<void>((resolve) => { resume = resolve; });
+  const paused = new Promise<number>((resolve) => { reached = resolve; });
+  const controlledPool = {
+    connect: async () => {
+      const client = await pool.connect();
+      return {
+        query: async (text: string, values?: any[]) => {
+          if (text.includes("WITH root AS")) {
+            const { rows: [backend] } = await client.query("SELECT pg_backend_pid() AS pid");
+            reached(backend.pid);
+            await gate;
+          }
+          return client.query(text, values);
+        },
+        release: () => client.release(),
+      };
+    },
+  } as unknown as Pool;
+  const deletion = deleteUnchangedTarget(controlledPool, kind, id, owner, hashToken(JSON.stringify(snapshot)));
+  // Observe failures immediately, rather than leaving a dangling rejected promise.
+  const result = deletion.then((value) => ({ value }), (error) => ({ error }));
+  try {
+    const pid = await Promise.race([paused, result.then((r) => { throw "error" in r ? r.error : new Error("Deletion did not pause"); })]);
+    await whileLocked(pid);
+  } finally {
+    resume();
+    const completed = await result;
+    if ("error" in completed) throw completed.error;
+  }
+  return deletion;
+}
+
 test("final conditional deletion waits for an uncommitted writer and preserves its new content", { timeout: 15000 }, async () => {
   const c = await getRecoveryContext();
   const p = await storage.createProject(c.workspaceId, { name: "Final database race" });
@@ -524,13 +580,8 @@ test("final conditional deletion waits for an uncommitted writer and preserves i
       "INSERT INTO project_tasks(user_id,project_id,title) VALUES($1,$2,'Concurrent uncommitted task') RETURNING id",
       [c.workspaceId, p.id]);
     const deletion = storage.deleteUnchangedTarget("project", p.id, c.workspaceId, hashToken(JSON.stringify(snapshot)));
-    let waiting = false;
-    for (let attempt = 0; attempt < 100 && !waiting; attempt++) {
-      waiting = (await pool.query(`SELECT 1 FROM pg_locks
-        WHERE relation='project_tasks'::regclass AND mode='ShareRowExclusiveLock' AND NOT granted`)).rows.length > 0;
-      if (!waiting) await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-    assert.ok(waiting, "The conditional delete must wait for the independent writer");
+    const { rows: [backend] } = await writer.query("SELECT pg_backend_pid() AS pid");
+    await waitForBlockedWriter(backend.pid);
     await writer.query("COMMIT");
     assert.equal(await deletion, false);
     assert.ok(await storage.getProject(p.id, c.workspaceId));
@@ -538,6 +589,218 @@ test("final conditional deletion waits for an uncommitted writer and preserves i
   } finally {
     await writer.query("ROLLBACK");
     writer.release();
+  }
+});
+
+test("unrelated SQL edits stay responsive while each deletion kind holds its locks", { timeout: 15000 }, async () => {
+  for (const kind of ["project", "task", "attachment"] as const) {
+    const p = await storage.createProject(members[0], { name: "Locked deletion" });
+    const t = await storage.createTask(members[0], p.id, { title: "Locked task" });
+    const att = await storage.createTaskAttachment(t.id, members[0],
+      { objectPath: `/objects/uploads/${mutation()}`, filename: "locked.txt", mimeType: "text/plain", size: 1 });
+    const metrics: any[] = [];
+    const info = console.info;
+    console.info = (...args) => {
+      if (args[0] === "[project-deletion] lock timing") metrics.push(args[1]);
+      info(...args);
+    };
+    try {
+      assert.equal(await withPausedConditionalDeletion(kind, kind === "project" ? p.id : kind === "task" ? t.id : att.id,
+        members[0], async (pid) => {
+          const broadLocks = await pool.query(`SELECT 1 FROM pg_locks WHERE pid=$1 AND locktype='relation'
+            AND mode IN ('ShareRowExclusiveLock', 'ExclusiveLock', 'AccessExclusiveLock')`, [pid]);
+          assert.equal(broadLocks.rows.length, 0, "Normal deletion must not acquire table-level writer locks");
+          // Both a different project in the same workspace and a different
+          // workspace must remain writable, including every protected table.
+          for (const owner of [members[0], members[1]]) {
+            const writer = await pool.connect();
+            try {
+              await writer.query("BEGIN");
+              await writer.query("SET LOCAL lock_timeout = '500ms'");
+              const { rows: [other] } = await writer.query(
+                "INSERT INTO projects(user_id,name) VALUES($1,'Unrelated') RETURNING id", [owner]);
+              const { rows: [task] } = await writer.query(
+                "INSERT INTO project_tasks(user_id,project_id,title) VALUES($1,$2,'Unrelated task') RETURNING id", [owner, other.id]);
+              await writer.query("UPDATE projects SET name='Still editable' WHERE id=$1", [other.id]);
+              await writer.query("UPDATE project_tasks SET notes='Independent edit' WHERE id=$1", [task.id]);
+              await writer.query("INSERT INTO project_columns(user_id,project_id,name) VALUES($1,$2,'Unrelated column')", [owner, other.id]);
+              await writer.query("INSERT INTO task_comments(user_id,task_id,body) VALUES($1,$2,'Unrelated comment')", [owner, task.id]);
+              await writer.query(`INSERT INTO task_attachments(user_id,task_id,object_path,filename,mime_type,size)
+                VALUES($1,$2,'/objects/unrelated','unrelated.txt','text/plain',1)`, [owner, task.id]);
+              await writer.query("UPDATE project_columns SET name='Edited' WHERE project_id=$1", [other.id]);
+              await writer.query("UPDATE task_comments SET body='Edited' WHERE task_id=$1", [task.id]);
+              await writer.query("UPDATE task_attachments SET filename='edited.txt' WHERE task_id=$1", [task.id]);
+              await writer.query("DELETE FROM projects WHERE id=$1", [other.id]);
+              await writer.query("COMMIT");
+            } finally {
+              await writer.query("ROLLBACK");
+              writer.release();
+            }
+          }
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }), true);
+      assert.equal(metrics.length, 1);
+      assert.equal(metrics[0].outcome, "deleted");
+      assert.ok(metrics[0].holdMs >= 100);
+      assert.ok(metrics[0].totalMs >= metrics[0].holdMs);
+      assert.ok(metrics[0].acquireMs >= 0);
+    } finally {
+      console.info = info;
+      await pool.query("DELETE FROM projects WHERE id=$1", [p.id]);
+    }
+  }
+});
+
+// All insert and incoming-move predicates, plus edits to existing contents.
+// An earlier writer invalidates consent; a later writer waits and cannot create
+// an orphan or add an unapproved stored-file reference to a deleted target.
+const raceCases = [
+  { kind: "project", change: "task insert" },
+  { kind: "project", change: "task move" },
+  { kind: "project", change: "column insert" },
+  { kind: "project", change: "column move" },
+  { kind: "task", change: "child insert" },
+  { kind: "task", change: "child move" },
+  { kind: "task", change: "comment insert" },
+  { kind: "task", change: "comment move" },
+  { kind: "task", change: "attachment insert" },
+  { kind: "task", change: "attachment move" },
+  { kind: "task", change: "child attachment insert" },
+  { kind: "project", change: "project edit" },
+  { kind: "task", change: "task edit" },
+  { kind: "task", change: "comment edit" },
+  { kind: "attachment", change: "attachment edit" },
+] as const;
+
+async function raceFixture(kind: DeletionKind, change: string) {
+  const owner = members[0];
+  const p = await storage.createProject(owner, { name: "Race target" });
+  const other = await storage.createProject(owner, { name: "Move source" });
+  const t = await storage.createTask(owner, p.id, { title: "Race task" });
+  const child = await storage.createTask(owner, p.id, { title: "Existing child", parentTaskId: t.id });
+  const source = await storage.createTask(owner, other.id, { title: "Incoming task" });
+  const att = await storage.createTaskAttachment(t.id, owner,
+    { objectPath: `/objects/uploads/${mutation()}`, filename: "existing.txt", mimeType: "text/plain", size: 1 });
+  const sourceAtt = await storage.createTaskAttachment(source.id, owner,
+    { objectPath: `/objects/uploads/${mutation()}`, filename: "incoming.txt", mimeType: "text/plain", size: 1 });
+  const comment = await storage.addTaskComment(t.id, owner, "Existing comment");
+  const sourceComment = await storage.addTaskComment(source.id, owner, "Incoming comment");
+  const column = await storage.createColumn(owner, other.id, { name: "Incoming column" });
+  const statements: Record<string, [string, any[]]> = {
+    "task insert": ["INSERT INTO project_tasks(user_id,project_id,title) VALUES($1,$2,'Phantom task')", [owner, p.id]],
+    "task move": ["UPDATE project_tasks SET project_id=$1 WHERE id=$2", [p.id, source.id]],
+    "column insert": ["INSERT INTO project_columns(user_id,project_id,name) VALUES($1,$2,'Phantom column')", [owner, p.id]],
+    "column move": ["UPDATE project_columns SET project_id=$1 WHERE id=$2", [p.id, column.id]],
+    "child insert": ["INSERT INTO project_tasks(user_id,project_id,parent_task_id,title) VALUES($1,$2,$3,'Phantom child')", [owner, p.id, t.id]],
+    "child move": ["UPDATE project_tasks SET parent_task_id=$1 WHERE id=$2", [t.id, source.id]],
+    "comment insert": ["INSERT INTO task_comments(user_id,task_id,body) VALUES($1,$2,'Phantom comment')", [owner, t.id]],
+    "comment move": ["UPDATE task_comments SET task_id=$1 WHERE id=$2", [t.id, sourceComment.id]],
+    "attachment insert": [`INSERT INTO task_attachments(user_id,task_id,object_path,filename,mime_type,size)
+      VALUES($1,$2,'/objects/phantom','new.txt','text/plain',1)`, [owner, t.id]],
+    "attachment move": ["UPDATE task_attachments SET task_id=$1 WHERE id=$2", [t.id, sourceAtt.id]],
+    "child attachment insert": [`INSERT INTO task_attachments(user_id,task_id,object_path,filename,mime_type,size)
+      VALUES($1,$2,'/objects/phantom-child','new.txt','text/plain',1)`, [owner, child.id]],
+    "project edit": ["UPDATE projects SET name='Independent edit' WHERE id=$1", [p.id]],
+    "task edit": ["UPDATE project_tasks SET notes='Independent edit' WHERE id=$1", [child.id]],
+    "comment edit": ["UPDATE task_comments SET body='Independent edit' WHERE id=$1", [comment.id]],
+    "attachment edit": ["UPDATE task_attachments SET filename='edited.txt' WHERE id=$1", [att.id]],
+  };
+  return { owner, projects: [p.id, other.id], id: kind === "project" ? p.id : kind === "task" ? t.id : att.id, statement: statements[change] };
+}
+
+test("earlier independent insert, move, and edit writers invalidate the deletion snapshot", { timeout: 30000 }, async () => {
+  for (const { kind, change } of raceCases) {
+    const f = await raceFixture(kind, change);
+    const snapshot = await storage.getDeletionSnapshot(kind, f.id, f.owner);
+    const writer = await pool.connect();
+    let deletion: Promise<boolean> | undefined;
+    try {
+      await writer.query("BEGIN");
+      await writer.query(...f.statement);
+      const { rows: [backend] } = await writer.query("SELECT pg_backend_pid() AS pid");
+      deletion = storage.deleteUnchangedTarget(kind, f.id, f.owner, hashToken(JSON.stringify(snapshot)));
+      // Attach the rejection observer before waiting for the real lock.
+      deletion.catch(() => {});
+      await waitForBlockedWriter(backend.pid);
+      await writer.query("COMMIT");
+      assert.equal(await deletion, false, `${kind}: ${change}`);
+      assert.ok(await storage.getDeletionSnapshot(kind, f.id, f.owner), change);
+    } finally {
+      await writer.query("ROLLBACK");
+      writer.release();
+      await deletion?.catch(() => {});
+      await pool.query("DELETE FROM projects WHERE id=ANY($1::varchar[])", [f.projects]);
+    }
+  }
+});
+
+test("later independent insert, move, and edit writers cannot enter a locked deletion scope", { timeout: 30000 }, async () => {
+  for (const { kind, change } of raceCases) {
+    const f = await raceFixture(kind, change);
+    const writer = await pool.connect();
+    let write: Promise<any> | undefined;
+    try {
+      await writer.query("BEGIN");
+      await writer.query("SET LOCAL lock_timeout = '5s'");
+      const { rows: [backend] } = await writer.query("SELECT pg_backend_pid() AS pid");
+      assert.equal(await withPausedConditionalDeletion(kind, f.id, f.owner, async (pid) => {
+        write = writer.query(...f.statement).then((result) => ({ result }), (error) => ({ error }));
+        await waitForBlockedWriter(pid, backend.pid);
+      }), true, change);
+      const result = await write!;
+      if (change.endsWith("edit")) {
+        assert.equal(result.error, undefined, change);
+        assert.equal(result.result.rowCount, 0, "A late edit must not update a deleted row");
+      } else {
+        assert.equal(result.error?.code, "23503", `${change} must fail its database FK check after deletion`);
+      }
+      await writer.query("ROLLBACK");
+      assert.equal(await storage.getDeletionSnapshot(kind, f.id, f.owner), undefined);
+    } finally {
+      await writer.query("ROLLBACK");
+      writer.release();
+      await pool.query("DELETE FROM projects WHERE id=ANY($1::varchar[])", [f.projects]);
+    }
+  }
+});
+
+test("missing immediate relationship checks fail closed before deletion and can be rechecked after schema setup", async () => {
+  let count = 4;
+  const queries: string[] = [];
+  const unreadyPool = {
+    connect: async () => ({
+      query: async (text: string) => { queries.push(text); return { rows: [{ count }] }; },
+      release: () => {},
+    }),
+  } as unknown as Pool;
+  await assert.rejects(() => deleteUnchangedTarget(unreadyPool, "task", randomUUID(), members[0], "unused"),
+    /requires immediate database relationship constraints/);
+  assert.equal(queries.length, 1);
+  assert.ok(!queries[0].includes("DELETE"));
+  count = 5;
+  await ensureProjectDeletionConstraints(unreadyPool);
+  assert.equal(queries.length, 2, "A failed readiness check must not be cached permanently");
+});
+
+test("the parent constraint refuses unpreviewed recursive cascades and rolls back the entire task deletion", async () => {
+  const p = await storage.createProject(members[0], { name: "Legacy deep tree safety" });
+  try {
+    const t = await storage.createTask(members[0], p.id, { title: "Approved root" });
+    const child = await storage.createTask(members[0], p.id, { title: "Approved child", parentTaskId: t.id });
+    // The website disallows deeper nesting; independent SQL can still create
+    // it. A new FK must not silently expand the existing one-level preview.
+    const { rows: [grandchild] } = await pool.query(`INSERT INTO project_tasks(user_id,project_id,parent_task_id,title)
+      VALUES($1,$2,$3,'Not in the task preview') RETURNING id`, [members[0], p.id, child.id]);
+    const attachment = await storage.createTaskAttachment(child.id, members[0],
+      { objectPath: `/objects/uploads/${mutation()}`, filename: "preserved.txt", mimeType: "text/plain", size: 1 });
+    const snapshot = await storage.getDeletionSnapshot("task", t.id, members[0]);
+    assert.ok(!snapshot?.tasks.some((task: any) => task.id === grandchild.id));
+    await assert.rejects(() => storage.deleteUnchangedTarget("task", t.id, members[0], hashToken(JSON.stringify(snapshot))),
+      (error: any) => error.code === "23503");
+    for (const id of [t.id, child.id, grandchild.id]) assert.ok(await storage.getTask(id, members[0]));
+    assert.ok(await storage.getTaskAttachment(attachment.id, members[0]));
+  } finally {
+    await pool.query("DELETE FROM projects WHERE id=$1", [p.id]);
   }
 });
 
@@ -838,19 +1101,44 @@ test("orphan cleanup needs fresh member-owned consent and refuses replaced, link
   const files = new Map<string, string>();
   let deletes = 0, raceReplacement = false, failDelete = false;
   const generation = "9007199254740993123";
+  const deleteRequests: string[] = [];
+  let replacementRejections = 0;
+  // Use the installed SDK against a local HTTP storage fixture, not a mocked
+  // File.delete. This verifies the actual wire query and its string precision.
+  const cloud = express();
+  cloud.all("/storage/v1/b/cleanup-fixtures/o/:object", (req, res) => {
+    const path = req.params.object;
+    if (req.method === "DELETE") {
+      deleteRequests.push(String(req.query.ifGenerationMatch ?? ""));
+      if (raceReplacement) { files.set(path, "9007199254740993124"); raceReplacement = false; }
+      if (req.query.ifGenerationMatch !== files.get(path)) {
+        replacementRejections++;
+        res.status(412).json({ error: { code: 412, message: "Precondition failed" } });
+        return;
+      }
+      if (failDelete) {
+        res.status(503).json({ error: { code: 503, message: "Storage unavailable" } });
+        return;
+      }
+      deletes++;
+      files.delete(path);
+      res.sendStatus(204);
+      return;
+    }
+    if (!files.has(path)) { res.status(404).json({ error: { code: 404, message: "Not found" } }); return; }
+    res.json({ name: path, bucket: "cleanup-fixtures", generation: files.get(path) });
+  });
+  const cloudServer = cloud.listen(0, "127.0.0.1");
+  await new Promise<void>((resolve) => cloudServer.once("listening", resolve));
+  const sdk = new Storage({
+    projectId: "cleanup-fixtures",
+    apiEndpoint: `http://127.0.0.1:${(cloudServer.address() as any).port}`,
+    useAuthWithCustomEndpoint: false,
+    retryOptions: { autoRetry: false },
+  });
   ObjectStorageService.prototype.getObjectEntityFile = async (path) => {
     if (!files.has(path)) throw new ObjectNotFoundError();
-    return {
-      getMetadata: async () => [{ generation: files.get(path) }],
-      delete: async (options: any) => {
-        assert.equal(typeof options.ifGenerationMatch, "string");
-        if (raceReplacement) { files.set(path, "9007199254740993124"); raceReplacement = false; }
-        if (options.ifGenerationMatch !== files.get(path)) throw Object.assign(new Error("Precondition"), { code: 412 });
-        if (failDelete) throw new Error("Storage unavailable");
-        deletes++;
-        files.delete(path);
-      },
-    } as any;
+    return sdk.bucket("cleanup-fixtures").file(path);
   };
   const p = await storage.createProject(c.workspaceId, insertProjectSchema.parse({ name: "Cleanup fixtures" }));
   const t = await storage.createTask(c.workspaceId, p.id, { title: "Leftovers", projectId: p.id });
@@ -974,9 +1262,14 @@ test("orphan cleanup needs fresh member-owned consent and refuses replaced, link
     assert.equal(deletes, countAfterDeletion);
     await executeProjectTool("confirm_deletion", confirmArgs(second), c);
     assert.equal((await inspectInterruptedDeletion(originalRow, c)).storage, "absent");
+    assert.ok(deleteRequests.length > 0);
+    assert.ok(deleteRequests.every((value) => value === generation), "Every real SDK DELETE must carry the exact string generation");
+    assert.equal(replacementRejections, 1, "The replacement race must be rejected by the HTTP service with 412");
   } finally {
     ObjectStorageService.prototype.getObjectEntityFile = getFile;
     await pool.query("DELETE FROM project_mcp_grants WHERE id=$1", [otherGrant]);
+    cloudServer.closeAllConnections();
+    await new Promise<void>((resolve) => cloudServer.close(() => resolve()));
   }
 });
 

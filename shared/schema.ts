@@ -1509,7 +1509,7 @@ export const projectTasks = pgTable("project_tasks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
-  parentTaskId: varchar("parent_task_id"), // nullable; one level deep
+  parentTaskId: varchar("parent_task_id").references((): AnyPgColumn => projectTasks.id), // nullable; one level deep, no recursive cascade
   columnId: varchar("column_id"), // nullable; references project_columns(id)
   title: text("title").notNull(),
   notes: text("notes").default("").notNull(), // HTML from tiptap

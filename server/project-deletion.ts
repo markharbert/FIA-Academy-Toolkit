@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
+import { performance } from "node:perf_hooks";
+import { ensureProjectDeletionConstraints } from "./project-deletion-constraints";
 
 export type DeletionKind = "project" | "task" | "attachment";
 export interface DeletionSnapshot {
@@ -44,32 +46,67 @@ export function deletionSnapshotHash(snapshot: DeletionSnapshot) {
 export async function deleteUnchangedTarget(
   pool: Pool, kind: DeletionKind, id: string, owner: string, expectedHash: string,
 ): Promise<boolean> {
+  await ensureProjectDeletionConstraints(pool);
   const client = await pool.connect();
+  let lockingStarted: number | undefined;
+  let locksAcquired: number | undefined;
+  let transactionEnded: number | undefined;
+  let outcome = "error";
   try {
     await client.query("BEGIN");
     await client.query("SET LOCAL lock_timeout = '5s'");
-    // Short database-only critical section. Table locks also protect predicates:
-    // new children/comments/files and moves into the target must not slip between
-    // the comparison and cascade. All writers participate, including website SQL.
-    // No cloud requests run while these locks are held.
-    await client.query(`LOCK TABLE projects, project_tasks, project_columns,
-      task_comments, task_attachments IN SHARE ROW EXCLUSIVE MODE`);
+    lockingStarted = performance.now();
+    // FOR UPDATE (not NO KEY UPDATE) conflicts with the KEY SHARE locks acquired
+    // by immediate FK checks, including independent SQL inserts/moves. Lock the
+    // parents before discovering children, then lock existing contents against
+    // edits/moves out. Each READ COMMITTED statement sees writers that committed
+    // while we waited. No cloud I/O occurs in this critical section.
+    await client.query(`SELECT id FROM ${tables[kind]} WHERE id=$1 AND user_id=$2 FOR UPDATE`, [id, owner]);
+    if (kind !== "attachment") {
+      const { rows: tasks } = await client.query(`
+        SELECT id FROM project_tasks
+        WHERE ${kind === "project" ? "project_id=$1" : "id=$1 OR parent_task_id=$1"}
+        ORDER BY id FOR UPDATE`, [id]);
+      const taskIds = tasks.map((task) => task.id);
+      await client.query("SELECT id FROM task_comments WHERE task_id=ANY($1::varchar[]) ORDER BY id FOR UPDATE", [taskIds]);
+      await client.query("SELECT id FROM task_attachments WHERE task_id=ANY($1::varchar[]) ORDER BY id FOR UPDATE", [taskIds]);
+      if (kind === "project") {
+        await client.query("SELECT id FROM project_columns WHERE project_id=$1 ORDER BY id FOR UPDATE", [id]);
+      }
+    }
+    locksAcquired = performance.now();
     const snapshot = await readDeletionSnapshot(client, kind, id, owner);
     if (!snapshot || deletionSnapshotHash(snapshot) !== expectedHash) {
       await client.query("ROLLBACK");
+      transactionEnded = performance.now();
+      outcome = "stale";
       return false;
     }
     if (kind === "task") {
-      // parent_task_id is not a foreign key; mirror the normal explicit cascade.
+      // Keep the existing one-level explicit cascade; the parent FK is NO ACTION.
       await client.query("DELETE FROM project_tasks WHERE parent_task_id=$1", [id]);
     }
     await client.query(`DELETE FROM ${tables[kind]} WHERE id=$1 AND user_id=$2`, [id, owner]);
     await client.query("COMMIT");
+    transactionEnded = performance.now();
+    outcome = "deleted";
     return true;
   } catch (error) {
     await client.query("ROLLBACK");
+    transactionEnded = performance.now();
     throw error;
   } finally {
     client.release();
+    if (lockingStarted !== undefined) {
+      const end = transactionEnded ?? performance.now();
+      // No member IDs/content. Total includes time holding early locks while
+      // later locks are acquired; holdMs is the final comparison/delete phase.
+      console.info("[project-deletion] lock timing", {
+        kind, outcome,
+        acquireMs: Math.round((locksAcquired ?? end) - lockingStarted),
+        holdMs: locksAcquired === undefined ? 0 : Math.round(end - locksAcquired),
+        totalMs: Math.round(end - lockingStarted),
+      });
+    }
   }
 }
