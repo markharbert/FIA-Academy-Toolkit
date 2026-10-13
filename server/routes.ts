@@ -40,6 +40,7 @@ import { hasExactIds } from "@shared/course-structure";
 import { slugify } from "@shared/slug";
 import { formatTranscriptParagraphs } from "@shared/transcript-format";
 import { resolveEmailLogoPath } from "./email-assets";
+import { registerWorkspaceRoutes, listAvailableWorkspaces, defaultWorkspaceOwner, validInviteForEmail, workspaceInviteReturnPath, isSharedWorkspaceRequestAllowed } from "./workspaces";
 import OpenAI from "openai";
 import {
   verifyCfWebhookSignature,
@@ -334,7 +335,7 @@ async function requireAuth(req: Request, res: Response, next: NextFunction) {
     if (isCollaborator) {
       const invite = await storage.getActiveInviteForMember(req.session.userId!, req.session.workspaceOwnerId!);
       if (!invite) {
-        req.session.destroy(() => {});
+        // Reject this workspace, not the person's other valid workspaces.
         return res.status(403).json({ message: "Workspace access has been revoked" });
       }
       // The collaborator's access is only as valid as the owner's membership.
@@ -342,12 +343,13 @@ async function requireAuth(req: Request, res: Response, next: NextFunction) {
       // off immediately — they are tied to that account.
       const owner = await storage.getUser(req.session.workspaceOwnerId!);
       if (!owner || owner.isDisabled) {
-        req.session.destroy(() => {});
         return res.status(403).json({ message: "Workspace access has been revoked" });
       }
-      if (process.env.CF_API_TOKEN && process.env.CF_COURSE_ID && owner.cfEnrolled !== true) {
-        req.session.destroy(() => {});
+      if (!owner.isAdmin && process.env.CF_API_TOKEN && process.env.CF_COURSE_ID && (owner.cfEnrolled !== true || owner.cfRevokedAt)) {
         return res.status(403).json({ message: "Workspace access has been revoked" });
+      }
+      if (!user.isAdmin && !isImpersonating && !isSharedWorkspaceRequestAllowed(req.path)) {
+        return res.status(403).json({ message: "Shared workspaces provide Project Manager access only. Choose your own workspace for other Academy tools." });
       }
     } else if (!isImpersonating && process.env.CF_API_TOKEN && process.env.CF_COURSE_ID && !user.isAdmin) {
       // When CF is configured, enforce active membership on every authenticated
@@ -609,39 +611,43 @@ export async function registerRoutes(
       // Collaborators bypass the CF enrollment check — the owner's membership
       // is what matters, not theirs. We also stamp workspaceOwnerId onto the
       // session here so requireAuth recognises them as a collaborator going forward.
-      const collaboratorOwnerId = await storage.getCollaboratorOwner(user.id);
-      const isCollaborator = !!collaboratorOwnerId;
+      const hasCollaboratorAccess = (await listAvailableWorkspaces(user.id)).some((choice) => !choice.isOwn);
+      const pendingInvite = await validInviteForEmail(req.body.workspaceInviteToken, user.email);
 
       // If ClickFunnels is configured, verify active membership via live CF API
       // for non-admin, non-collaborator users.
-      if (!isCollaborator && CF_API_TOKEN && CF_COURSE_ID && !user.isAdmin) {
+      if ((!hasCollaboratorAccess || user.cfEnrolled === true) && !pendingInvite && CF_API_TOKEN && CF_COURSE_ID && !user.isAdmin) {
         try {
           const cfInfo = await checkCfEnrollmentByEmail(email, user.cfContactId ?? undefined);
           if (!cfInfo.enrolled) {
             console.warn(`[Login] CF live check: not enrolled — ${email}`);
             await storage.updateUser(user.id, { cfEnrolled: false, cfRevokedAt: new Date() });
-            return res.status(403).json({
+            user.cfEnrolled = false;
+            user.cfRevokedAt = new Date();
+            if (!hasCollaboratorAccess) return res.status(403).json({
               message: "Your Fearless Influencer Academy membership is not active. Please check your membership and try again.",
               error: "cf_not_enrolled",
             });
+          } else {
+            // Sync own-membership status without affecting accepted shared access.
+            await storage.updateUser(user.id, {
+              cfEnrolled: true, cfRevokedAt: null,
+              cfContactId: cfInfo.contactId ?? user.cfContactId,
+            });
+            user.cfEnrolled = true;
+            user.cfRevokedAt = null;
+            console.log(`[Login] CF live check passed for ${email}`);
           }
-          // Sync latest CF data back to local DB
-          await storage.updateUser(user.id, {
-            cfEnrolled: true,
-            cfRevokedAt: null,
-            cfContactId: cfInfo.contactId ?? user.cfContactId,
-          });
-          console.log(`[Login] CF live check passed for ${email}`);
         } catch (cfErr: any) {
           console.error(`[Login] CF API check failed, falling back to local DB: ${cfErr?.message}`);
           // CF API is down — fall back to locally-synced status
-          if (user.cfEnrolled === false) {
+          if (user.cfEnrolled === false && !hasCollaboratorAccess) {
             return res.status(403).json({
               message: "Your membership has been revoked. Please reactivate your Fearless Influencer Academy membership to continue.",
               error: "cf_revoked",
             });
           }
-          if (user.cfEnrolled !== true) {
+          if (user.cfEnrolled !== true && !hasCollaboratorAccess) {
             return res.status(403).json({
               message: "We couldn't verify your membership right now. Please try again in a moment.",
               error: "cf_api_error",
@@ -654,8 +660,10 @@ export async function registerRoutes(
         req.session.regenerate(err => (err ? reject(err) : resolve()))
       );
       req.session.userId = user.id;
-      if (collaboratorOwnerId) {
-        req.session.workspaceOwnerId = collaboratorOwnerId;
+      const initialWorkspaceOwner = await defaultWorkspaceOwner(user.id);
+      const isCollaborator = !!initialWorkspaceOwner;
+      if (initialWorkspaceOwner) {
+        req.session.workspaceOwnerId = initialWorkspaceOwner;
       }
 
       // Update last login timestamp
@@ -694,7 +702,7 @@ export async function registerRoutes(
           cfEnrolled: user.cfEnrolled,
           cfEnrolledAt: user.cfEnrolledAt,
           cfRevokedAt: user.cfRevokedAt,
-          workspaceOwnerId: collaboratorOwnerId ?? null,
+          workspaceOwnerId: initialWorkspaceOwner ?? null,
           isCollaborator,
         }
       });
@@ -1012,7 +1020,9 @@ export async function registerRoutes(
         userAgent: req.get("user-agent") || null,
       });
 
-      await sendPasswordResetEmail(email, token);
+      const invitation = await validInviteForEmail(req.body.workspaceInviteToken, email);
+      const returnTo = invitation ? workspaceInviteReturnPath(invitation.inviteToken) : undefined;
+      await sendPasswordResetEmail(email, token, false, returnTo);
 
       res.json({ message: successMessage });
     } catch (err) {
@@ -1306,7 +1316,8 @@ export async function registerRoutes(
     app.get("/api/auth/oauth/google", (req: Request, _res: Response, next: NextFunction) => {
       const redirect = typeof req.query.redirect === "string" ? req.query.redirect : "";
       if (/^\/extension\/connect\?request=[\w-]{43}$/.test(redirect) ||
-          /^\/mcp\/authorize\?request=[0-9a-f-]{36}$/.test(redirect)) {
+          /^\/mcp\/authorize\?request=[0-9a-f-]{36}$/.test(redirect) ||
+          /^\/workspace\/accept\?token=[a-f0-9]{64}$/i.test(redirect)) {
         req.session.extensionGoogleReturnTo = redirect;
       } else {
         delete req.session.extensionGoogleReturnTo;
@@ -1318,7 +1329,8 @@ export async function registerRoutes(
 
     app.get("/api/auth/oauth/google/callback", (req: Request, res: Response, next: NextFunction) => {
       console.log("[OAuth Google] Callback received");
-      passport.authenticate("google", (err: any, user: any, info: any) => {
+      passport.authenticate("google", async (err: any, user: any, info: any) => {
+        try {
         console.log("[OAuth Google] Passport result - err:", err?.message || null, "user:", user?.id || null, "info:", JSON.stringify(info));
         if (err) {
           console.error("[OAuth Google] Authentication error:", err.message, err.stack);
@@ -1335,8 +1347,13 @@ export async function registerRoutes(
           return res.redirect("/?error=account_disabled");
         }
 
-        // If ClickFunnels is configured, require active membership for non-admin users.
-        if (CF_API_TOKEN && CF_COURSE_ID && !user.isAdmin) {
+        const returnTo = req.session.extensionGoogleReturnTo || "/dashboard";
+        const pendingToken = /^\/workspace\/accept\?token=([a-f0-9]{64})$/i.exec(returnTo)?.[1];
+        const pendingInvite = await validInviteForEmail(pendingToken, user.email);
+        const sharedAccess = (await listAvailableWorkspaces(user.id)).some((w) => !w.isOwn);
+        // A pending invitation permits identity sign-in only. The protected
+        // workspace remains inaccessible until that invitation is accepted.
+        if (CF_API_TOKEN && CF_COURSE_ID && !user.isAdmin && !sharedAccess && !pendingInvite) {
           if (user.cfEnrolled === false) {
             console.warn("[OAuth Google] CF membership revoked for user:", user.id);
             return res.redirect("/?error=cf_revoked");
@@ -1349,22 +1366,27 @@ export async function registerRoutes(
         
         // Set session and save before redirect
         console.log("[OAuth Google] Setting session for user:", user.id);
-        const returnTo = req.session.extensionGoogleReturnTo || "/dashboard";
+        const workspaceOwnerId = await defaultWorkspaceOwner(user.id);
         req.session.regenerate((regenerateErr) => {
           if (regenerateErr) {
             console.error("[OAuth Google] Session regeneration error:", regenerateErr);
             return res.redirect("/?error=oauth_failed&reason=session_save");
           }
           req.session.userId = user.id;
+          if (workspaceOwnerId) req.session.workspaceOwnerId = workspaceOwnerId;
           req.session.save((saveErr) => {
             if (saveErr) {
               console.error("[OAuth Google] Session save error:", saveErr);
               return res.redirect("/?error=oauth_failed&reason=session_save");
             }
             console.log("[OAuth Google] Session saved");
-            res.redirect(returnTo);
+            res.redirect(returnTo === "/dashboard" && workspaceOwnerId ? "/projects" : returnTo);
           });
         });
+        } catch (error) {
+          console.error("[OAuth Google] Workspace login failed:", error instanceof Error ? error.name : "Unknown error");
+          res.redirect("/?error=oauth_failed");
+        }
       })(req, res, next);
     });
   } else {
@@ -10665,99 +10687,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
-  // GET /api/workspace/invite/info?token=xxx — public, returns invite metadata
-  app.get("/api/workspace/invite/info", async (req: Request, res: Response) => {
-    const { token } = req.query;
-    if (!token || typeof token !== "string") {
-      return res.status(400).json({ message: "Token is required" });
-    }
-    try {
-      const invite = await storage.getWorkspaceInviteByToken(token);
-      if (!invite || invite.status === "revoked") {
-        return res.status(404).json({ message: "Invite not found or has been revoked" });
-      }
-      if (invite.status === "accepted") {
-        return res.status(400).json({ message: "This invite has already been used" });
-      }
-      const owner = await storage.getUser(invite.ownerId);
-      res.json({
-        ownerName: owner?.displayName || owner?.email || "Unknown",
-        ownerEmail: owner?.email || "",
-        inviteEmail: invite.inviteEmail,
-        status: invite.status,
-      });
-    } catch (err) {
-      console.error("[workspace] invite-info error:", err);
-      res.status(500).json({ message: "Failed to load invite" });
-    }
-  });
-
-  // POST /api/workspace/invite/accept — accept invite (creates/logs-in account)
-  app.post("/api/workspace/invite/accept", async (req: Request, res: Response) => {
-    const { token, password } = req.body ?? {};
-    if (!token || typeof token !== "string") {
-      return res.status(400).json({ message: "Token is required" });
-    }
-    try {
-      const invite = await storage.getWorkspaceInviteByToken(token);
-      if (!invite || invite.status === "revoked") {
-        return res.status(404).json({ message: "Invite not found or has been revoked" });
-      }
-      if (invite.status === "accepted") {
-        return res.status(400).json({ message: "This invite has already been used" });
-      }
-
-      let memberId: string;
-      const existingUser = await storage.getUserByEmail(invite.inviteEmail);
-
-      if (existingUser) {
-        // Existing account — log them in (password optional if already logged in)
-        memberId = existingUser.id;
-        if (!req.session.userId || req.session.userId !== existingUser.id) {
-          if (!password || typeof password !== "string") {
-            return res.status(400).json({ message: "Password required to log in to the existing account" });
-          }
-          const bcrypt = await import("bcrypt");
-          const valid = await bcrypt.compare(password, existingUser.passwordHash || "");
-          if (!valid) {
-            return res.status(401).json({ message: "Incorrect password" });
-          }
-        }
-      } else {
-        // New account — create with provided password and name from invite
-        if (!password || typeof password !== "string" || password.length < 8) {
-          return res.status(400).json({ message: "Password must be at least 8 characters" });
-        }
-        const bcrypt = await import("bcrypt");
-        const hash = await bcrypt.hash(password, 10);
-        const firstName = invite.inviteFirstName || undefined;
-        const lastName = invite.inviteLastName || undefined;
-        const displayName = firstName && lastName
-          ? `${firstName} ${lastName}`
-          : firstName || lastName || undefined;
-        const newUser = await storage.createUser({
-          email: invite.inviteEmail,
-          passwordHash: hash,
-          firstName,
-          lastName,
-          displayName,
-        });
-        memberId = newUser.id;
-      }
-
-      // Mark invite as accepted and set memberId
-      await storage.acceptWorkspaceInvite(invite.inviteToken, memberId);
-
-      // Establish session as collaborator
-      req.session.userId = memberId;
-      req.session.workspaceOwnerId = invite.ownerId;
-
-      res.json({ ok: true, userId: memberId, workspaceOwnerId: invite.ownerId });
-    } catch (err) {
-      console.error("[workspace] accept error:", err);
-      res.status(500).json({ message: "Failed to accept invite" });
-    }
-  });
+  registerWorkspaceRoutes(app, authLimiter);
 
   // ─── Admin: API Access Toggle ─────────────────────────────────────────────
   app.get("/api/admin/settings/email-sender", requireAdmin, async (_req: Request, res: Response) => {

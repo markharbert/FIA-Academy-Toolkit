@@ -29,7 +29,7 @@ interface AuthUser {
 interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<AuthUser>;
+  login: (email: string, password: string, workspaceInviteToken?: string) => Promise<AuthUser>;
   signup: (email: string, password: string, options?: { emailConsent?: boolean; firstName?: string; lastName?: string }) => Promise<void>;
   logout: () => Promise<void>;
   refetch: () => Promise<void>;
@@ -62,11 +62,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refetch();
   }, [refetch]);
 
-  const login = async (email: string, password: string): Promise<AuthUser> => {
+  useEffect(() => {
+    const onWorkspaceChange = (event: StorageEvent) => {
+      if (event.key === "fia-workspace-change" && user) window.location.assign("/projects");
+    };
+    window.addEventListener("storage", onWorkspaceChange);
+    return () => window.removeEventListener("storage", onWorkspaceChange);
+  }, [user]);
+
+  const login = async (email: string, password: string, workspaceInviteToken?: string): Promise<AuthUser> => {
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, ...(workspaceInviteToken ? { workspaceInviteToken } : {}) }),
       credentials: "include",
     });
     if (!res.ok) {

@@ -93,7 +93,10 @@ export default function LoginPage() {
     setNotice(null);
     setIsLoading(true);
     try {
-      const loggedInUser = await login(data.email, data.password);
+      const invitationToken = /^\/workspace\/accept\?token=([a-f0-9]{64})$/i.exec(redirectTo)?.[1];
+      const loggedInUser = invitationToken
+        ? await login(data.email, data.password, invitationToken)
+        : await login(data.email, data.password);
       // Collaborators default to Projects; everyone else honours the redirect param
       if (loggedInUser?.isCollaborator && redirectTo === "/dashboard") {
         setLocation("/projects");

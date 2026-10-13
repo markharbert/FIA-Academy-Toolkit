@@ -7,21 +7,28 @@ import { Label } from "@/components/ui/label";
 import { Loader2, Users, AlertCircle, CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import logoImage from "@assets/image_1788559097620.png";
+import { queryClient } from "@/lib/queryClient";
+import { announceWorkspaceChange, reloadWorkspace } from "@/lib/workspace-navigation";
 
 interface InviteInfo {
   ownerName: string;
   ownerEmail: string;
   inviteEmail: string;
   status: string;
+  accountExists: boolean;
+  hasPassword: boolean;
 }
 
 export default function WorkspaceInviteAcceptPage() {
   const [, setLocation] = useLocation();
-  const { user, refetch } = useAuth();
+  const { user, refetch, isLoading: loadingAuth } = useAuth();
   const [inviteInfo, setInviteInfo] = useState<InviteInfo | null>(null);
   const [loadingInvite, setLoadingInvite] = useState(true);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -52,15 +59,31 @@ export default function WorkspaceInviteAcceptPage() {
       });
   }, [token]);
 
-  // If user is already logged in, try auto-accepting
-  useEffect(() => {
-    if (!user || !inviteInfo || done) return;
-    if (user.email?.toLowerCase() !== inviteInfo.inviteEmail.toLowerCase()) return;
-    handleAccept();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, inviteInfo]);
+  const matchesSignedInUser = !!user && user.email?.trim().toLowerCase() === inviteInfo?.inviteEmail.trim().toLowerCase();
+  const returnPath = `/workspace/accept?token=${encodeURIComponent(token)}`;
+
+  async function requestPasswordReset() {
+    if (resetBusy) return;
+    setResetBusy(true);
+    setSubmitError(null);
+    try {
+      const response = await fetch("/api/auth/forgot-password", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: inviteInfo?.inviteEmail, workspaceInviteToken: token }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Unable to request a reset link.");
+      setResetSent(true);
+    } catch (error: any) { setSubmitError(error.message); }
+    finally { setResetBusy(false); }
+  }
 
   async function handleAccept(pw?: string) {
+    if (submitting) return;
+    if (!matchesSignedInUser && !inviteInfo?.accountExists && pw !== confirmPassword) {
+      setSubmitError("Your passwords don't match. Please enter the same password twice.");
+      return;
+    }
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -72,9 +95,13 @@ export default function WorkspaceInviteAcceptPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to accept invite");
+      await queryClient.cancelQueries();
+      queryClient.clear();
       await refetch();
+      announceWorkspaceChange();
       setDone(true);
-      setTimeout(() => setLocation("/projects"), 1500);
+      // Acceptance may also switch identity/workspace; discard old mounted state.
+      setTimeout(reloadWorkspace, 1500);
     } catch (err: any) {
       setSubmitError(err.message);
     } finally {
@@ -89,7 +116,7 @@ export default function WorkspaceInviteAcceptPage() {
           <img src={logoImage} alt="Academy Toolkit" className="h-12 w-auto" />
         </div>
 
-        {loadingInvite ? (
+        {loadingInvite || loadingAuth ? (
           <Card className="border-[hsl(230,45%,18%)] bg-[hsl(230,45%,12%)]">
             <CardContent className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -124,7 +151,7 @@ export default function WorkspaceInviteAcceptPage() {
                 </div>
               </div>
               <CardTitle className="text-white">Workspace Invitation</CardTitle>
-              <CardDescription>
+              <CardDescription className="text-white/70">
                 <strong className="text-white/80">{inviteInfo?.ownerName || inviteInfo?.ownerEmail}</strong> has invited
                 you to collaborate on their Academy Toolkit workspace. You'll have access to their Project Manager.
               </CardDescription>
@@ -137,7 +164,7 @@ export default function WorkspaceInviteAcceptPage() {
                 </div>
               )}
 
-              {user && user.email?.toLowerCase() === inviteInfo?.inviteEmail.toLowerCase() ? (
+              {matchesSignedInUser ? (
                 <div className="space-y-3 text-center">
                   <p className="text-sm text-muted-foreground">
                     You're logged in as <span className="text-white">{user.email}</span>. Click below to accept.
@@ -153,43 +180,81 @@ export default function WorkspaceInviteAcceptPage() {
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void handleAccept(password); }}>
                   <div className="space-y-1.5">
-                    <Label className="text-white/80">Email (invitation sent to)</Label>
+                    <Label htmlFor="invite-email" className="text-white/80">Email (invitation sent to)</Label>
                     <Input
                       value={inviteInfo?.inviteEmail ?? ""}
+                      id="invite-email"
+                      name="username"
+                      autoComplete="username"
                       readOnly
                       className="bg-[hsl(230,45%,8%)] border-[hsl(230,45%,20%)] text-white/60"
                       data-testid="input-invite-email"
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-white/80">
-                      {user ? "Your account email doesn't match — log in with the right account or enter a password to create one" : "Set a password for your collaborator account"}
+                  {(!inviteInfo?.accountExists || inviteInfo.hasPassword) && <div className="space-y-1.5">
+                    <Label htmlFor="invite-password" className="text-white/80">
+                      {inviteInfo?.accountExists ? "Your existing FIA password" : "Create your personal FIA password"}
                     </Label>
                     <Input
                       type="password"
-                      placeholder="Create or enter your password"
+                      id="invite-password"
+                      name="password"
+                      autoComplete={inviteInfo?.accountExists ? "current-password" : "new-password"}
+                      placeholder={inviteInfo?.accountExists ? "Enter your current password" : "At least 8 characters"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") handleAccept(password); }}
                       className="bg-[hsl(230,45%,8%)] border-[hsl(230,45%,20%)] text-white"
                       data-testid="input-invite-password"
                     />
-                    <p className="text-xs text-muted-foreground">
-                      If an account already exists for this email, this will log you in. Otherwise, a new account will be created.
+                    <p className="text-xs text-white/70">
+                      {inviteInfo?.accountExists
+                        ? "You already have an FIA account. Use your existing login—joining this workspace won't change your password or replace your own workspace."
+                        : "This is your own login, separate from the workspace owner's. You can use it for any workspace you're invited to."}
                     </p>
-                  </div>
-                  <Button
+                  </div>}
+                  {!inviteInfo?.accountExists && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="invite-password-confirm" className="text-white/80">Confirm your password</Label>
+                      <Input id="invite-password-confirm" name="password-confirm" type="password" autoComplete="new-password"
+                        value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="bg-[hsl(230,45%,8%)] border-[hsl(230,45%,20%)] text-white"
+                        data-testid="input-invite-password-confirm" />
+                    </div>
+                  )}
+                  {user && !matchesSignedInUser && (
+                    <p className="text-xs text-amber-200">
+                      You're currently signed in with a different email. Use the invited email's login below, not the workspace owner's password.
+                    </p>
+                  )}
+                  {inviteInfo?.accountExists && (
+                    <div className="space-y-3">
+                      {!inviteInfo.hasPassword && <p className="text-sm text-white/80">This account doesn't have a password yet. Sign in with Google or request a link to set one.</p>}
+                      <button type="button" onClick={requestPasswordReset} disabled={resetBusy}
+                        className="text-sm text-white underline underline-offset-4 disabled:opacity-50"
+                        data-testid="button-invite-reset-password">
+                        {resetBusy ? "Sending…" : inviteInfo.hasPassword ? "Forgot password?" : "Send a link to set my password"}
+                      </button>
+                      {resetSent && <p role="status" className="text-sm text-green-300">
+                        Check your email for a reset link. After setting your password, select “Return to Your Invitation.”
+                      </p>}
+                      <a className="block text-sm text-white underline underline-offset-4"
+                        href={`/api/auth/oauth/google?redirect=${encodeURIComponent(returnPath)}`} data-testid="link-invite-google">
+                        Sign in with Google
+                      </a>
+                    </div>
+                  )}
+                  {(!inviteInfo?.accountExists || inviteInfo.hasPassword) && <Button
                     className="w-full"
-                    onClick={() => handleAccept(password)}
-                    disabled={submitting || !password}
+                    type="submit"
+                    disabled={submitting || !password || (!!inviteInfo?.accountExists && !inviteInfo.hasPassword) || (!inviteInfo?.accountExists && (!confirmPassword || password.length < 8))}
                     data-testid="button-accept-invite"
                   >
                     {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                    Accept Invitation
-                  </Button>
-                </div>
+                    {inviteInfo?.accountExists ? "Sign In & Join Workspace" : "Create Account & Join Workspace"}
+                  </Button>}
+                </form>
               )}
             </CardContent>
           </Card>

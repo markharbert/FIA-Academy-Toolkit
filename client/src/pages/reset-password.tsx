@@ -26,6 +26,8 @@ export default function ResetPassword() {
   const searchString = useSearch();
   const params = new URLSearchParams(searchString);
   const token = params.get("token");
+  const candidateReturnTo = params.get("returnTo") || "";
+  const invitationReturnTo = /^\/workspace\/accept\?token=[a-f0-9]{64}$/i.test(candidateReturnTo) ? candidateReturnTo : null;
   const [success, setSuccess] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -126,12 +128,12 @@ export default function ResetPassword() {
               </p>
             </div>
             <Link
-              href="/"
+              href={invitationReturnTo || "/"}
               className="w-full rounded-lg py-2.5 text-sm font-semibold text-white text-center flex items-center justify-center transition-opacity hover:opacity-80"
               style={{ background: "hsl(358,100%,43%)" }}
               data-testid="button-go-to-login"
             >
-              Go to Login
+              {invitationReturnTo ? "Return to Your Invitation" : "Go to Login"}
             </Link>
           </div>
         )}

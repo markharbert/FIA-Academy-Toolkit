@@ -43,3 +43,4 @@
 - [Cloud generation preconditions](cloud-generation-preconditions.md) — test destructive preconditions through real SDK HTTP requests; preserve generations as opaque strings.
 - [MCP connector branding](mcp-connector-branding.md) — use the FIA lion head; metadata delivery and third-party icon rendering are separate checks.
 - [Authenticated UI previews](authenticated-ui-previews.md) — verify source parity before trusting isolated redesign screenshots; check themes as well as viewport sizes.
+- [Personal identities and shared workspaces](workspace-identities.md) — one teammate login; protect existing passwords and separate paid membership from Project Manager collaboration.

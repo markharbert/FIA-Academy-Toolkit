@@ -48,6 +48,7 @@ import {
 } from "lucide-react";
 import logoImage from "@assets/image_1788559097620.png";
 import cfLogo from "@/assets/cf-logo.png";
+import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 
 type NavChild = {
   title: string;
@@ -315,6 +316,8 @@ export function AppSidebar() {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
+
+      {!user.impersonating && <WorkspaceSwitcher />}
 
       <SidebarContent>
         <SidebarGroup>

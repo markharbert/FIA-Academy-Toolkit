@@ -6,9 +6,10 @@ const APP_BASE_URL = process.env.APP_BASE_URL || "https://toolkit.fearlessmarket
 export async function sendPasswordResetEmail(
   email: string,
   resetToken: string,
-  isFirstTime = false
+  isFirstTime = false,
+  returnTo?: string
 ): Promise<boolean> {
-  const resetLink = `${APP_BASE_URL}/reset-password?token=${resetToken}${isFirstTime ? "&welcome=1" : ""}`;
+  const resetLink = `${APP_BASE_URL}/reset-password?token=${resetToken}${isFirstTime ? "&welcome=1" : ""}${returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : ""}`;
 
   const heading = isFirstTime ? "Set Up Your Password" : "Reset Your Password";
   const intro = isFirstTime
