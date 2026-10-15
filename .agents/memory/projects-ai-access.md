@@ -30,6 +30,15 @@ project content or the AI's own decision, and keep connection/workspace ownershi
 write permissions, expiration, and changed-target checks. Be clear that the AI
 client obtains consent; MCP does not provide universal proof of a human click.
 
+AI-created Funnel Grid maps must remain hand-editable with the same connection
+controls and email-flow animation as maps built in the browser.
+
+**Why:** The user expects to build with an AI and then tweak the result in the
+editor, including deleting connections and seeing animated opt-in-to-email links.
+
+**How to apply:** Keep AI-generated maps compatible with the normal editor's
+interaction behavior; a viewable diagram alone is not enough.
+
 Funnel Grid through MCP builds editable diagrams, not live landing pages or
 activated email/SMS campaigns.
 

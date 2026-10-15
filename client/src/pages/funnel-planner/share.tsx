@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { normalizeFunnelEdges } from "@shared/funnel-edges";
 import { useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -98,7 +99,7 @@ function PasswordGate({ token, onUnlock }: { token: string; onUnlock: (data: Sha
 
 function SharedCanvas({ funnel }: { funnel: SharedFunnel }) {
   const nodes: Node[] = funnel.canvasData?.nodes ?? [];
-  const edges: Edge[] = funnel.canvasData?.edges ?? [];
+  const edges: Edge[] = normalizeFunnelEdges(funnel.canvasData?.edges ?? []);
 
   const [theme, setTheme] = useState<CanvasTheme>(() =>
     (localStorage.getItem("funnelCanvasTheme") as CanvasTheme) || "dark"

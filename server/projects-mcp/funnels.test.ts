@@ -110,6 +110,8 @@ test("Funnel-only OAuth consent and SDK expose every node but not Projects tools
   assert.deepEqual(new Set(testFunnel.canvasData.nodes.map((n: any) => n.type)), new Set(FUNNEL_NODE_TYPES));
   assert.ok(testFunnel.canvasData.nodes.every((n: any) => n.type === n.data.nodeType && Number.isFinite(n.position.x)));
   assert.equal(testFunnel.canvasData.edges[0].sourceHandle, "right");
+  assert.equal(testFunnel.canvasData.edges[0].type, "custom");
+  assert.deepEqual(testFunnel.canvasData.edges[0].data, {});
   assert.ok(testFunnel.canvasData.nodes.find((n: any) => n.type === "note").data.notes.includes("&lt;script&gt;"));
   assert.equal(testFunnel.canvasData.nodes.find((n: any) => n.type === "delay").data.delayAmount, 2);
   assert.equal(testFunnel.url, `${origin}/funnel-grid/${testFunnel.id}`);
@@ -134,6 +136,7 @@ test("safe incremental edits, connections, batch additions, layout and duplicati
   assert.equal(testFunnel.canvasData.nodes.find((n: any) => n.type === "note").data.notes, "Updated<br>note");
   testFunnel = await call("add_funnel_nodes", { ...base(), map: { nodes: [{ id: "extra", type: "note", data: { label: "New note", notes: "Summary" } }], edges: [] } });
   testFunnel = await call("connect_funnel_nodes", { ...base(), edges: [{ id: "branch", source: "n1", target: "n2", label: "Success" }] });
+  assert.equal(testFunnel.canvasData.edges.find((edge: any) => edge.id === "branch").type, "custom");
   testFunnel = await call("layout_funnel", base());
   assert.equal(testFunnel.canvasData.nodes.length, 16);
   const copy = await call("duplicate_funnel", { request_id: mutation(), funnel_id: testFunnel.id });

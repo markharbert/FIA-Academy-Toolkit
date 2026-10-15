@@ -2,6 +2,7 @@ import dagre from "dagre";
 import { z } from "zod";
 import { pool } from "../db";
 import { FUNNEL_NODE_TYPES, funnelMapInput, funnelNodeInput, funnelEdgeInput, funnelNodeDataSchema } from "../../shared/funnel-graph";
+import { editableFunnelEdge } from "../../shared/funnel-edges";
 import { ProjectToolError, type ToolContext, type ToolDefinition } from "./tools";
 
 const id = z.string().uuid();
@@ -39,7 +40,7 @@ export function buildFunnelMap(input: z.infer<typeof funnelMapInput>) {
   }));
   // Explicit positions are respected only when every node has one.
   if (map.nodes.some((node) => !node.position)) nodes = layoutFunnel(nodes, map.edges);
-  return { nodes, edges: map.edges.map((edge) => ({ ...edge, sourceHandle: edge.sourceHandle ?? "right", targetHandle: edge.targetHandle ?? "left", type: "smoothstep" })) };
+  return { nodes, edges: map.edges.map((edge) => editableFunnelEdge({ ...edge, sourceHandle: edge.sourceHandle ?? "right", targetHandle: edge.targetHandle ?? "left" })) };
 }
 
 export async function readFunnel(funnelId: string, c: ToolContext) {
@@ -198,7 +199,7 @@ const tools: Record<string, ToolDefinition> = {
         const source = findNode(map, edge.source), target = findNode(map, edge.target);
         if (source.type === "note" || target.type === "note") throw new ProjectToolError("Notes are standalone annotations without connection handles");
         if (edge.source === edge.target || seen.has(edge.id)) throw new ProjectToolError("Connection must have unique ID and distinct endpoints");
-        seen.add(edge.id); map.edges.push({ ...edge, sourceHandle: edge.sourceHandle ?? "right", targetHandle: edge.targetHandle ?? "left", type: "smoothstep" });
+        seen.add(edge.id); map.edges.push(editableFunnelEdge({ ...edge, sourceHandle: edge.sourceHandle ?? "right", targetHandle: edge.targetHandle ?? "left" }));
       }
     }),
   },

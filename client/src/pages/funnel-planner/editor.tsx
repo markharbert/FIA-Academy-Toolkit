@@ -3,6 +3,7 @@ import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Funnel } from "@shared/schema";
+import { normalizeFunnelEdges } from "@shared/funnel-edges";
 import {
   ReactFlow,
   Background,
@@ -62,7 +63,7 @@ function EditorInner({ funnel }: { funnel: Funnel & { editVersion?: string } }) 
 
   const initialCanvas = funnel.canvasData as { nodes?: Node[]; edges?: Edge[] } | null;
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(initialCanvas?.nodes ?? []);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initialCanvas?.edges ?? []);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(normalizeFunnelEdges(initialCanvas?.edges ?? []));
   const [funnelName, setFunnelName] = useState(funnel.name);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
