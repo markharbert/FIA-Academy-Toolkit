@@ -4,7 +4,7 @@ import { MCP_SCOPES, mcpOrigin, productionOrigin } from "./oauth";
 // Paths are documentation of mounted HTTP handlers, not individual REST tool
 // endpoints. Tool names and argument names come from the live tool registry.
 export const mcpEndpointReference = [
-  { method: "POST", path: "/mcp/agent", category: "MCP transport", access: "OAuth bearer credential", description: "The single Streamable HTTP connection URL. Carries initialize, notifications, tools/list, and tools/call JSON-RPC messages. All project tools use this endpoint." },
+  { method: "POST", path: "/mcp/agent", category: "MCP transport", access: "OAuth bearer credential", description: "The single Streamable HTTP connection URL. Carries initialize, notifications, tools/list, and tools/call JSON-RPC messages. Projects and Funnel Grid tools use this same endpoint, with separate consent scopes." },
   { method: "OPTIONS", path: "/mcp/agent", category: "MCP transport", access: "Public", description: "Browser CORS preflight. GET and DELETE on the MCP endpoint return 405 because this server uses stateless POST requests." },
   { method: "GET", path: "/.well-known/oauth-authorization-server", category: "OAuth discovery", access: "Public", description: "OAuth issuer metadata: authorization, token, client registration, revocation, scopes, and PKCE support." },
   { method: "GET", path: "/.well-known/oauth-protected-resource/mcp/agent", category: "OAuth discovery", access: "Public", description: "Resource-specific OAuth discovery, advertised in the 401 WWW-Authenticate response." },

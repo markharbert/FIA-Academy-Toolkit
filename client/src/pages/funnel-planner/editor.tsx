@@ -54,7 +54,7 @@ function useDebounce<T>(value: T, delay: number): T {
   return debouncedValue;
 }
 
-function EditorInner({ funnel }: { funnel: Funnel }) {
+function EditorInner({ funnel }: { funnel: Funnel & { editVersion?: string } }) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
@@ -216,17 +216,39 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
   const canvasJson = useMemo(() => JSON.stringify({ nodes, edges }), [nodes, edges]);
   const debouncedCanvasJson = useDebounce(canvasJson, 1200);
   const debouncedName = useDebounce(funnelName, 1200);
+  const editVersionRef = useRef(funnel.editVersion);
+  const conflictRef = useRef(false);
+  const saveQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+  const persistFunnel = (data: { name?: string; canvasData?: unknown }) => {
+    const work = saveQueueRef.current.catch(() => {}).then(async () => {
+      if (conflictRef.current) throw new Error("Your local edits are preserved. Export them before reloading this changed funnel.");
+      const res = await fetch(`/api/funnels/${funnel.id}`, {
+        method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...data, expectedVersion: editVersionRef.current }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (res.status === 409) conflictRef.current = true;
+        throw new Error(body.message || "Could not save funnel");
+      }
+      const result = await res.json();
+      editVersionRef.current = result.editVersion;
+      return result as Funnel;
+    });
+    saveQueueRef.current = work;
+    return work;
+  };
 
   const saveMutation = useMutation({
-    mutationFn: async (data: { name?: string; canvasData?: unknown }) => {
-      const res = await apiRequest("PATCH", `/api/funnels/${funnel.id}`, data);
-      return res.json() as Promise<Funnel>;
-    },
+    mutationFn: persistFunnel,
     onSuccess: (data) => {
       setSaveStatus("saved");
       queryClient.setQueryData(["/api/funnels", funnel.id], data);
     },
-    onError: () => setSaveStatus("unsaved"),
+    onError: (error: Error) => {
+      setSaveStatus("unsaved");
+      toast({ title: "Funnel not saved", description: error.message, variant: "destructive" });
+    },
   });
 
   const hasInitialized = useRef(false);
@@ -246,9 +268,11 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
   // Flush latest state via sendBeacon on browser close / refresh
   useEffect(() => {
     const onUnload = () => {
+      if (conflictRef.current) return;
       const body = JSON.stringify({
         name: latestRef.current.name,
         canvasData: JSON.parse(latestRef.current.canvasJson),
+        expectedVersion: editVersionRef.current,
       });
       navigator.sendBeacon(
         `/api/funnels/${funnel.id}/beacon`,
@@ -306,18 +330,14 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
   const handleBack = useCallback(async () => {
     setSaveStatus("saving");
     try {
-      const res = await fetch(`/api/funnels/${funnel.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: funnelName, canvasData: JSON.parse(canvasJson) }),
-        credentials: "include",
-      });
-      if (res.ok) {
-        const data = await res.json();
-        queryClient.setQueryData(["/api/funnels", funnel.id], data);
-        setSaveStatus("saved");
-      }
-    } catch { /* navigate anyway */ }
+      const data = await persistFunnel({ name: funnelName, canvasData: JSON.parse(canvasJson) });
+      queryClient.setQueryData(["/api/funnels", funnel.id], data);
+      setSaveStatus("saved");
+    } catch (error) {
+      setSaveStatus("unsaved");
+      toast({ title: "Keep your unsaved edits", description: (error as Error).message, variant: "destructive" });
+      return;
+    }
     setLocation("/funnel-grid");
   }, [funnel.id, funnelName, canvasJson, setLocation]);
 

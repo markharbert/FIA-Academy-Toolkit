@@ -42,6 +42,38 @@ afterEach(() => {
 });
 
 describe("Projects AI connections", () => {
+  it("requires explicit Funnel Grid consent and separately approved changes", async () => {
+    responses[`/api/mcp/consent/${requestId}`] = {
+      ...(responses[`/api/mcp/consent/${requestId}`] as object),
+      scopes: ["projects:read", "projects:write", "funnels:read", "funnels:write"],
+    };
+    view(<McpAuthorizePage />);
+    const reading = await screen.findByRole("checkbox", { name: "Allow Funnel Grid reading" });
+    const writing = screen.getByRole("checkbox", { name: "Allow Funnel Grid changes" });
+    expect(reading.getAttribute("aria-checked")).toBe("false");
+    expect(writing.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(reading);
+    fireEvent.click(writing);
+    fireEvent.click(screen.getByRole("button", { name: "Approve selected access" }));
+    await waitFor(() => expect(mocks.apiRequest).toHaveBeenCalledWith("POST", `/api/mcp/consent/${requestId}`, {
+      csrfToken: "fixture-only-nonce", decision: "approve", scopes: ["projects:read", "funnels:read", "funnels:write"],
+    }));
+  });
+
+  it("supports a Funnel Grid-only authorization without Projects permission", async () => {
+    responses[`/api/mcp/consent/${requestId}`] = {
+      ...(responses[`/api/mcp/consent/${requestId}`] as object), scopes: ["funnels:read", "funnels:write"],
+    };
+    view(<McpAuthorizePage />);
+    const reading = await screen.findByRole("checkbox", { name: "Allow Funnel Grid reading" });
+    expect(screen.getByRole("button", { name: "Approve selected access" }).hasAttribute("disabled")).toBe(true);
+    fireEvent.click(reading);
+    fireEvent.click(screen.getByRole("button", { name: "Approve selected access" }));
+    await waitFor(() => expect(mocks.apiRequest).toHaveBeenCalledWith("POST", `/api/mcp/consent/${requestId}`, {
+      csrfToken: "fixture-only-nonce", decision: "approve", scopes: ["funnels:read"],
+    }));
+  });
+
   it("shows both endpoint choices and an understandable empty state", async () => {
     view(<AiConnectionsPage />);
     expect(await screen.findByText("https://live.example.invalid/mcp/agent")).toBeTruthy();

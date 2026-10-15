@@ -94,7 +94,7 @@ async function prepareAuthorization(scopes = MCP_SCOPES, userId = members[0], en
 }
 async function authorize(scopes = MCP_SCOPES, userId = members[0], endpointPath = "/mcp/projects", existingClient?: any) {
   const { info, requestId, details, verifier } = await prepareAuthorization(scopes, userId, endpointPath, existingClient);
-  const approve = await browser(`/api/mcp/consent/${requestId}`, "POST", { decision: "approve", scopes, csrfToken: details.csrfToken }, userId);
+  const approve = await browser(`/api/mcp/consent/${requestId}`, "POST", { decision: "approve", scopes: details.scopes, csrfToken: details.csrfToken }, userId);
   assert.equal(approve.status, 200);
   const redirect = new URL((await approve.json()).redirectTo);
   assert.equal(redirect.searchParams.get("state"), "fixture-state");
@@ -200,6 +200,10 @@ test("consent rejects workspace changes and rechecks shared access before granti
     const sharedConsent = await reloaded.json();
     assert.equal(sharedConsent.workspace.id, sharedId);
     assert.equal(sharedConsent.workspace.kind, "shared");
+    assert.deepEqual(sharedConsent.scopes, ["projects:read", "projects:write"]);
+    assert.equal((await browser(`/api/mcp/consent/${pending.requestId}`, "POST",
+      { ...decision, csrfToken: sharedConsent.csrfToken }, userId)).status, 400,
+      "Shared Projects consent must never include personal funnel access");
     await pool.query("UPDATE workspace_invites SET status='revoked' WHERE id=$1", [inviteId]);
     assert.equal((await browser(`/api/mcp/consent/${pending.requestId}`, "POST",
       { ...decision, csrfToken: sharedConsent.csrfToken }, userId)).status, 403);
@@ -207,7 +211,7 @@ test("consent rejects workspace changes and rechecks shared access before granti
     assert.equal(afterCount, beforeCount);
     await pool.query("UPDATE workspace_invites SET status='accepted' WHERE id=$1", [inviteId]);
     const accepted = await browser(`/api/mcp/consent/${pending.requestId}`, "POST",
-      { ...decision, csrfToken: sharedConsent.csrfToken }, userId);
+      { ...decision, scopes: sharedConsent.scopes, csrfToken: sharedConsent.csrfToken }, userId);
     assert.equal(accepted.status, 200);
     const { rows: [grant] } = await pool.query("SELECT workspace_id FROM project_mcp_grants WHERE user_id=$1 AND client_id=$2", [userId, pending.info.client_id]);
     assert.equal(grant.workspace_id, sharedId);

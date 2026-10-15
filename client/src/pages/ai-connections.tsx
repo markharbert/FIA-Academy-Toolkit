@@ -72,11 +72,11 @@ export default function AiConnectionsPage() {
       <div className="relative overflow-hidden border-b border-border bg-[hsl(230,45%,14%)] text-white">
         <div className="pointer-events-none absolute -right-16 -top-24 h-72 w-72 rounded-full bg-cyan-400/10 blur-3xl" />
         <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-          <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-white/60"><PlugZap className="h-4 w-4" /> Member toolkit / Projects</div>
+          <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-white/60"><PlugZap className="h-4 w-4" /> Member toolkit / Projects &amp; Funnel Grid</div>
           <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
             <div className="max-w-2xl">
               <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">AI connections</h1>
-              <p className="mt-2 max-w-xl text-sm leading-6 text-white/75">Connect a compatible AI assistant to the projects you already manage here. You stay in control of what it can see and change.</p>
+              <p className="mt-2 max-w-xl text-sm leading-6 text-white/75">Connect a compatible AI assistant to your projects and Funnel Grid maps. You choose what it can see and change. Existing connections need fresh authorization to add funnel access.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" className="border-white/25 bg-white/10 text-white hover:bg-white/15 hover:text-white" onClick={() => { void config.refetch(); void connections.refetch(); }}>
@@ -251,6 +251,8 @@ export function McpAuthorizePage() {
     retry: false,
   });
   const [writeAllowed, setWriteAllowed] = useState(false);
+  const [funnelReadAllowed, setFunnelReadAllowed] = useState(false);
+  const [funnelWriteAllowed, setFunnelWriteAllowed] = useState(false);
   const approve = useMutation({
     mutationFn: async ({ decision, scopes }: { decision: "approve" | "deny"; scopes: string[] }) => {
       if (!consent.data) throw new Error("This authorization request is unavailable.");
@@ -267,7 +269,11 @@ export function McpAuthorizePage() {
   const consentData = consent.data;
   const canRead = requestedScopes.includes("projects:read");
   const canWrite = requestedScopes.includes("projects:write");
-  const selectedScopes = [ ...(canRead ? ["projects:read"] : []), ...(canWrite && writeAllowed ? ["projects:write"] : []) ];
+  const canReadFunnels = requestedScopes.includes("funnels:read");
+  const canWriteFunnels = requestedScopes.includes("funnels:write");
+  const selectedScopes = [ ...(canRead ? ["projects:read"] : []), ...(canWrite && writeAllowed ? ["projects:write"] : []),
+    ...(canReadFunnels && funnelReadAllowed ? ["funnels:read"] : []),
+    ...(canWriteFunnels && funnelReadAllowed && funnelWriteAllowed ? ["funnels:write"] : []) ];
   const unavailableMessage = !requestId ? "This authorization link is missing its request identifier. Return to your AI assistant and start connecting again." : "This request may have expired or already been used. Return to your AI assistant and start a new connection.";
 
   return (
@@ -282,7 +288,7 @@ export function McpAuthorizePage() {
             <CardHeader className="pb-4">
               <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary"><LockKeyhole className="h-5 w-5" /></div>
               <CardTitle className="text-2xl">Connect {consentData.clientName}?</CardTitle>
-              <CardDescription className="leading-6">This AI platform is requesting access to a Fearless Influencer Academy project workspace. Review and choose the access level you want to grant.</CardDescription>
+              <CardDescription className="leading-6">This AI platform is requesting access to FIA Toolkit. Review the workspace and choose which features it may read or change.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="rounded-lg border bg-muted/25 p-4" aria-label="Authorization workspace">
@@ -297,16 +303,21 @@ export function McpAuthorizePage() {
               <div className="rounded-lg border bg-muted/25 p-4">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Requested permissions</p>
                 <div className="space-y-3">
-                  {canRead ? <div className="flex gap-3"><FolderKanban className="mt-0.5 h-4 w-4 shrink-0 text-primary" /><div><p className="text-sm font-medium">Read projects</p><p className="text-xs leading-5 text-muted-foreground">View project, task, section, comment, template, attachment, and activity content available to your account.</p></div></div> : <p className="text-sm text-destructive">This request does not include the required project read permission.</p>}
+                  {canRead ? <div className="flex gap-3"><FolderKanban className="mt-0.5 h-4 w-4 shrink-0 text-primary" /><div><p className="text-sm font-medium">Read projects</p><p className="text-xs leading-5 text-muted-foreground">View project, task, section, comment, template, attachment, and activity content available to your account.</p></div></div> : null}
                   {canWrite && <div className="flex gap-3"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" /><div><p className="text-sm font-medium">Make project changes</p><p className="text-xs leading-5 text-muted-foreground">Create and update supported project content. Deletions require your confirmation inside your AI app, without returning to the website.</p></div></div>}
+                  {canReadFunnels && <p className="text-sm leading-6">Funnel Grid: view your personal maps; optionally create and edit every step type, including notes and delays. Shared Project Manager workspaces do not include funnel access.</p>}
                 </div>
               </div>
               {canWrite && <div className="flex items-start gap-3 rounded-lg border p-4"><Checkbox id="allow-write" checked={writeAllowed} onCheckedChange={(checked) => setWriteAllowed(checked === true)} /><div><Label htmlFor="allow-write" className="cursor-pointer text-sm font-medium">Include write access</Label><p className="mt-1 text-xs leading-5 text-muted-foreground">Leave unchecked to authorize read-only access. You can remove access later from AI connections.</p></div></div>}
-              <Alert><Info className="h-4 w-4" /><AlertTitle>Your content, your decision</AlertTitle><AlertDescription className="text-xs leading-5">If you approve, the selected AI platform receives project and task content it accesses. Review the platform’s privacy and data handling terms. Access uses your regular member sign-in; never share your password.</AlertDescription></Alert>
+              {canReadFunnels && <div className="space-y-4 rounded-lg border p-4">
+                <div className="flex items-start gap-3"><Checkbox id="allow-funnel-read" checked={funnelReadAllowed} onCheckedChange={(checked) => setFunnelReadAllowed(checked === true)} /><div><Label htmlFor="allow-funnel-read">Allow Funnel Grid reading</Label><p className="mt-1 text-xs text-muted-foreground">View your saved maps and their content.</p></div></div>
+                {canWriteFunnels && <div className="flex items-start gap-3"><Checkbox id="allow-funnel-write" checked={funnelWriteAllowed} disabled={!funnelReadAllowed} onCheckedChange={(checked) => setFunnelWriteAllowed(checked === true)} /><div><Label htmlFor="allow-funnel-write">Allow Funnel Grid changes</Label><p className="mt-1 text-xs leading-5 text-muted-foreground">Build, edit, connect, arrange and duplicate maps. Removal and full-map replacement require confirmation inside your AI app.</p></div></div>}
+              </div>}
+              <Alert><Info className="h-4 w-4" /><AlertTitle>Your content, your decision</AlertTitle><AlertDescription className="text-xs leading-5">If you approve, the selected AI platform receives the project or funnel content it accesses. Review the platform’s privacy and data handling terms. Access uses your regular member sign-in; never share your password.</AlertDescription></Alert>
               <p className="text-xs text-muted-foreground">Redirect requested by <span className="break-all font-medium text-foreground">{consentData.clientName}</span>. Expires {readableDate(consentData.expiresAt)}.</p>
               <div className="flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:justify-end">
                 <Button variant="outline" onClick={() => approve.mutate({ decision: "deny", scopes: [] })} disabled={approve.isPending}>Deny</Button>
-                <Button onClick={() => approve.mutate({ decision: "approve", scopes: selectedScopes })} disabled={approve.isPending || !canRead || selectedScopes.length === 0}>{approve.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} Approve selected access</Button>
+                <Button onClick={() => approve.mutate({ decision: "approve", scopes: selectedScopes })} disabled={approve.isPending || selectedScopes.length === 0}>{approve.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} Approve selected access</Button>
               </div>
             </CardContent>
           </Card>

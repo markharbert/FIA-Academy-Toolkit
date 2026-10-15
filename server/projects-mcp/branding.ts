@@ -5,7 +5,7 @@ export function mcpBranding(origin: string): Implementation {
   return {
     name: "fia-toolkit",
     title: "FIA Toolkit",
-    version: "1.1.0",
+    version: "1.2.0",
     websiteUrl: new URL("/", origin).href,
     icons: [{
       src: new URL("/lion-logo.png", origin).href,

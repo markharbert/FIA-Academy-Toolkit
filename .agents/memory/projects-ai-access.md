@@ -1,19 +1,21 @@
 ---
-name: Projects AI access boundary
-description: Why the member-facing MCP integration starts with Projects and uses member-controlled grants and deletion approval.
+name: Toolkit AI access boundary
+description: Member-approved Projects and personal Funnel Grid access, with confirmations inside the AI client.
 ---
 
-The initial member-facing MCP integration is deliberately limited to Projects.
+The member-facing MCP integration covers Projects and personal Funnel Grid.
 Do not expose Academy administration, courses, email tools, or other app features
-just because they already have API handlers.
+just because they already have API handlers. Existing Projects grants must not
+silently gain Funnel Grid access. Shared Project Manager collaboration does not
+include the owner's funnels.
 
-**Why:** The user requested full control of Projects through members' chosen AI
-assistants, specifically “just for now, the projects,” with a base build to test
-before further improvements.
+**Why:** The user initially requested Projects only, then explicitly approved
+expansion to Funnel Grid through the same MCP connection, including every node,
+notes and delays. The agreed expansion keeps separate member-approved access.
 
-**How to apply:** Expand beyond Projects only when the user explicitly requests
-that expansion. Ordinary project edits can execute under an editing grant.
-Deletions need a preview and an explicit user decision inside the member's AI
+**How to apply:** Expand beyond these features only when the user explicitly requests
+that expansion. Ordinary edits can execute under the matching editing grant.
+Deletions and full-map replacement need a preview and an explicit user decision inside the member's AI
 conversation or the client's own approval prompt, not a mandatory website visit.
 Website action approval is not a fallback; its status view is read-only. Initial
 login and connection authorization still use the Academy's secure OAuth flow.
@@ -27,6 +29,14 @@ happen within that agentic software, regardless of which MCP client they use.
 project content or the AI's own decision, and keep connection/workspace ownership,
 write permissions, expiration, and changed-target checks. Be clear that the AI
 client obtains consent; MCP does not provide universal proof of a human click.
+
+Funnel Grid through MCP builds editable diagrams, not live landing pages or
+activated email/SMS campaigns.
+
+**Why:** The user asked assistants to build funnel maps in the existing grid,
+not to deploy external marketing systems.
+
+**How to apply:** Keep this distinction clear in tools and student instructions.
 
 After an interrupted deletion, a missing target is evidence of its current
 state, not proof that the particular confirmed attempt completed. Recovery must

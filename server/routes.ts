@@ -12030,7 +12030,11 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const funnel = await storage.getFunnelById(req.params.id);
       if (!funnel) return res.status(404).json({ message: "Funnel not found" });
       if (funnel.userId !== userId) return res.status(403).json({ message: "Access denied" });
-      res.json(funnel);
+      // Read content and version together; never pair old content with a new version.
+      const { rows: [snapshot] } = await pool.query("SELECT row_to_json(f) AS value FROM funnels f WHERE id=$1 AND user_id=$2", [funnel.id, userId]);
+      if (!snapshot) return res.status(404).json({ message: "Funnel not found" });
+      const value = Object.fromEntries(Object.entries(snapshot.value).map(([key, data]) => [key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase()), data]));
+      res.json({ ...value, editVersion: snapshot.value.updated_at });
     } catch (err) {
       console.error("[funnels] get error:", err);
       res.status(500).json({ message: "Failed to load funnel" });
@@ -12045,13 +12049,19 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         description: z.string().max(1000).optional().nullable(),
         canvasData: z.any().optional(),
         thumbnailData: z.string().optional().nullable(),
+        expectedVersion: z.string().min(10).max(50).optional(),
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message });
       const existing = await storage.getFunnelById(req.params.id);
       if (!existing) return res.status(404).json({ message: "Funnel not found" });
       if (existing.userId !== userId) return res.status(403).json({ message: "Access denied" });
-      const updated = await storage.updateFunnel(req.params.id, userId, parsed.data as any);
+      const { expectedVersion, ...changes } = parsed.data;
+      if ((changes.name !== undefined || changes.description !== undefined || changes.canvasData !== undefined) && !expectedVersion) {
+        return res.status(409).json({ message: "Reload this funnel before saving. A current edit version is required." });
+      }
+      const updated = await storage.updateFunnel(req.params.id, userId, changes as any, expectedVersion);
+      if (!updated) return res.status(409).json({ message: "This funnel changed in another window or AI assistant. Your local edits have not overwritten it. Keep or export your edits before reloading." });
       res.json(updated);
     } catch (err) {
       console.error("[funnels] update error:", err);
@@ -12066,12 +12076,16 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const schema = z.object({
         name: z.string().min(1).max(200).optional(),
         canvasData: z.any().optional(),
+        expectedVersion: z.string().min(10).max(50).optional(),
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Invalid data" });
       const existing = await storage.getFunnelById(req.params.id);
       if (!existing || existing.userId !== userId) return res.status(403).json({ message: "Access denied" });
-      await storage.updateFunnel(req.params.id, userId, parsed.data as any);
+      const { expectedVersion, ...changes } = parsed.data;
+      if (!expectedVersion) return res.status(409).end();
+      const updated = await storage.updateFunnel(req.params.id, userId, changes as any, expectedVersion);
+      if (!updated) return res.status(409).end();
       res.status(204).end();
     } catch (err) {
       console.error("[funnels] beacon error:", err);

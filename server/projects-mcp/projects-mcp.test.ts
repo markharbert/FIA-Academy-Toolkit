@@ -178,7 +178,7 @@ test("FIA Toolkit agent endpoint supports discovery, OAuth, tools, and existing 
   }
   const actor = await connection(MCP_SCOPES, members[0], "/mcp/agent");
   assert.equal(actor.client.getServerVersion()?.name, "fia-toolkit");
-  assert.equal(actor.client.getServerVersion()?.version, "1.1.0");
+  assert.equal(actor.client.getServerVersion()?.version, "1.2.0");
   assert.equal(actor.client.getServerVersion()?.title, "FIA Toolkit");
   assert.equal(actor.client.getServerVersion()?.websiteUrl, `${base}/`);
   assert.deepEqual(actor.client.getServerVersion()?.icons,
@@ -1084,7 +1084,7 @@ test("in-agent confirmation completes task, comment, section, template and templ
 });
 
 test("collaborator access stays tied to the active owner and invite", async () => {
-  const collaborator = await connection(MCP_SCOPES, members[2]);
+  const collaborator = await connection(["projects:read", "projects:write"], members[2]);
   const result = await tool(collaborator.client, "list_projects");
   assert.ok(result.total >= 1);
   await pool.query("UPDATE workspace_invites SET status='revoked' WHERE member_id=$1", [members[2]]);

@@ -12,22 +12,8 @@ import {
 } from "react-icons/si";
 import { useCanvasTheme } from "./canvas-theme-context";
 
-export type FunnelNodeType =
-  | "trafficSource"
-  | "capturePage"
-  | "thankYouPage"
-  | "emailNode"
-  | "salesPage"
-  | "videoPage"
-  | "webinar"
-  | "zoom"
-  | "orderForm"
-  | "upsell"
-  | "downsell"
-  | "externalLink"
-  | "delay"
-  | "note"
-  | "smsNode";
+import type { FunnelNodeType } from "@shared/funnel-graph";
+export type { FunnelNodeType } from "@shared/funnel-graph";
 
 export interface FunnelNodeData {
   label: string;

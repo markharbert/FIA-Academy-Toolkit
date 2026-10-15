@@ -74,7 +74,7 @@ import { slugify } from "@shared/slug";
 import crypto from "crypto";
 import { db, pool } from "./db";
 import { readDeletionSnapshot, deleteUnchangedTarget, type DeletionKind, type DeletionSnapshot } from "./project-deletion";
-import { eq, and, lt, lte, gte, isNull, desc, gt, sql, or, ilike, count, asc, inArray } from "drizzle-orm";
+import { eq, and, lt, lte, gte, isNull, desc, gt, sql, or, ilike, count, asc, inArray, getTableColumns } from "drizzle-orm";
 
 // Email normalization helper - centralizes email handling to prevent duplicates
 export function normalizeEmail(email: string | null | undefined): string | null {
@@ -713,7 +713,7 @@ export interface IStorage {
   getFunnel(id: string, userId: string): Promise<Funnel | undefined>;
   getFunnelByShareToken(token: string): Promise<Funnel | undefined>;
   createFunnel(userId: string, data: { name: string; description?: string; canvasData?: any }): Promise<Funnel>;
-  updateFunnel(id: string, userId: string, data: Partial<{ name: string; description: string; canvasData: any; thumbnailData: string }>): Promise<Funnel | undefined>;
+  updateFunnel(id: string, userId: string, data: Partial<{ name: string; description: string; canvasData: any; thumbnailData: string }>, expectedVersion?: string): Promise<Funnel | undefined>;
   setFunnelShareToken(id: string, userId: string, token: string, passwordHash: string | null): Promise<Funnel | undefined>;
   clearFunnelShareToken(id: string, userId: string): Promise<Funnel | undefined>;
   duplicateFunnel(id: string, userId: string): Promise<Funnel | undefined>;
@@ -5826,11 +5826,13 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async updateFunnel(id: string, userId: string, data: Partial<{ name: string; description: string; canvasData: any; thumbnailData: string }>): Promise<Funnel | undefined> {
+  async updateFunnel(id: string, userId: string, data: Partial<{ name: string; description: string; canvasData: any; thumbnailData: string }>, expectedVersion?: string): Promise<Funnel | undefined> {
+    const contentChanged = data.name !== undefined || data.description !== undefined || data.canvasData !== undefined;
     const [row] = await db.update(funnels)
-      .set({ ...data, updatedAt: new Date() })
-      .where(and(eq(funnels.id, id), eq(funnels.userId, userId)))
-      .returning();
+      .set({ ...data, ...(contentChanged ? { updatedAt: sql`clock_timestamp()` } : {}) })
+      .where(and(eq(funnels.id, id), eq(funnels.userId, userId),
+        expectedVersion ? sql`${funnels.updatedAt} = ${expectedVersion}::timestamp` : undefined))
+      .returning({ ...getTableColumns(funnels), editVersion: sql<string>`${funnels.updatedAt}::text` });
     return row;
   }
 

@@ -90,8 +90,8 @@ export default function AdminMcpServerPage() {
           </div>
           <div className="mt-3 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div className="max-w-2xl">
-              <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Connect your AI to Projects</h1>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">FIA Toolkit lets you connect the AI you choose to your Academy Projects using your familiar Academy login. Choose your AI, then use the connection name and published address below.</p>
+              <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Connect your AI to FIA Toolkit</h1>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">Manage Projects and build Funnel Grid maps through your AI using your familiar Academy login. Use the same connection name and published address below. Existing connections must reconnect and approve Funnel Grid access before using the new tools.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={retry} disabled={reference.isFetching}><RefreshCw className={`h-4 w-4 ${reference.isFetching ? "animate-spin" : ""}`} /> Refresh reference</Button>
@@ -198,10 +198,11 @@ export default function AdminMcpServerPage() {
               <div className="border-t py-5">
             <section className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
               <Card className="border-[hsl(39,24%,82%)] shadow-sm">
-                <CardHeader><SectionHeading icon={ShieldCheck} eyebrow="Permissions and safety" title="Member consent sets the boundary" description="The server is scoped to Projects. This admin reference page does not make the underlying MCP integration admin-only." /></CardHeader>
+                <CardHeader><SectionHeading icon={ShieldCheck} eyebrow="Permissions and safety" title="Member consent sets the boundary" description="Projects and Funnel Grid have separate permissions. This admin reference page does not make the underlying MCP integration admin-only." /></CardHeader>
                 <CardContent className="space-y-4 text-sm leading-5">
                   <div className="space-y-3">
-                    <div className="flex gap-3"><span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><FolderKanban className="h-4 w-4" /></span><p><strong>Read-only is the default.</strong> A member may optionally approve write scope during the Academy consent flow. Connectors do not receive access outside Projects.</p></div>
+                    <div className="flex gap-3"><span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><FolderKanban className="h-4 w-4" /></span><p><strong>Changes are opt-in.</strong> Approve Projects editing and/or Funnel Grid reading and editing separately. Funnel Grid is personal-member access only, not shared Project Manager collaborator access. No other Toolkit features are exposed.</p></div>
+                    <p><strong>Try a funnel prompt:</strong> “Build a webinar funnel with Facebook traffic, registration, a thank-you page, three reminder emails, a two-day delay, the webinar, a sales page, an order form, an upsell, and a note explaining the offer.” All 15 node types are supported. The assistant returns an editable map link; it does not publish pages or send messages.</p>
                     <div className="flex gap-3"><span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-700/10 text-emerald-800"><FileCheck2 className="h-4 w-4" /></span><p><strong>Ordinary edits</strong> execute with an approved write grant. <strong>Deletions</strong> show a preview and ask for your confirmation inside your AI app. Confirm there—no website visit is required. Requests expire after 10 minutes; changed content needs a fresh preview and confirmation.</p></div>
                     <div className="flex gap-3"><span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><RefreshCw className="h-4 w-4" /></span><p><strong>Credential renewal:</strong> access tokens last 15 minutes; rolling refresh credentials last 30 days. Compatible AI clients renew automatically.</p></div>
                   </div>
