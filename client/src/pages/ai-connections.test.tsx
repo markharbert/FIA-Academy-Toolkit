@@ -11,6 +11,8 @@ vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: mocks.toast }) }
 const requestId = "10000000-0000-4000-8000-000000000001";
 const connectionId = "10000000-0000-4000-8000-000000000002";
 const approvalId = "10000000-0000-4000-8000-000000000003";
+const ownWorkspace = { id: "workspace-own", name: "Maya’s Workspace", kind: "own" as const, accessAvailable: true };
+const sharedWorkspace = { id: "workspace-shared", name: "Studio Workspace", kind: "shared" as const, accessAvailable: true };
 let responses: Record<string, unknown>;
 const clients: QueryClient[] = [];
 
@@ -29,7 +31,8 @@ beforeEach(() => {
       ready: true, scopes: ["projects:read", "projects:write"], capabilities: ["Manage projects and tasks"] },
     "/api/mcp/connections": { connections: [], approvals: [] },
     [`/api/mcp/consent/${requestId}`]: { requestId, clientName: "Test assistant", redirectUri: "https://ai.example.invalid/callback",
-      scopes: ["projects:read", "projects:write"], csrfToken: "fixture-only-nonce", expiresAt: "2099-10-12T17:00:00Z" },
+      scopes: ["projects:read", "projects:write"], csrfToken: "fixture-only-nonce", expiresAt: "2099-10-12T17:00:00Z",
+      workspace: ownWorkspace },
   };
   mocks.apiRequest.mockResolvedValue({ json: async () => ({ ok: true, status: "approved", redirectTo: "" }) });
 });
@@ -66,13 +69,56 @@ describe("Projects AI connections", () => {
   });
   it("requires confirmation before disconnecting an assistant", async () => {
     responses["/api/mcp/connections"] = { connections: [{ id: connectionId, clientName: "Test assistant",
-      scopes: ["projects:read"], createdAt: "2026-10-12T17:00:00Z", lastUsedAt: null, revokedAt: null }], approvals: [] };
+      scopes: ["projects:read"], createdAt: "2026-10-12T17:00:00Z", lastUsedAt: null, revokedAt: null,
+      workspace: ownWorkspace }], approvals: [] };
     view(<AiConnectionsPage />);
     fireEvent.click(await screen.findByRole("button", { name: "Remove access" }));
     expect(mocks.apiRequest).not.toHaveBeenCalled();
     const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText("Maya’s Workspace")).toBeTruthy();
+    expect(dialog.textContent).toContain("Own workspace");
     fireEvent.click(within(dialog).getByRole("button", { name: "Remove access" }));
     await waitFor(() => expect(mocks.apiRequest).toHaveBeenCalledWith("DELETE", `/api/mcp/connections/${connectionId}`));
+  });
+  it("lists the same assistant separately for its own and shared workspace grants", async () => {
+    responses["/api/mcp/connections"] = { connections: [
+      { id: connectionId, clientName: "Test assistant", scopes: ["projects:read"], createdAt: "2026-10-12T17:00:00Z",
+        lastUsedAt: null, revokedAt: null, workspace: ownWorkspace },
+      { id: approvalId, clientName: "Test assistant", scopes: ["projects:write"], createdAt: "2026-10-13T17:00:00Z",
+        lastUsedAt: null, revokedAt: null, workspace: sharedWorkspace },
+    ], approvals: [] };
+    view(<AiConnectionsPage />);
+
+    expect(await screen.findAllByRole("heading", { name: "Test assistant" })).toHaveLength(2);
+    expect(screen.getByText("Maya’s Workspace")).toBeTruthy();
+    expect(screen.getByText("Studio Workspace")).toBeTruthy();
+    expect(screen.getByText("Own workspace")).toBeTruthy();
+    expect(screen.getByText("Shared workspace")).toBeTruthy();
+    expect(screen.getByText("2 active")).toBeTruthy();
+    expect(screen.getByText(/Switching workspaces on this website does not change an existing AI connection/)).toBeTruthy();
+  });
+  it("redacts an unavailable shared workspace name and excludes its grant from active count", async () => {
+    responses["/api/mcp/connections"] = { connections: [{
+      id: connectionId, clientName: "Test assistant", scopes: ["projects:read"], createdAt: "2026-10-12T17:00:00Z",
+      lastUsedAt: null, revokedAt: null,
+      workspace: { id: "workspace-shared", name: "Private client workspace name", kind: "shared", accessAvailable: false },
+    }], approvals: [] };
+    view(<AiConnectionsPage />);
+
+    expect(await screen.findByText("Workspace unavailable")).toBeTruthy();
+    expect(screen.queryByText("Private client workspace name")).toBeNull();
+    expect(screen.getByText("Unavailable")).toBeTruthy();
+    expect(screen.getByText("Shared workspace")).toBeTruthy();
+    expect(screen.getByText("0 active")).toBeTruthy();
+    expect(screen.getByText("Access to this workspace is no longer available.")).toBeTruthy();
+  });
+  it("shows consent for its pinned workspace and explains how to authorize another", async () => {
+    view(<McpAuthorizePage />);
+
+    expect(await screen.findByText("Maya’s Workspace")).toBeTruthy();
+    expect(screen.getByText("Own workspace")).toBeTruthy();
+    expect(screen.getByText(/Switching workspaces on this website does not change an existing agent connection/)).toBeTruthy();
+    expect(screen.getByText(/To connect another workspace, start a new authorization from your AI assistant/)).toBeTruthy();
   });
   it("shows request status without website approval or denial controls", async () => {
     responses["/api/mcp/connections"] = { connections: [], approvals: [{ id: approvalId, connectionId,

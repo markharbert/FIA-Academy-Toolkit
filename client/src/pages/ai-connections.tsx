@@ -14,15 +14,20 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Activity, AlertCircle, ArrowUpRight, Check, CheckCircle2, Clipboard, Clock3, FileText, FolderKanban, Info, Loader2, LockKeyhole, PlugZap, RefreshCw, ShieldCheck, Trash2, X } from "lucide-react";
 
 type McpConfig = { endpoint: string; productionEndpoint: string; scopes: string[]; capabilities: string[]; ready: boolean };
-type Connection = { id: string; clientName: string; scopes: string[]; createdAt: string; lastUsedAt: string | null; revokedAt: string | null };
+type Workspace = { id: string; name: string | null; kind: "own" | "shared"; accessAvailable: boolean };
+type Connection = { id: string; clientName: string; scopes: string[]; createdAt: string; lastUsedAt: string | null; revokedAt: string | null; workspace: Workspace };
 type Approval = { id: string; connectionId: string; clientName: string; toolName: string; summary: string; status: string; createdAt: string; expiresAt: string; result?: string; error?: string };
 type ConnectionsResponse = { connections: Connection[]; approvals: Approval[] };
-type Consent = { requestId: string; clientName: string; redirectUri: string; scopes: string[]; csrfToken: string; expiresAt: string };
+type Consent = { requestId: string; clientName: string; redirectUri: string; scopes: string[]; csrfToken: string; expiresAt: string; workspace: Workspace };
 
 const CONFIG_KEY = ["/api/mcp/config"];
 const CONNECTIONS_KEY = ["/api/mcp/connections"];
 const prettyScope = (scope: string) => scope.replace(/:/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 const readableDate = (value: string | null) => value ? new Date(value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "Not yet";
+const workspaceName = (workspace: Workspace) => workspace.accessAvailable
+  ? workspace.name || (workspace.kind === "own" ? "Your workspace" : "Shared workspace")
+  : "Workspace unavailable";
+const workspaceKind = (workspace: Workspace) => workspace.kind === "own" ? "Own workspace" : "Shared workspace";
 
 function useMcpWorkspace() {
   const config = useQuery<McpConfig>({ queryKey: CONFIG_KEY });
@@ -60,6 +65,7 @@ export default function AiConnectionsPage() {
   const items = connections.data?.connections ?? [];
   const approvals = connections.data?.approvals ?? [];
   const pending = approvals.filter((approval) => approval.status === "pending");
+  const activeCount = items.filter((item) => !item.revokedAt && item.workspace.accessAvailable).length;
 
   return (
     <div className="min-h-full bg-background">
@@ -99,7 +105,7 @@ export default function AiConnectionsPage() {
                 <CardTitle id="connections-title">Connected assistants</CardTitle>
                 <CardDescription>Only assistants you authorize appear here. Remove access at any time.</CardDescription>
               </div>
-              <Badge variant={items.filter((item) => !item.revokedAt).length ? "default" : "secondary"}>{items.filter((item) => !item.revokedAt).length} active</Badge>
+              <Badge variant={activeCount ? "default" : "secondary"}>{activeCount} active</Badge>
             </CardHeader>
             <CardContent className="p-4 sm:p-5">
               {connections.isLoading ? <SkeletonRows /> : connectionsError ? <p className="py-5 text-sm text-muted-foreground">Connection list unavailable. Use refresh to retry.</p> : items.length === 0 ? (
@@ -113,7 +119,12 @@ export default function AiConnectionsPage() {
                 <div key={connection.id} className="rounded-lg border p-4">
                   <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
                     <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{connection.clientName}</h3><Badge variant={connection.revokedAt ? "outline" : "secondary"}>{connection.revokedAt ? "Revoked" : "Connected"}</Badge></div>
+                      <div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{connection.clientName}</h3><Badge variant={connection.revokedAt || !connection.workspace.accessAvailable ? "outline" : "secondary"}>{connection.revokedAt ? "Revoked" : connection.workspace.accessAvailable ? "Connected" : "Unavailable"}</Badge></div>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-medium">{workspaceName(connection.workspace)}</span>
+                        <Badge variant="outline">{workspaceKind(connection.workspace)}</Badge>
+                      </div>
+                      {!connection.workspace.accessAvailable && <p className="mt-1 text-xs text-muted-foreground">Access to this workspace is no longer available.</p>}
                       <div className="mt-2"><Scopes scopes={connection.scopes} /></div>
                       <p className="mt-3 text-xs text-muted-foreground">Authorized {readableDate(connection.createdAt)} <span className="px-1">·</span> Last used {readableDate(connection.lastUsedAt)}</p>
                     </div>
@@ -121,6 +132,7 @@ export default function AiConnectionsPage() {
                   </div>
                 </div>
               ))}</div>}
+              <p className="mt-4 rounded-lg bg-muted/40 px-3 py-2.5 text-xs leading-5 text-muted-foreground">Switching workspaces on this website does not change an existing AI connection. To connect another workspace, start a new authorization from your AI assistant.</p>
             </CardContent>
           </Card>
 
@@ -205,7 +217,7 @@ export default function AiConnectionsPage() {
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open && !removeConnection.isPending) setDeleteTarget(null); }}>
         <AlertDialogContent>
-          <AlertDialogHeader><AlertDialogTitle>Remove this AI connection?</AlertDialogTitle><AlertDialogDescription><strong>{deleteTarget?.clientName}</strong> will lose access to your projects immediately. You can reconnect later by approving it again.</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogHeader><AlertDialogTitle>Remove this AI connection?</AlertDialogTitle><AlertDialogDescription><strong>{deleteTarget?.clientName}</strong> for <strong>{deleteTarget ? workspaceName(deleteTarget.workspace) : ""}</strong> ({deleteTarget ? workspaceKind(deleteTarget.workspace) : ""}) will lose access to its projects immediately. You can reconnect later by approving it again.</AlertDialogDescription></AlertDialogHeader>
           <AlertDialogFooter><AlertDialogCancel disabled={removeConnection.isPending}>Keep connection</AlertDialogCancel><AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={removeConnection.isPending} onClick={(event) => { event.preventDefault(); if (deleteTarget) removeConnection.mutate(deleteTarget.id); }}>{removeConnection.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Remove access</AlertDialogAction></AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -270,9 +282,18 @@ export function McpAuthorizePage() {
             <CardHeader className="pb-4">
               <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary"><LockKeyhole className="h-5 w-5" /></div>
               <CardTitle className="text-2xl">Connect {consentData.clientName}?</CardTitle>
-              <CardDescription className="leading-6">This AI platform is requesting access to your Fearless Influencer Academy project workspace. Review and choose the access level you want to grant.</CardDescription>
+              <CardDescription className="leading-6">This AI platform is requesting access to a Fearless Influencer Academy project workspace. Review and choose the access level you want to grant.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
+              <div className="rounded-lg border bg-muted/25 p-4" aria-label="Authorization workspace">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Workspace for this connection</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold">{workspaceName(consentData.workspace)}</span>
+                  <Badge variant="outline">{workspaceKind(consentData.workspace)}</Badge>
+                  {!consentData.workspace.accessAvailable && <Badge variant="destructive">Unavailable</Badge>}
+                </div>
+                <p className="mt-2 text-xs leading-5 text-muted-foreground">Switching workspaces on this website does not change an existing agent connection. To connect another workspace, start a new authorization from your AI assistant.</p>
+              </div>
               <div className="rounded-lg border bg-muted/25 p-4">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Requested permissions</p>
                 <div className="space-y-3">

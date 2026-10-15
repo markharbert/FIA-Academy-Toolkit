@@ -52,12 +52,13 @@ export async function assertWorkspaceAccess(userId: string, workspaceId: string)
   const actor = await storage.getUser(userId);
   if (!actor || actor.isDisabled) throw new InvalidTokenError("Member access is no longer active");
   const owner = workspaceId === userId ? actor : await storage.getUser(workspaceId);
-  if (!owner || owner.isDisabled || (!owner.isAdmin && owner.cfEnrolled !== true)) {
+  if (!owner || owner.isDisabled || (!owner.isAdmin && (owner.cfEnrolled !== true || owner.cfRevokedAt))) {
     throw new InvalidTokenError("Active Academy membership is required");
   }
   if (workspaceId !== userId && !await storage.getActiveInviteForMember(userId, workspaceId)) {
     throw new InvalidTokenError("Workspace access has been revoked");
   }
+  return owner;
 }
 
 export class ProjectsOAuthProvider implements OAuthServerProvider {

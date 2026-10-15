@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Express, Request, Response, NextFunction } from "express";
 import { registerProjectsMcpRoutes } from "./projects-mcp/routes";
+import { requireAuth, createAuthMeHandler } from "./member-auth";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { registerExtensionAuthRoutes, requireExtensionAccess, resolveExtensionAccess, revokeExtensionSessions } from "./extension-auth";
@@ -40,7 +41,7 @@ import { hasExactIds } from "@shared/course-structure";
 import { slugify } from "@shared/slug";
 import { formatTranscriptParagraphs } from "@shared/transcript-format";
 import { resolveEmailLogoPath } from "./email-assets";
-import { registerWorkspaceRoutes, listAvailableWorkspaces, defaultWorkspaceOwner, validInviteForEmail, workspaceInviteReturnPath, isSharedWorkspaceRequestAllowed } from "./workspaces";
+import { registerWorkspaceRoutes, listAvailableWorkspaces, defaultWorkspaceOwner, validInviteForEmail, workspaceInviteReturnPath } from "./workspaces";
 import OpenAI from "openai";
 import {
   verifyCfWebhookSignature,
@@ -310,67 +311,6 @@ function getEffectiveUserId(req: Request): string {
   return req.session.workspaceOwnerId ?? req.session.userId!;
 }
 
-// Auth middleware
-async function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (!req.session.userId) {
-    return res.status(401).json({ message: "Authentication required" });
-  }
-  try {
-    const user = await storage.getUser(req.session.userId);
-    if (!user) {
-      req.session.destroy(() => {});
-      return res.status(401).json({ message: "Authentication required" });
-    }
-    // When an admin is impersonating, bypass disabled/CF checks so they can
-    // freely navigate the impersonated user's account.
-    const isImpersonating = !!req.session.impersonatingAdminId;
-    // Workspace collaborators get a pass on CF enrollment checks — the owner's
-    // membership is what matters. Verify the invite is still active.
-    const isCollaborator = !!req.session.workspaceOwnerId;
-
-    if (!isImpersonating && user.isDisabled) {
-      req.session.destroy(() => {});
-      return res.status(403).json({ message: "Account is disabled" });
-    }
-
-    if (isCollaborator) {
-      const invite = await storage.getActiveInviteForMember(req.session.userId!, req.session.workspaceOwnerId!);
-      if (!invite) {
-        // Reject this workspace, not the person's other valid workspaces.
-        return res.status(403).json({ message: "Workspace access has been revoked" });
-      }
-      // The collaborator's access is only as valid as the owner's membership.
-      // If the owner loses their CF enrollment or is disabled, cut the collaborator
-      // off immediately — they are tied to that account.
-      const owner = await storage.getUser(req.session.workspaceOwnerId!);
-      if (!owner || owner.isDisabled) {
-        return res.status(403).json({ message: "Workspace access has been revoked" });
-      }
-      if (!owner.isAdmin && (owner.cfEnrolled !== true || owner.cfRevokedAt)) {
-        return res.status(403).json({ message: "Workspace access has been revoked" });
-      }
-      if (!user.isAdmin && !isImpersonating && !isSharedWorkspaceRequestAllowed(req.path)) {
-        return res.status(403).json({ message: "Shared workspaces provide Project Manager access only. Choose your own workspace for other Academy tools." });
-      }
-    } else if (!isImpersonating && process.env.CF_API_TOKEN && process.env.CF_COURSE_ID && !user.isAdmin) {
-      // When CF is configured, enforce active membership on every authenticated
-      // request so revoked members are denied mid-session without waiting for
-      // their session to naturally expire. Admins are always exempt.
-      if (user.cfEnrolled !== true) {
-        req.session.destroy(() => {});
-        return res.status(403).json({
-          message: "Active ClickFunnels membership required",
-          error: "cf_not_enrolled",
-        });
-      }
-    }
-  } catch (err) {
-    console.error("[requireAuth] DB error:", err);
-    return res.status(500).json({ message: "Authentication check failed" });
-  }
-  next();
-}
-
 // Middleware that verifies the session exists and belongs to the caller
 // BEFORE any file-writing middleware (e.g. multer) runs.  This prevents
 // authenticated users from leaving orphaned files on disk by targeting
@@ -452,9 +392,9 @@ export async function registerRoutes(
 
   registerExtensionAuthRoutes(app, requireAuth);
 
-  // ===================
+  // -------------------
   // AUTH ROUTES
-  // ===================
+  // -------------------
 
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -892,95 +832,11 @@ export async function registerRoutes(
     res.sendFile(imgPath);
   });
 
-  app.get("/api/auth/me", async (req: Request, res: Response) => {
-    if (!req.session.userId) {
-      return res.status(401).json({ message: "Not authenticated" });
-    }
+  app.get("/api/auth/me", createAuthMeHandler());
 
-    const user = await storage.getUser(req.session.userId);
-    if (!user) {
-      return res.status(401).json({ message: "User not found" });
-    }
-
-    if (user.isDisabled) {
-      req.session.destroy(() => {});
-      return res.status(403).json({ message: "Account is disabled" });
-    }
-
-    const isImpersonating = !!req.session.impersonatingAdminId;
-
-    // A shared workspace grants collaboration, not the actor's paid membership.
-    // Refresh identity against the selected invitation and owner's membership
-    // just like protected Projects requests. Reject a stale workspace without
-    // destroying the actor's login or access to other available workspaces.
-    if (req.session.workspaceOwnerId) {
-      const invite = await storage.getActiveInviteForMember(user.id, req.session.workspaceOwnerId);
-      const owner = invite ? await storage.getUser(req.session.workspaceOwnerId) : undefined;
-      if (!invite || !owner || owner.isDisabled || (!owner.isAdmin && (owner.cfEnrolled !== true || owner.cfRevokedAt))) {
-        return res.status(403).json({ message: "Workspace access has been revoked" });
-      }
-    } else if (!isImpersonating && process.env.CF_API_TOKEN && process.env.CF_COURSE_ID && !user.isAdmin) {
-      // Personal access keeps its existing configured-membership checks.
-      if (user.cfEnrolled !== true) {
-        req.session.destroy(() => {});
-        return res.status(403).json({
-          message: "Active ClickFunnels membership required",
-          error: "cf_not_enrolled",
-        });
-      }
-    }
-
-    // Compute Gravatar URL from email
-    let gravatarUrl: string | null = null;
-    if (user.email) {
-      const normalizedEmail = user.email.trim().toLowerCase();
-      const hash = crypto.createHash("md5").update(normalizedEmail).digest("hex");
-      gravatarUrl = `https://www.gravatar.com/avatar/${hash}?s=64&d=mp`;
-    }
-
-    // If an admin is impersonating this user, include info about the real admin
-    let impersonating: { adminId: string; adminDisplayName: string | null; adminEmail: string | null } | null = null;
-    if (req.session.impersonatingAdminId) {
-      const adminUser = await storage.getUser(req.session.impersonatingAdminId);
-      if (adminUser) {
-        impersonating = {
-          adminId: adminUser.id,
-          adminDisplayName: adminUser.displayName,
-          adminEmail: adminUser.email,
-        };
-      }
-    }
-
-    // Workspace collaborator context
-    const workspaceOwnerId = req.session.workspaceOwnerId ?? null;
-    const isCollaborator = !!workspaceOwnerId;
-    
-    res.json({ 
-      user: { 
-        id: user.id, 
-        email: user.email, 
-        displayName: user.displayName,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        emailConsentAt: user.emailConsentAt,
-        isAdmin: user.isAdmin,
-        role: user.role || (user.isAdmin ? "admin" : "user"),
-        isDisabled: user.isDisabled,
-        gravatarUrl,
-        cfEnrolled: user.cfEnrolled,
-        cfEnrolledAt: user.cfEnrolledAt,
-        cfRevokedAt: user.cfRevokedAt,
-        timezone: user.timezone || "America/New_York",
-        impersonating,
-        workspaceOwnerId,
-        isCollaborator,
-      } 
-    });
-  });
-
-  // ===================
+  // -------------------
   // PASSWORD RESET ROUTES
-  // ===================
+  // -------------------
 
   const PASSWORD_RESET_EXPIRY_MINUTES = 60;
   const MAX_RESET_REQUESTS_PER_HOUR = 5;
@@ -1204,9 +1060,9 @@ export async function registerRoutes(
     }
   });
 
-  // ===================
+  // -------------------
   // OAUTH ROUTES
-  // ===================
+  // -------------------
 
   // Compute APP_BASE_URL from REPLIT_DEV_DOMAIN (modern Replit) or fallback
   const APP_BASE_URL = process.env.APP_BASE_URL || 
@@ -1410,9 +1266,9 @@ export async function registerRoutes(
   }
 
 
-  // ===================
+  // -------------------
   // CLICKFUNNELS INTEGRATION
-  // ===================
+  // -------------------
 
   // Webhook endpoint – ClickFunnels sends events here (enrollment created/revoked, subscription cancelled)
   // Must be raw body to verify HMAC signature
@@ -2714,9 +2570,9 @@ export async function registerRoutes(
     }
   });
 
-  // ===================
+  // -------------------
   // ADMIN ROUTES - USER MANAGEMENT
-  // ===================
+  // -------------------
 
   // Admin stats overview
   app.get("/api/admin/stats", requireAdmin, async (req: Request, res: Response) => {
@@ -3338,9 +3194,9 @@ export async function registerRoutes(
     }
   });
 
-  // ===================
+  // -------------------
   // ACCOUNT ROUTES
-  // ===================
+  // -------------------
 
   // Get current user's account info with connected providers
   app.get("/api/account", requireAuth, async (req: Request, res: Response) => {
@@ -3621,9 +3477,9 @@ export async function registerRoutes(
     }
   });
 
-  // ===================
+  // -------------------
   // SESSION ROUTES
-  // ===================
+  // -------------------
 
   // === FOLDER ROUTES ===
   
@@ -5445,9 +5301,9 @@ export async function registerRoutes(
     }
   });
 
-  // ==========================================
+  // ------------------------------------------
   // Topic Pulse Finder API Routes
-  // ==========================================
+  // ------------------------------------------
   
   const { generateTopics, enrichTopicDetails, generateScript, generateFullScript, generateIntentAnalysis, getApiKeyStatus, getKeywordsEverywhereCredits } = await import("./topic-pulse");
   const { topicSearchInputSchema, scriptGenerationInputSchema } = await import("@shared/schema");

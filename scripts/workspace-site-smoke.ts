@@ -67,6 +67,7 @@ if (process.argv[2] === "--cleanup") {
     assert.equal((await call("/api/workspaces/active", { workspaceId: owner }, cookie)).status, 200);
     assert.equal((await call("/api/account", undefined, cookie)).status, 200);
     assert.equal((await call("/api/funnels", undefined, cookie)).status, 403, "shared scope rejects other tools");
+    assert.equal((await call("/api/link-vault", undefined, cookie)).status, 403, "shared scope rejects other tools");
     await storage.revokeWorkspaceInvite(invitation.id, owner);
     assert.equal((await call("/api/projects", undefined, cookie)).status, 403);
     assert.equal((await call("/api/workspaces", undefined, cookie)).status, 200, "revocation does not remove the personal login");

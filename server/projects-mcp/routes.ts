@@ -12,6 +12,7 @@ import { createOAuthMetadata } from "@modelcontextprotocol/sdk/server/auth/route
 import { metadataHandler } from "@modelcontextprotocol/sdk/server/auth/handlers/metadata.js";
 import { pool } from "../db";
 import { storage } from "../storage";
+import { requireIdentityAuth } from "../member-auth";
 import { buildMcpReference } from "./reference";
 import { cleanExpiredMcpData, ensureMcpDatabase } from "./database";
 import { ProjectsOAuthProvider, MCP_SCOPES, opaqueToken, hashToken, assertWorkspaceAccess, productionOrigin } from "./oauth";
@@ -22,6 +23,7 @@ declare module "express-session" {
   interface SessionData {
     mcpConsentRequest?: string;
     mcpConsentToken?: string;
+    mcpConsentWorkspaceId?: string;
   }
 }
 const uuid = z.string().uuid();
@@ -48,9 +50,22 @@ function api(handler: (req: Request, res: Response) => Promise<unknown>): Reques
     });
   }); };
 }
-function connectionView(row: any, clientName: string) {
+async function workspaceView(userId: string, workspaceId: string) {
+  const kind = workspaceId === userId ? "own" as const : "shared" as const;
+  try {
+    // Resolve names only through the same access check used by agent tokens.
+    const owner = await assertWorkspaceAccess(userId, workspaceId);
+    const ownerName = owner.displayName || owner.firstName;
+    return { id: workspaceId, kind, accessAvailable: true,
+      name: ownerName ? `${ownerName}'s workspace` : kind === "own" ? "Your workspace" : "Shared workspace" };
+  } catch (error) {
+    if (!(error instanceof InvalidTokenError)) throw error;
+    return { id: workspaceId, kind, accessAvailable: false, name: null };
+  }
+}
+function connectionView(row: any, clientName: string, workspace: Awaited<ReturnType<typeof workspaceView>>) {
   return { id: row.id, clientName, scopes: row.scopes, createdAt: row.created_at,
-    lastUsedAt: row.last_used_at, revokedAt: row.revoked_at };
+    lastUsedAt: row.last_used_at, revokedAt: row.revoked_at, workspace };
 }
 function approvalView(row: any, clientName: string) {
   return { id: row.id, connectionId: row.grant_id, clientName, toolName: row.tool_name, summary: row.summary,
@@ -101,7 +116,7 @@ export function registerProjectsMcpRoutes(app: Express, requireAuth: RequestHand
   app.use("/api/mcp/approvals", browserLimit);
   app.use("/api/mcp/connections", browserLimit);
 
-  app.get("/api/mcp/config", requireAuth, noStore, api(async (_req, res) => {
+  app.get("/api/mcp/config", requireIdentityAuth, noStore, api(async (_req, res) => {
     await ensureMcpDatabase();
     res.json({ ready: true, endpoint: provider.endpoint, productionEndpoint: `${productionOrigin()}/mcp/agent`,
       scopes: MCP_SCOPES, capabilities: [
@@ -116,7 +131,8 @@ export function registerProjectsMcpRoutes(app: Express, requireAuth: RequestHand
     const requestId = uuid.parse(req.params.requestId);
     if (req.session.impersonatingAdminId) { res.status(403).json({ message: "Stop impersonating before connecting an AI assistant." }); return; }
     const workspace = req.session.workspaceOwnerId ?? req.session.userId!;
-    await assertWorkspaceAccess(req.session.userId!, workspace);
+    const workspaceMetadata = await workspaceView(req.session.userId!, workspace);
+    if (!workspaceMetadata.accessAvailable) throw new InvalidTokenError("Workspace access is no longer available");
     await ensureMcpDatabase();
     const { rows: [row] } = await pool.query("SELECT * FROM project_mcp_requests WHERE id=$1 AND consumed_at IS NULL AND expires_at>NOW()", [requestId]);
     if (!row) { res.status(410).json({ message: "This connection request expired or was already used. Start again from your AI assistant." }); return; }
@@ -124,10 +140,11 @@ export function registerProjectsMcpRoutes(app: Express, requireAuth: RequestHand
     if (!client) { res.status(410).json({ message: "The requesting assistant is no longer registered." }); return; }
     req.session.mcpConsentRequest = requestId;
     req.session.mcpConsentToken = opaqueToken();
+    req.session.mcpConsentWorkspaceId = workspace;
     const csrfToken = req.session.mcpConsentToken;
     await new Promise<void>((resolve, reject) => req.session.save((error) => error ? reject(error) : resolve()));
     res.json({ requestId, clientName: client.client_name || "Unnamed AI assistant", redirectUri: row.data.redirectUri,
-      scopes: row.data.scopes, csrfToken, expiresAt: row.expires_at });
+      scopes: row.data.scopes, csrfToken, expiresAt: row.expires_at, workspace: workspaceMetadata });
   }));
   app.post("/api/mcp/consent/:requestId", requireAuth, noStore, api(async (req, res) => {
     if (!browserWrite(req, res)) return;
@@ -138,7 +155,10 @@ export function registerProjectsMcpRoutes(app: Express, requireAuth: RequestHand
         !secretEqual(req.session.mcpConsentToken, input.csrfToken)) {
       res.status(403).json({ message: "This approval is not valid for your sign-in session. Reload the consent page." }); return;
     }
-    const userId = req.session.userId!, workspaceId = req.session.workspaceOwnerId ?? userId;
+    const userId = req.session.userId!, workspaceId = req.session.mcpConsentWorkspaceId;
+    if (!workspaceId || workspaceId !== (req.session.workspaceOwnerId ?? userId)) {
+      res.status(409).json({ message: "Your selected workspace changed. Reload the consent page to review and authorize that workspace." }); return;
+    }
     await assertWorkspaceAccess(userId, workspaceId);
     const connection = await pool.connect();
     let redirect: URL;
@@ -165,20 +185,25 @@ export function registerProjectsMcpRoutes(app: Express, requireAuth: RequestHand
     } catch (error) { await connection.query("ROLLBACK"); throw error; } finally { connection.release(); }
     delete req.session.mcpConsentRequest;
     delete req.session.mcpConsentToken;
+    delete req.session.mcpConsentWorkspaceId;
     await new Promise<void>((resolve, reject) => req.session.save((error) => error ? reject(error) : resolve()));
     res.json({ redirectTo: redirect!.href });
   }));
-  app.get("/api/mcp/connections", requireAuth, noStore, api(async (req, res) => {
+  app.get("/api/mcp/connections", requireIdentityAuth, noStore, api(async (req, res) => {
     await ensureMcpDatabase();
     const { rows } = await pool.query("SELECT * FROM project_mcp_grants WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100", [req.session.userId]);
     const names = new Map<string, string>();
+    const workspaces = new Map<string, Awaited<ReturnType<typeof workspaceView>>>();
     for (const row of rows) if (!names.has(row.client_id)) names.set(row.client_id, (await provider.clientsStore.getClient(row.client_id))?.client_name || "Unnamed AI assistant");
+    for (const row of rows) if (!workspaces.has(row.workspace_id)) {
+      workspaces.set(row.workspace_id, await workspaceView(req.session.userId!, row.workspace_id));
+    }
     const { rows: approvals } = await pool.query(`SELECT a.*,g.client_id FROM project_mcp_approvals a JOIN project_mcp_grants g ON g.id=a.grant_id
       WHERE a.user_id=$1 ORDER BY a.created_at DESC LIMIT 100`, [req.session.userId]);
-    res.json({ connections: rows.map((row) => connectionView(row, names.get(row.client_id) || "AI assistant")),
+    res.json({ connections: rows.map((row) => connectionView(row, names.get(row.client_id) || "AI assistant", workspaces.get(row.workspace_id)!)),
       approvals: approvals.map((row) => approvalView(row, names.get(row.client_id) || "AI assistant")) });
   }));
-  app.delete("/api/mcp/connections/:id", requireAuth, noStore, api(async (req, res) => {
+  app.delete("/api/mcp/connections/:id", requireIdentityAuth, noStore, api(async (req, res) => {
     if (!browserWrite(req, res)) return;
     const connectionId = uuid.parse(req.params.id);
     const { rows: [row] } = await pool.query("UPDATE project_mcp_grants SET revoked_at=NOW() WHERE id=$1 AND user_id=$2 RETURNING id", [connectionId, req.session.userId]);
