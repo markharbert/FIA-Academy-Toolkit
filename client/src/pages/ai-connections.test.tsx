@@ -42,6 +42,44 @@ afterEach(() => {
 });
 
 describe("Projects AI connections", () => {
+  it("requires separate opt-in for Scripts and Link Vault, with matching reading before changes", async () => {
+    responses[`/api/mcp/consent/${requestId}`] = {
+      ...(responses[`/api/mcp/consent/${requestId}`] as object),
+      scopes: ["scripts:read", "scripts:write", "links:read", "links:write"],
+    };
+    view(<McpAuthorizePage />);
+    const scriptRead = await screen.findByRole("checkbox", { name: "Allow Scripts reading" });
+    const scriptWrite = screen.getByRole("checkbox", { name: "Allow Scripts changes" });
+    const linkRead = screen.getByRole("checkbox", { name: "Allow Link Vault reading" });
+    const linkWrite = screen.getByRole("checkbox", { name: "Allow Link Vault changes" });
+    for (const reading of [scriptRead, linkRead]) expect(reading.getAttribute("aria-checked")).toBe("false");
+    for (const writing of [scriptWrite, linkWrite]) expect(writing.hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Approve selected access" }).hasAttribute("disabled")).toBe(true);
+    fireEvent.click(scriptRead);
+    fireEvent.click(scriptWrite);
+    fireEvent.click(linkRead);
+    fireEvent.click(screen.getByRole("button", { name: "Approve selected access" }));
+    await waitFor(() => expect(mocks.apiRequest).toHaveBeenCalledWith("POST", `/api/mcp/consent/${requestId}`, {
+      csrfToken: "fixture-only-nonce", decision: "approve", scopes: ["scripts:read", "scripts:write", "links:read"],
+    }));
+  });
+
+  it("clears Scripts editing consent when its reading permission is unchecked", async () => {
+    responses[`/api/mcp/consent/${requestId}`] = {
+      ...(responses[`/api/mcp/consent/${requestId}`] as object), scopes: ["scripts:read", "scripts:write", "links:read"],
+    };
+    view(<McpAuthorizePage />);
+    const read = await screen.findByRole("checkbox", { name: "Allow Scripts reading" });
+    const write = screen.getByRole("checkbox", { name: "Allow Scripts changes" });
+    fireEvent.click(read); fireEvent.click(write); fireEvent.click(read);
+    expect(write.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Allow Link Vault reading" }));
+    fireEvent.click(screen.getByRole("button", { name: "Approve selected access" }));
+    await waitFor(() => expect(mocks.apiRequest).toHaveBeenCalledWith("POST", `/api/mcp/consent/${requestId}`, {
+      csrfToken: "fixture-only-nonce", decision: "approve", scopes: ["links:read"],
+    }));
+  });
+
   it("requires explicit Funnel Grid consent and separately approved changes", async () => {
     responses[`/api/mcp/consent/${requestId}`] = {
       ...(responses[`/api/mcp/consent/${requestId}`] as object),

@@ -39,7 +39,7 @@
 - [Extension sign-in](extension-sign-in.md) — independent device sessions, extension-origin credential storage, and a login return-path race to preserve.
 - [Extension background loading](extension-background-loading.md) — preload popup data and thumbnails so opening tabs does not start their first network load.
 - [Extension privacy disclosures](extension-privacy-disclosures.md) — local processing counts; IPs and captured source URLs need accurate Chrome Store categories.
-- [Toolkit AI access](projects-ai-access.md) — Projects and personal Funnel Grid need separate consent; shared collaborators stay Projects-only; action approvals stay inside the AI app.
+- [Toolkit AI access](projects-ai-access.md) — Projects, Funnel Grid, Scripts and Link Vault have separate consent; shared collaborators stay Projects-only; confirmations stay in the AI app.
 - [Cloud generation preconditions](cloud-generation-preconditions.md) — test destructive preconditions through real SDK HTTP requests; preserve generations as opaque strings.
 - [MCP connector branding](mcp-connector-branding.md) — use the FIA lion head; metadata delivery and third-party icon rendering are separate checks.
 - [Authenticated UI previews](authenticated-ui-previews.md) — verify source parity before trusting isolated redesign screenshots; check themes as well as viewport sizes.

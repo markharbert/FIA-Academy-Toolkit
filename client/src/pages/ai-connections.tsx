@@ -72,11 +72,11 @@ export default function AiConnectionsPage() {
       <div className="relative overflow-hidden border-b border-border bg-[hsl(230,45%,14%)] text-white">
         <div className="pointer-events-none absolute -right-16 -top-24 h-72 w-72 rounded-full bg-cyan-400/10 blur-3xl" />
         <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-          <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-white/60"><PlugZap className="h-4 w-4" /> Member toolkit / Projects &amp; Funnel Grid</div>
+          <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-white/60"><PlugZap className="h-4 w-4" /> Member toolkit / AI connections</div>
           <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
             <div className="max-w-2xl">
               <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">AI connections</h1>
-              <p className="mt-2 max-w-xl text-sm leading-6 text-white/75">Connect a compatible AI assistant to your projects and Funnel Grid maps. You choose what it can see and change. Existing connections need fresh authorization to add funnel access.</p>
+              <p className="mt-2 max-w-xl text-sm leading-6 text-white/75">Connect a compatible AI assistant to Projects, Funnel Grid, Scripts and Link Vault. You choose what it can see and change. Reconnect existing assistants to approve access to new features.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" className="border-white/25 bg-white/10 text-white hover:bg-white/15 hover:text-white" onClick={() => { void config.refetch(); void connections.refetch(); }}>
@@ -253,6 +253,7 @@ export function McpAuthorizePage() {
   const [writeAllowed, setWriteAllowed] = useState(false);
   const [funnelReadAllowed, setFunnelReadAllowed] = useState(false);
   const [funnelWriteAllowed, setFunnelWriteAllowed] = useState(false);
+  const [contentPermissions, setContentPermissions] = useState<Record<string, boolean>>({});
   const approve = useMutation({
     mutationFn: async ({ decision, scopes }: { decision: "approve" | "deny"; scopes: string[] }) => {
       if (!consent.data) throw new Error("This authorization request is unavailable.");
@@ -273,7 +274,11 @@ export function McpAuthorizePage() {
   const canWriteFunnels = requestedScopes.includes("funnels:write");
   const selectedScopes = [ ...(canRead ? ["projects:read"] : []), ...(canWrite && writeAllowed ? ["projects:write"] : []),
     ...(canReadFunnels && funnelReadAllowed ? ["funnels:read"] : []),
-    ...(canWriteFunnels && funnelReadAllowed && funnelWriteAllowed ? ["funnels:write"] : []) ];
+    ...(canWriteFunnels && funnelReadAllowed && funnelWriteAllowed ? ["funnels:write"] : []),
+    ...["scripts", "links"].flatMap((feature) => [
+      ...(requestedScopes.includes(`${feature}:read`) && contentPermissions[`${feature}:read`] ? [`${feature}:read`] : []),
+      ...(requestedScopes.includes(`${feature}:write`) && contentPermissions[`${feature}:read`] && contentPermissions[`${feature}:write`] ? [`${feature}:write`] : []),
+    ]) ];
   const unavailableMessage = !requestId ? "This authorization link is missing its request identifier. Return to your AI assistant and start connecting again." : "This request may have expired or already been used. Return to your AI assistant and start a new connection.";
 
   return (
@@ -313,7 +318,21 @@ export function McpAuthorizePage() {
                 <div className="flex items-start gap-3"><Checkbox id="allow-funnel-read" checked={funnelReadAllowed} onCheckedChange={(checked) => setFunnelReadAllowed(checked === true)} /><div><Label htmlFor="allow-funnel-read">Allow Funnel Grid reading</Label><p className="mt-1 text-xs text-muted-foreground">View your saved maps and their content.</p></div></div>
                 {canWriteFunnels && <div className="flex items-start gap-3"><Checkbox id="allow-funnel-write" checked={funnelWriteAllowed} disabled={!funnelReadAllowed} onCheckedChange={(checked) => setFunnelWriteAllowed(checked === true)} /><div><Label htmlFor="allow-funnel-write">Allow Funnel Grid changes</Label><p className="mt-1 text-xs leading-5 text-muted-foreground">Build, edit, connect, arrange and duplicate maps. Removal and full-map replacement require confirmation inside your AI app.</p></div></div>}
               </div>}
-              <Alert><Info className="h-4 w-4" /><AlertTitle>Your content, your decision</AlertTitle><AlertDescription className="text-xs leading-5">If you approve, the selected AI platform receives the project or funnel content it accesses. Review the platform’s privacy and data handling terms. Access uses your regular member sign-in; never share your password.</AlertDescription></Alert>
+              {([{ feature: "scripts", label: "Scripts", read: "Read your saved video scripts and notes.",
+                write: "Save scripts written by your AI, revise sections and duplicate scripts. No Toolkit AI-generation credits are used." },
+                { feature: "links", label: "Link Vault", read: "Read saved links, descriptions and categories.",
+                  write: "Save, edit, categorize and duplicate links. External websites are not changed." }]).map(({ feature, label, read, write }) =>
+                requestedScopes.includes(`${feature}:read`) ? <div key={feature} className="space-y-4 rounded-lg border p-4">
+                  <div className="flex items-start gap-3"><Checkbox id={`allow-${feature}-read`} checked={!!contentPermissions[`${feature}:read`]}
+                    onCheckedChange={(checked) => setContentPermissions((previous) => ({ ...previous, [`${feature}:read`]: checked === true,
+                      ...(checked === true ? {} : { [`${feature}:write`]: false }) }))} />
+                    <div><Label htmlFor={`allow-${feature}-read`}>Allow {label} reading</Label><p className="mt-1 text-xs text-muted-foreground">{read}</p></div></div>
+                  {requestedScopes.includes(`${feature}:write`) && <div className="flex items-start gap-3"><Checkbox id={`allow-${feature}-write`}
+                    checked={!!contentPermissions[`${feature}:write`]} disabled={!contentPermissions[`${feature}:read`]}
+                    onCheckedChange={(checked) => setContentPermissions((previous) => ({ ...previous, [`${feature}:write`]: checked === true }))} />
+                    <div><Label htmlFor={`allow-${feature}-write`}>Allow {label} changes</Label><p className="mt-1 text-xs leading-5 text-muted-foreground">{write} Deletions require confirmation inside your AI app.</p></div></div>}
+                </div> : null)}
+              <Alert><Info className="h-4 w-4" /><AlertTitle>Your content, your decision</AlertTitle><AlertDescription className="text-xs leading-5">If you approve, the selected AI platform receives the content it accesses in your selected features. Review the platform’s privacy and data handling terms. Access uses your regular member sign-in; never share your password.</AlertDescription></Alert>
               <p className="text-xs text-muted-foreground">Redirect requested by <span className="break-all font-medium text-foreground">{consentData.clientName}</span>. Expires {readableDate(consentData.expiresAt)}.</p>
               <div className="flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:justify-end">
                 <Button variant="outline" onClick={() => approve.mutate({ decision: "deny", scopes: [] })} disabled={approve.isPending}>Deny</Button>

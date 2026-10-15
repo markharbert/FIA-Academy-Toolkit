@@ -147,7 +147,9 @@ function LinkModal({
         category: data.category || null,
       };
       if (isEdit) {
-        return apiRequest("PATCH", `/api/affiliate-links/${link!.id}`, payload);
+        return apiRequest("PATCH", `/api/affiliate-links/${link!.id}`, {
+          ...payload, expectedVersion: (link as AffiliateLink & { version?: string }).version,
+        });
       }
       return apiRequest("POST", "/api/affiliate-links", payload);
     },

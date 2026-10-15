@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Express, Request, Response, NextFunction } from "express";
 import { registerProjectsMcpRoutes } from "./projects-mcp/routes";
+import { readContent, readContentItems, updateContentFromBrowser } from "./projects-mcp/content";
 import { requireAuth, createAuthMeHandler } from "./member-auth";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
@@ -5728,7 +5729,8 @@ export async function registerRoutes(
       if (script.userId !== req.session.userId) {
         return res.status(403).json({ message: "Access denied" });
       }
-      res.json(script);
+      const current = await readContent("scripts", req.params.id, { userId: req.session.userId!, origin: "" });
+      res.json({ ...current, topic: script.topic });
     } catch (err) {
       console.error("[TopicPulse] Get script error:", err);
       res.status(500).json({ message: "Failed to get script" });
@@ -5747,6 +5749,15 @@ export async function registerRoutes(
         updates.teleprompterScriptId = req.body.teleprompterScriptId ?? null;
       }
 
+      if (updates.scriptJson !== undefined || updates.title !== undefined || updates.notes !== undefined) {
+        const saved = await updateContentFromBrowser("scripts", req.params.id, req.body.expectedVersion, {
+          ...(updates.title !== undefined ? { title: updates.title } : {}),
+          ...(updates.notes !== undefined ? { notes: updates.notes } : {}),
+          ...(updates.scriptJson !== undefined ? { script_json: updates.scriptJson } : {}),
+        }, req.session.userId!);
+        res.json(saved);
+        return;
+      }
       const script = await storage.updateScript(req.params.id, req.session.userId!, updates);
       if (!script) {
         return res.status(404).json({ message: "Script not found" });
@@ -5754,6 +5765,8 @@ export async function registerRoutes(
       res.json(script);
     } catch (err) {
       console.error("[TopicPulse] Update script error:", err);
+      if ((err as any)?.code === "edit_conflict") { res.status(409).json({ message: (err as Error).message }); return; }
+      if (err instanceof z.ZodError) { res.status(400).json({ message: err.errors[0]?.message }); return; }
       res.status(500).json({ message: "Failed to update script" });
     }
   });
@@ -12723,7 +12736,8 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         page:  page  ? parseInt(page,  10) : 1,
         limit: limit ? parseInt(limit, 10) : 20,
       });
-      res.json(result);
+      const links = await readContentItems("links", result.links.map((link) => link.id), { userId, origin: "" });
+      res.json({ ...result, links });
     } catch (err) {
       console.error("[affiliate-links] list error:", err);
       res.status(500).json({ message: "Failed to load links" });
@@ -12747,18 +12761,25 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   app.patch("/api/affiliate-links/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = (req.session as any).userId as string;
-      const parsed = insertAffiliateLinkSchema.partial().safeParse(req.body);
+      const { expectedVersion, ...body } = req.body;
+      const parsed = insertAffiliateLinkSchema.partial().safeParse(body);
       if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message });
       const { userId: _uid, ...updates } = parsed.data as any;
-      // If URL is changing, refresh the cached screenshot
-      if (updates.url) {
-        updates.screenshotUrl = await fetchMicrolinkScreenshotUrl(updates.url);
-      }
-      const link = await storage.updateAffiliateLink(req.params.id, userId, updates);
-      if (!link) return res.status(404).json({ message: "Link not found" });
+      const link = await updateContentFromBrowser("links", req.params.id, expectedVersion, {
+        ...(updates.title !== undefined ? { title: updates.title } : {}),
+        ...(updates.url !== undefined ? { url: updates.url } : {}),
+        ...(updates.description !== undefined ? { description: updates.description } : {}),
+        ...(updates.category !== undefined ? { category: updates.category } : {}),
+        ...(updates.emoji !== undefined ? { emoji: updates.emoji } : {}),
+        ...(updates.isActive !== undefined ? { is_active: updates.isActive } : {}),
+        ...(updates.sortOrder !== undefined ? { sort_order: updates.sortOrder } : {}),
+      }, userId);
       res.json(link);
     } catch (err) {
       console.error("[affiliate-links] update error:", err);
+      if ((err as any)?.code === "edit_conflict") { res.status(409).json({ message: (err as Error).message }); return; }
+      if ((err as any)?.code === "not_found") { res.status(404).json({ message: "Link not found" }); return; }
+      if (err instanceof z.ZodError) { res.status(400).json({ message: err.errors[0]?.message }); return; }
       res.status(500).json({ message: "Failed to update link" });
     }
   });

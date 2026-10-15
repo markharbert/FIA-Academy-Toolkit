@@ -120,6 +120,8 @@ export function registerProjectsMcpRoutes(app: Express, requireAuth: RequestHand
     await ensureMcpDatabase();
     res.json({ ready: true, endpoint: provider.endpoint, productionEndpoint: `${productionOrigin()}/mcp/agent`,
       scopes: MCP_SCOPES, capabilities: [
+        "Scripts: search, read, save AI-written scripts, revise sections, duplicate and delete with in-agent confirmation",
+        "Link Vault: search, read, save, edit, categorize, duplicate and delete with in-agent confirmation",
         "Funnel Grid: all 15 node types, complete map creation, editing, connections, automatic layout, duplication, and confirmed deletion/replacement",
         "Projects: create, edit, reorder, archive, restore, and approved deletion",
         "Tasks and subtasks: details, completion, priorities, deadlines, tags, links, sections, and ordering",
@@ -145,14 +147,14 @@ export function registerProjectsMcpRoutes(app: Express, requireAuth: RequestHand
     const csrfToken = req.session.mcpConsentToken;
     await new Promise<void>((resolve, reject) => req.session.save((error) => error ? reject(error) : resolve()));
     res.json({ requestId, clientName: client.client_name || "Unnamed AI assistant", redirectUri: row.data.redirectUri,
-      scopes: row.data.scopes.filter((scope: string) => workspace === req.session.userId || !scope.startsWith("funnels:")),
+      scopes: row.data.scopes.filter((scope: string) => workspace === req.session.userId || scope.startsWith("projects:")),
       csrfToken, expiresAt: row.expires_at, workspace: workspaceMetadata });
   }));
   app.post("/api/mcp/consent/:requestId", requireAuth, noStore, api(async (req, res) => {
     if (!browserWrite(req, res)) return;
     const requestId = uuid.parse(req.params.requestId);
     const input = z.object({ csrfToken: z.string().max(100), decision: z.enum(["approve", "deny"]),
-      scopes: z.array(z.enum(["projects:read", "projects:write", "funnels:read", "funnels:write"])).max(4) }).strict().parse(req.body);
+      scopes: z.array(z.enum(MCP_SCOPES)).max(MCP_SCOPES.length) }).strict().parse(req.body);
     if (req.session.impersonatingAdminId || req.session.mcpConsentRequest !== requestId ||
         !secretEqual(req.session.mcpConsentToken, input.csrfToken)) {
       res.status(403).json({ message: "This approval is not valid for your sign-in session. Reload the consent page." }); return;
@@ -170,7 +172,7 @@ export function registerProjectsMcpRoutes(app: Express, requireAuth: RequestHand
       if (!row) { await connection.query("ROLLBACK"); res.status(410).json({ message: "This connection request expired or was already used." }); return; }
       if (input.decision === "approve" && (!validMcpScopes(input.scopes) ||
           input.scopes.some((scope) => !row.data.scopes.includes(scope)) ||
-          (workspaceId !== userId && input.scopes.some((scope) => scope.startsWith("funnels:"))))) {
+          (workspaceId !== userId && input.scopes.some((scope) => !scope.startsWith("projects:"))))) {
         await connection.query("ROLLBACK"); res.status(400).json({ message: "Permissions cannot exceed what the assistant requested; read access is required." }); return;
       }
       redirect = new URL(row.data.redirectUri);

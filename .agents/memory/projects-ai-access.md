@@ -1,17 +1,19 @@
 ---
 name: Toolkit AI access boundary
-description: Member-approved Projects and personal Funnel Grid access, with confirmations inside the AI client.
+description: Separate member-approved feature access, with confirmations inside the AI client.
 ---
 
-The member-facing MCP integration covers Projects and personal Funnel Grid.
+The member-facing MCP integration covers Projects and personal Funnel Grid,
+Video Studio Scripts, and Link Vault.
 Do not expose Academy administration, courses, email tools, or other app features
-just because they already have API handlers. Existing Projects grants must not
-silently gain Funnel Grid access. Shared Project Manager collaboration does not
-include the owner's funnels.
+just because they already have API handlers. Existing grants must not silently
+gain access to newly supported features. Shared Project Manager collaboration
+does not include the owner's funnels, scripts, or links.
 
 **Why:** The user initially requested Projects only, then explicitly approved
 expansion to Funnel Grid through the same MCP connection, including every node,
-notes and delays. The agreed expansion keeps separate member-approved access.
+notes and delays, then explicitly approved Scripts and Link Vault as the next
+features. The agreed expansion keeps separate member-approved access.
 
 **How to apply:** Expand beyond these features only when the user explicitly requests
 that expansion. Ordinary edits can execute under the matching editing grant.

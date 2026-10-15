@@ -1149,7 +1149,7 @@ export default function TopicPulseScriptPage() {
   const [scriptView, setScriptView] = useState<"outline" | "full">("outline");
   const [videoLengthTarget, setVideoLengthTarget] = useState<string>("6-10");
 
-  const { data: script, isLoading } = useQuery<Script & { topic?: Topic }>({
+  const { data: script, isLoading } = useQuery<Script & { topic?: Topic; version?: string }>({
     queryKey: ["/api/topic-pulse/scripts", scriptId],
     enabled: !!scriptId,
   });
@@ -1189,13 +1189,19 @@ export default function TopicPulseScriptPage() {
   }, [script]);
 
   const isAutoSaveRef = useRef(false);
+  const scriptSaveConflictRef = useRef(false);
+  const scriptVersionRef = useRef(script?.version);
+  useEffect(() => { scriptVersionRef.current = script?.version; }, [script?.version]);
+  useEffect(() => { scriptSaveConflictRef.current = false; }, [scriptId]);
 
   const saveMutation = useMutation({
     mutationFn: async (scriptJson: ScriptJson) => {
-      const res = await apiRequest("PATCH", `/api/topic-pulse/scripts/${scriptId}`, { scriptJson });
+      if (scriptSaveConflictRef.current) throw new Error("This script changed elsewhere. Copy your unsaved edits before reloading.");
+      const res = await apiRequest("PATCH", `/api/topic-pulse/scripts/${scriptId}`, { scriptJson, expectedVersion: scriptVersionRef.current });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      scriptVersionRef.current = data.version;
       if (!isAutoSaveRef.current) {
         setSavedNotice("manual");
         setTimeout(() => setSavedNotice(null), 5000);
@@ -1205,6 +1211,7 @@ export default function TopicPulseScriptPage() {
     },
     onError: (err: Error) => {
       isAutoSaveRef.current = false;
+      if (err.message.startsWith("409:")) scriptSaveConflictRef.current = true;
       toast({ title: "Failed to save script", description: err.message, variant: "destructive" });
     },
   });
@@ -1296,7 +1303,7 @@ export default function TopicPulseScriptPage() {
 
   // Auto-save: silently persist changes 5 seconds after the last edit
   useEffect(() => {
-    if (!hasChanges || saveMutation.isPending) return;
+    if (!hasChanges || saveMutation.isPending || scriptSaveConflictRef.current) return;
     const timer = setTimeout(() => {
       if (editedScriptJson) {
         isAutoSaveRef.current = true;

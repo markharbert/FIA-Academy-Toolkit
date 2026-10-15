@@ -8,12 +8,13 @@ import { pool } from "../db";
 import { storage } from "../storage";
 import { ensureMcpDatabase } from "./database";
 
-export const MCP_SCOPES = ["projects:read", "projects:write", "funnels:read", "funnels:write"];
+export const MCP_SCOPES: [string, ...string[]] = ["projects:read", "projects:write", "funnels:read", "funnels:write",
+  "scripts:read", "scripts:write", "links:read", "links:write"];
 export function validMcpScopes(scopes: string[]) {
-  return scopes.some((scope) => scope === "projects:read" || scope === "funnels:read") &&
-    scopes.every((scope) => MCP_SCOPES.includes(scope)) &&
-    (!scopes.includes("projects:write") || scopes.includes("projects:read")) &&
-    (!scopes.includes("funnels:write") || scopes.includes("funnels:read"));
+  return scopes.some((scope) => scope.endsWith(":read")) &&
+    scopes.every((scope) => (MCP_SCOPES as readonly string[]).includes(scope)) &&
+    ["projects", "funnels", "scripts", "links"].every((feature) =>
+      !scopes.includes(`${feature}:write`) || scopes.includes(`${feature}:read`));
 }
 export const ACCESS_SECONDS = 15 * 60;
 export const REFRESH_SECONDS = 30 * 24 * 60 * 60;
@@ -107,9 +108,9 @@ export class ProjectsOAuthProvider implements OAuthServerProvider {
   }
   async authorize(client: OAuthClientInformationFull, params: AuthorizationParams, res: Response) {
     this.assertResource(params.resource);
-    const scopes = params.scopes?.length ? params.scopes : MCP_SCOPES;
+    const scopes = params.scopes?.length ? params.scopes : [...MCP_SCOPES];
     if (!validMcpScopes(scopes)) {
-      throw new InvalidScopeError("Request Projects and/or Funnel Grid read access. Each write permission requires its matching read permission.");
+      throw new InvalidScopeError("Request read access for Projects, Funnel Grid, Scripts or Link Vault. Each write permission requires its matching read permission.");
     }
     if (!/^[A-Za-z0-9_-]{43}$/.test(params.codeChallenge)) throw new InvalidRequestError("A valid S256 PKCE challenge is required");
     const id = randomUUID();
